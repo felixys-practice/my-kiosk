@@ -22,7 +22,7 @@ import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
  */
 export interface TransactionLog {
   transactionId: string;
-  type: 'ORDER' | 'PAYMENT' | 'SHIPMENT' | 'REFUND';
+  type: 'ORDER' | 'PAYMENT' | 'SHIPMENT' | 'REFUND' | 'PAYOUT';
   userId: string;
   orderId?: string;
   orderItemId?: string;

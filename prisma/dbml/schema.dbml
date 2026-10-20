@@ -44,12 +44,47 @@ Table refresh_tokens {
 
 Table ledger {
   id String [pk]
-  sellerId String [not null]
-  tradeId String [not null]
+  shopId String [not null]
+  shop shops [not null]
+  orderId String [not null]
+  order orders [not null]
   amount Int [not null]
   status LedgerStatus [not null]
   settledAt DateTime
+  paymentCancelId String [unique]
+  paymentCancel payment_cancels
+  settlementBatchId String
+  settlementBatch settlement_batches
   createdAt DateTime [default: `now()`, not null]
+}
+
+Table settlement_batches {
+  id String [pk]
+  status SettlementBatchStatus [not null, default: 'IN_PROGRESS']
+  startedAt DateTime [default: `now()`, not null]
+  completedAt DateTime
+  totalAmount Int
+  sellerCount Int
+  ledgerCount Int
+  ledgers ledger [not null]
+  payouts payouts [not null]
+}
+
+Table payouts {
+  id String [pk]
+  shopId String [not null]
+  shop shops [not null]
+  settlementBatchId String [not null]
+  settlementBatch settlement_batches [not null]
+  amount Int [not null]
+  status PayoutStatus [not null, default: 'PENDING']
+  bankTransactionId String [unique]
+  requestedBy String [not null]
+  requestedAt DateTime
+  completedAt DateTime
+  failureReason String
+  createdAt DateTime [default: `now()`, not null]
+  updatedAt DateTime [not null]
 }
 
 Table tickets {
@@ -115,6 +150,7 @@ Table orders {
   totalAmount Int [not null]
   orderItems order_items [not null]
   payments payments [not null]
+  ledgers ledger [not null]
   shop shops [not null]
   user user [not null]
   createdAt DateTime [default: `now()`, not null]
@@ -176,6 +212,7 @@ Table payment_cancels {
   orderItemId String [not null]
   orderItem order_items [not null]
   locks refund_locks [not null]
+  ledger ledger
 }
 
 Table refund_locks {
@@ -228,10 +265,24 @@ Table shops {
   products products [not null]
   usageSessions usage_sessions [not null]
   orders orders [not null]
+  ledgers ledger [not null]
+  payouts payouts [not null]
+  settlementAccount shop_settlement_accounts
   createdAt DateTime [default: `now()`, not null]
   updatedAt DateTime [not null]
   isActive Boolean [not null, default: true]
   deletedAt DateTime
+}
+
+Table shop_settlement_accounts {
+  id String [pk]
+  shopId String [unique, not null]
+  shop shops [not null]
+  bankName String [not null]
+  accountNumber String [not null]
+  accountHolder String [not null]
+  createdAt DateTime [default: `now()`, not null]
+  updatedAt DateTime [not null]
 }
 
 Table shop_owners {
@@ -277,7 +328,19 @@ Enum LedgerStatus {
   HELD
   RELEASABLE
   SETTLED
-  CLAWBACK_PENDING
+}
+
+Enum SettlementBatchStatus {
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+}
+
+Enum PayoutStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
 }
 
 Enum TicketType {
@@ -341,6 +404,18 @@ Ref: oauth_accounts.userId > user.id
 
 Ref: refresh_tokens.userId > user.id
 
+Ref: ledger.shopId > shops.id
+
+Ref: ledger.orderId > orders.id
+
+Ref: ledger.paymentCancelId - payment_cancels.id
+
+Ref: ledger.settlementBatchId > settlement_batches.id
+
+Ref: payouts.shopId > shops.id
+
+Ref: payouts.settlementBatchId > settlement_batches.id
+
 Ref: tickets.orderItemId - order_items.id
 
 Ref: tickets.userId > user.id
@@ -378,6 +453,8 @@ Ref: usage_sessions.userId > user.id
 Ref: product_histories.changedBy > user.id
 
 Ref: product_histories.productId > products.id
+
+Ref: shop_settlement_accounts.shopId - shops.id
 
 Ref: shop_owners.shopId > shops.id
 

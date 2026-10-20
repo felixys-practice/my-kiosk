@@ -26,18 +26,18 @@ enum OAuthProvider {
 }
 
 model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  role UserRole @default(USER)
+  id       String   @id @default(uuid())
+  email    String   @unique
+  role     UserRole @default(USER)
   password String? // nullable: OAuth 전용 유저는 null, 로컬 로그인 유저는 bcrypt 해시 문자열
-  isActive Boolean @default(true) @map("is_active")
+  isActive Boolean  @default(true) @map("is_active")
 
-  refreshTokens RefreshToken[]
-  oauthAccounts OAuthAccount[]
-  ownedShops ShopOwner[]
-  tickets Ticket[]
-  orders Order[]
-  usageSessions UsageSession[]
+  refreshTokens    RefreshToken[]
+  oauthAccounts    OAuthAccount[]
+  ownedShops       ShopOwner[]
+  tickets          Ticket[]
+  orders           Order[]
+  usageSessions    UsageSession[]
   ProductHistories ProductHistory[]
 
   createdAt DateTime @default(now()) @map("created_at")
@@ -63,9 +63,9 @@ model OAuthAccount {
 }
 
 model RefreshToken {
-  id String @id @default(uuid())
-  userId String @map("user_id")
-  jti String @map("jti")
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  jti       String   @map("jti")
   expiresAt DateTime @map("expires_at")
   createdAt DateTime @default(now()) @map("created_at")
 
@@ -94,27 +94,28 @@ enum LedgerStatus {
 // orderItem.orderId로 소속 Order를 역참조해 같은 orderId에 담으면 "이
 // 주문에 대해 최종 지급할 금액"이 SUM 하나로 정확히 나온다.
 model Ledger {
-  id String @id @default(uuid())
-  sellerId String
-  orderId String @map("order_id")
-  order Order @relation(fields: [orderId], references: [id])
-  amount Int   // 매출은 양수, 환불은 음수
-  status LedgerStatus
-  settledAt DateTime? @map("settled_at")
+  id        String       @id @default(uuid())
+  shopId    String       @map("shop_id")
+  shop      Shop         @relation(fields: [shopId], references: [id])
+  orderId   String       @map("order_id")
+  order     Order        @relation(fields: [orderId], references: [id])
+  amount    Int // 매출은 양수, 환불은 음수
+  status    LedgerStatus
+  settledAt DateTime?    @map("settled_at")
 
   // 이 레코드가 환불로 생성된 경우에만 설정(매출 레코드는 null).
   // @unique가 "같은 환불에 대해 레코드를 두 번 추가하지 않는다"는
   // 멱등성을 DB 레벨에서 보장한다.
-  paymentCancelId String? @unique @map("payment_cancel_id")
-  paymentCancel PaymentCancel? @relation(fields: [paymentCancelId], references: [id])
+  paymentCancelId String?        @unique @map("payment_cancel_id")
+  paymentCancel   PaymentCancel? @relation(fields: [paymentCancelId], references: [id])
 
   // 어느 정산 배치에서 SETTLED로 마감됐는지. 마감 전에는 null.
-  settlementBatchId String? @map("settlement_batch_id")
-  settlementBatch SettlementBatch? @relation(fields: [settlementBatchId], references: [id])
+  settlementBatchId String?          @map("settlement_batch_id")
+  settlementBatch   SettlementBatch? @relation(fields: [settlementBatchId], references: [id])
 
   createdAt DateTime @default(now()) @map("created_at")
 
-  @@index([sellerId])
+  @@index([shopId])
   @@index([orderId, status]) // 정산 배치의 주 조회 패턴: orderId별 미마감 레코드 집계
   @@index([settlementBatchId])
   @@map("ledger")
@@ -122,18 +123,24 @@ model Ledger {
 
 enum SettlementBatchStatus {
   IN_PROGRESS // 배치 실행 중
-  COMPLETED   // 배치 정상 종료
-  FAILED      // 배치 중 에러로 중단(일부만 SETTLED됐을 수 있음)
+  COMPLETED // 배치 정상 종료
+  FAILED // 배치 중 에러로 중단(일부만 SETTLED됐을 수 있음)
 }
 
 // 정산 배치 1회 실행의 메타데이터. Ledger row 자체는 "무엇이 지급됐는지"만
 // 말해줄 뿐 "언제, 몇 건이, 총 얼마가, 어떤 배치에서" 처리됐는지는 말해주지
 // 못하므로 이 테이블이 그 정보를 보관한다.
+//
+// 배치는 장부(Ledger)를 SETTLED로 확정하는 것까지만 담당하고, 매장 계좌로
+// 돈을 실제로 보내는 것(Payout)은 별도 단계다 - 은행 송금은 PG 연동과
+// 성격이 다른 실패 유형(계좌 오류, 송금 한도 등)을 가지므로 장부 확정과
+// 묶으면 실패 시 두 책임이 뒤섞인다. 관리자가 배치 완료 후 별도로 Payout을
+// 트리거한다(§6 참고).
 model SettlementBatch {
-  id String @id @default(uuid())
+  id     String                @id @default(uuid())
   status SettlementBatchStatus @default(IN_PROGRESS)
 
-  startedAt DateTime @default(now()) @map("started_at")
+  startedAt   DateTime  @default(now()) @map("started_at")
   completedAt DateTime? @map("completed_at")
 
   // 집계 요약(COMPLETED 시점에 확정). 매번 Ledger를 다시 집계하지 않도록
@@ -143,44 +150,82 @@ model SettlementBatch {
   ledgerCount Int? @map("ledger_count")
 
   ledgers Ledger[]
+  payouts Payout[]
 
   @@index([status])
   @@map("settlement_batches")
 }
 
+enum PayoutStatus {
+  PENDING // 관리자 트리거 대기(배치 완료 직후 기본 상태)
+  PROCESSING // 송금 API 호출 중
+  SUCCEEDED // 송금 완료 확인
+  FAILED // 송금 실패(계좌 오류, 은행 API 오류 등)
+}
+
+// 정산 배치로 확정된 금액을 매장 계좌로 실제 송금하는 1건의 실행 기록.
+// SettlementBatch(장부 확정)와 분리된 이유는 위 SettlementBatch 주석 참고.
+// 관리자가 API로 송금을 트리거하면 PENDING -> PROCESSING -> SUCCEEDED/FAILED로
+// 전이한다. FAILED는 재시도 가능하도록 같은 레코드를 재사용하지 않고
+// 새 Payout을 생성한다(append-only 원장과 동일한 이유 - 시도 이력을 보존).
+model Payout {
+  id                String          @id @default(uuid())
+  shopId            String          @map("shop_id")
+  shop              Shop            @relation(fields: [shopId], references: [id])
+  settlementBatchId String          @map("settlement_batch_id")
+  settlementBatch   SettlementBatch @relation(fields: [settlementBatchId], references: [id])
+
+  amount Int // 이번에 송금할 금액(해당 배치에서 이 매장에 귀속된 합계)
+  status PayoutStatus @default(PENDING)
+
+  bankTransactionId String?   @unique @map("bank_transaction_id") // 은행 API가 응답한 거래 고유 ID
+  requestedBy       String    @map("requested_by") // 송금을 트리거한 관리자(User.id)
+  requestedAt       DateTime? @map("requested_at")
+  completedAt       DateTime? @map("completed_at")
+  failureReason     String?   @map("failure_reason")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([shopId])
+  @@index([settlementBatchId])
+  @@index([status])
+  @@map("payouts")
+}
+
 enum TicketType {
-  TIME   // 시간권
+  TIME // 시간권
   PERIOD // 정기권
 }
 
 enum TicketStatus {
-  UNUSED    // 미사용 (시간권: 미사용, 정기권: 미활성화)
-  ACTIVE    // 사용 중 (정기권 활성화됨)
-  EXPIRED   // 만료 (기간 초과)
+  UNUSED // 미사용 (시간권: 미사용, 정기권: 미활성화)
+  ACTIVE // 사용 중 (정기권 활성화됨)
+  EXPIRED // 만료 (기간 초과)
   EXHAUSTED // 소진 (시간권 분 다 씀)
-  REVOKED   // 관리자 강제 소멸
+  REVOKED // 관리자 강제 소멸
   // PAUSED 상태는 TicketPause를 조인해서 조회한다. (관리자가 직접 처리하는 구조로 성능 이슈 발생 시 추가한다.)
 }
 
 model Ticket {
-  id String @id @default(uuid())
-  userId String @map("user_id")
-  type TicketType
-  status TicketStatus @default(UNUSED)
-  orderItemId String @unique @map("order_item_id")  
+  id            String         @id @default(uuid())
+  userId        String         @map("user_id")
+  type          TicketType
+  status        TicketStatus   @default(UNUSED)
+  orderItemId   String         @unique @map("order_item_id")
   usageSessions UsageSession[]
-  ticketPauses TicketPause[]
+  ticketPauses  TicketPause[]
 
   // 시간권 전용
-  purchasedMinutes Int? @map("purchased_minutes")   // 구매 시점 부여 시간 스냅샷
+  purchasedMinutes     Int?      @map("purchased_minutes") // 구매 시점 부여 시간 스냅샷
   minuteExpireDeadline DateTime? @map("minute_expire_deadline") // 소진 기한(구매일 + product.usableDays)
-  remainingMinutes Int? @map("remaining_minutes")   // ⭐️ 잔여 시간의 유일한 원천(시간권만 사용)
+  remainingMinutes     Int?      @map("remaining_minutes") // ⭐️ 잔여 시간의 유일한 원천(시간권만 사용)
 
   // 정기권 전용
-  purchasedDurationDays Int? @map("purchased_duration_days") // 구매 시점 부여 기간 스냅샷
-  activationDeadline DateTime? @map("activation_deadline") // 정기권 활성화 기한(구매일 + product.usableDays)
-  activatedAt DateTime? @map("activated_at")        // 첫 입장(활성화) 시각
-  expiresAt DateTime? @map("expires_at")            // ⭐️ 정기권 실제 만료 시각(activatedAt + purchasedDurationDays)
+  purchasedDurationDays Int?      @map("purchased_duration_days") // 구매 시점 부여 기간 스냅샷
+  activationDeadline    DateTime? @map("activation_deadline") // 정기권 활성화 기한(구매일 + product.usableDays)
+  activatedAt           DateTime? @map("activated_at") // 첫 입장(활성화) 시각
+  expiresAt             DateTime? @map("expires_at") // ⭐️ 정기권 실제 만료 시각(activatedAt + purchasedDurationDays)
 
   // 환불 확정(REVOKED 전이) 시각. PaymentCancel.cancelledAt(그 환불 실행 기록의
   // 확정 시각)과 개념적으로 동일한 순간을 가리키며 같은 트랜잭션에서 함께
@@ -193,35 +238,33 @@ model Ticket {
   revokedAt DateTime? @map("revoked_at")
 
   orderItem OrderItem @relation(fields: [orderItemId], references: [id])
-  user User @relation( fields: [userId], references: [id])
+  user      User      @relation(fields: [userId], references: [id])
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   // 관리자: 최근 변경된 티켓 목록
   @@index([status, updatedAt])
-  
   // 사용자: 내 티켓 목록 (만료일 가까운 순)
   @@index([userId, expiresAt])
   @@index([userId, minuteExpireDeadline])
-  
   // 사용자: 내 티켓 구매일 정렬
   @@index([userId, createdAt])
   @@map("tickets")
 }
 
 model TicketPause {
-  id String @id @default(uuid())
+  id       String @id @default(uuid())
   ticketId String @map("ticket_id")
-  
-  pausedAt DateTime @map("paused_at")          // 일시정지 시작
-  pausedReason String? @map("paused_reason")   // 정지사유
-  pausedBy String @map("paused_by")            // 누가 정지를 시켰는가
 
-  resumedAt DateTime? @map("resumed_at")       // 재개 시간(null 이면 현재 정지 중)
-  resumedReason String? @map("resumed_reason") // 재개 사유
-  resumedBy String? @map("resumed_by")         // 누가 재개 시켰는가
-  
+  pausedAt     DateTime @map("paused_at") // 일시정지 시작
+  pausedReason String?  @map("paused_reason") // 정지사유
+  pausedBy     String   @map("paused_by") // 누가 정지를 시켰는가
+
+  resumedAt     DateTime? @map("resumed_at") // 재개 시간(null 이면 현재 정지 중)
+  resumedReason String?   @map("resumed_reason") // 재개 사유
+  resumedBy     String?   @map("resumed_by") // 누가 재개 시켰는가
+
   ticket Ticket @relation(fields: [ticketId], references: [id])
 
   // NOTE: Partial Unique Index → (ticket_id) WHERE resumed_at IS NULL
@@ -234,26 +277,25 @@ model TicketPause {
   @@map("ticket_pauses")
 }
 
-
 model Product {
-  id String @id @default(uuid())
-  name String
+  id         String     @id @default(uuid())
+  name       String
   ticketType TicketType @map("ticket_type")
-  amount Int // 금액
-  shopId String @map("shop_id")
+  amount     Int // 금액
+  shopId     String     @map("shop_id")
 
-  usableDays Int @map("usable_days") // 공통 - 구매 후 며칠 안에 사용/활성화해야 하는 상품인가
-  isActive Boolean @default(true) @map("is_active") // 판매 활성화 유무
-  
-  purchasedMinutes Int? @map("purchased_minutes") // 시간권 전용 — 구매 시 제공되는 시간(분)
+  usableDays Int     @map("usable_days") // 공통 - 구매 후 며칠 안에 사용/활성화해야 하는 상품인가
+  isActive   Boolean @default(true) @map("is_active") // 판매 활성화 유무
+
+  purchasedMinutes      Int? @map("purchased_minutes") // 시간권 전용 — 구매 시 제공되는 시간(분)
   purchasedDurationDays Int? @map("purchased_duration_days") // 정기권 전용 — 구매 시 제공되는 기간(일)
 
-  orderItems OrderItem[]
+  orderItems       OrderItem[]
   productHistories ProductHistory[]
-  shop Shop @relation(fields: [shopId], references: [id])
+  shop             Shop             @relation(fields: [shopId], references: [id])
 
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
   deletedAt DateTime? @map("deleted_at") // 소프트 삭제 필드
 
   @@index([shopId])
@@ -261,17 +303,17 @@ model Product {
 }
 
 model Order {
-  id String @id @default(uuid())
+  id     String @id @default(uuid())
   shopId String @map("shop_id")
   userId String @map("user_id")
-  
-  originalAmount  Int @map("original_amount")  // 할인 전 금액
-  discountAmount  Int @default(0) @map("discount_amount") // 할인 금액
-  totalAmount     Int @map("total_amount")    // 실결제 금액
+
+  originalAmount Int @map("original_amount") // 할인 전 금액
+  discountAmount Int @default(0) @map("discount_amount") // 할인 금액
+  totalAmount    Int @map("total_amount") // 실결제 금액
 
   orderItems OrderItem[]
-  payments Payment[]
-  ledgers Ledger[] // 이 주문에 대한 정산 원장(매출 1건 + 환불 0건 이상)
+  payments   Payment[]
+  ledgers    Ledger[] // 이 주문에 대한 정산 원장(매출 1건 + 환불 0건 이상)
 
   shop Shop @relation(fields: [shopId], references: [id])
   user User @relation(fields: [userId], references: [id])
@@ -284,22 +326,22 @@ model Order {
 }
 
 model OrderItem {
-  id String @id @default(uuid())
-  ticketType TicketType @map("ticket_type") // 구매 시점 티켓 타입
-  originalAmount Int @map("original_amount")// 구매 시점 가격 스냅샷
-  discountAmount Int @map("discount_amount") // 항목 할인액
-  amount Int // 실결제 금액 스냅샷(originalAmount - discountAmount)
-  purchasedMinutes Int? @map("purchased_minutes") // 시간권: 구매 시점 분 스냅샷
-  purchasedDurationDays Int? @map("purchased_duration_days") // 정기권: 구매 시점 기간 스냅샷
-  usableDays Int @map("usable_days") // 구매 시점 활성화/소진 기한 스냅샷(티켓 생성 시 기한 계산에 사용)
-  orderId String @map("order_id")
-  productId String @map("product_id")
+  id                    String     @id @default(uuid())
+  ticketType            TicketType @map("ticket_type") // 구매 시점 티켓 타입
+  originalAmount        Int        @map("original_amount") // 구매 시점 가격 스냅샷
+  discountAmount        Int        @map("discount_amount") // 항목 할인액
+  amount                Int // 실결제 금액 스냅샷(originalAmount - discountAmount)
+  purchasedMinutes      Int?       @map("purchased_minutes") // 시간권: 구매 시점 분 스냅샷
+  purchasedDurationDays Int?       @map("purchased_duration_days") // 정기권: 구매 시점 기간 스냅샷
+  usableDays            Int        @map("usable_days") // 구매 시점 활성화/소진 기한 스냅샷(티켓 생성 시 기한 계산에 사용)
+  orderId               String     @map("order_id")
+  productId             String     @map("product_id")
 
-  ticket Ticket?
-  product Product @relation(fields: [productId], references: [id])
-  order Order @relation(fields: [orderId], references: [id])
+  ticket         Ticket?
+  product        Product         @relation(fields: [productId], references: [id])
+  order          Order           @relation(fields: [orderId], references: [id])
   paymentCancels PaymentCancel[] // 이 상품에 대한 취소 요청 이력(상품당 SUCCEEDED는 최대 1건, FAILED/REQUESTED 포함 시 여러 건 가능)
-  refundLock RefundLock? // 이 상품에 대해 현재 진행 중인 환불이 있으면 존재(동시 중복 진행 방지용 락)
+  refundLock     RefundLock? // 이 상품에 대해 현재 진행 중인 환불이 있으면 존재(동시 중복 진행 방지용 락)
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -312,35 +354,37 @@ enum PaymentType {
   CARD
   CASH
 }
+
 enum VanType {
-  NICE  // 나이스페이
-  KCP   // KCP
+  NICE // 나이스페이
+  KCP // KCP
   KSNET // KSNET
 }
+
 enum PaymentStatus {
-  PENDING    // 결제 대기 (주문 생성, 아직 요청 안 함)
-  REQUESTED  // 승인 요청 중 (VAN사에 요청 전송)
-  SUCCESS    // 결제 성공
-  FAILED     // 결제 실패
-  CANCELLED  // 결제 취소 
+  PENDING // 결제 대기 (주문 생성, 아직 요청 안 함)
+  REQUESTED // 승인 요청 중 (VAN사에 요청 전송)
+  SUCCESS // 결제 성공
+  FAILED // 결제 실패
+  CANCELLED // 결제 취소 
 }
 
 model Payment {
-  id String @id @default(uuid())
-  type PaymentType // 결재 타입(카드, 현금)
-  status PaymentStatus @default(PENDING)
-  orderId String @map("order_id")
-  amount Int   // 결재 금액
-  van VanType? // 카드 대행사
-  pgTransactionId String? @unique // 거래 고유 ID (요청 응답으로 수신)
-  requestedAt DateTime? @map("requested_at") // 결재 승인 요청 시각
-  approvedAt DateTime? @map("approved_at")   // 결재 승인 완료 시각
+  id              String        @id @default(uuid())
+  type            PaymentType // 결재 타입(카드, 현금)
+  status          PaymentStatus @default(PENDING)
+  orderId         String        @map("order_id")
+  amount          Int // 결재 금액
+  van             VanType? // 카드 대행사
+  pgTransactionId String?       @unique // 거래 고유 ID (요청 응답으로 수신)
+  requestedAt     DateTime?     @map("requested_at") // 결재 승인 요청 시각
+  approvedAt      DateTime?     @map("approved_at") // 결재 승인 완료 시각
 
   order Order @relation(fields: [orderId], references: [id])
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
-  reason String? // 결재 실패 시 이유
+  reason    String? // 결재 실패 시 이유
 
   paymentCancels PaymentCancel[]
 
@@ -349,39 +393,39 @@ model Payment {
 }
 
 enum PaymentCancelStatus {
-  REQUESTED         // PG에 취소 요청 발송, 응답 대기중(미확정)
-  PENDING_APPROVAL  // 사용 이력 있는 건 - 점주 승인 대기(락 미획득, PG 요청 전, 금액 미확정)
-  SUCCEEDED         // PG가 취소 확정
-  FAILED            // PG가 취소를 확정적으로 거절
+  REQUESTED // PG에 취소 요청 발송, 응답 대기중(미확정)
+  PENDING_APPROVAL // 사용 이력 있는 건 - 점주 승인 대기(락 미획득, PG 요청 전, 금액 미확정)
+  SUCCEEDED // PG가 취소 확정
+  FAILED // PG가 취소를 확정적으로 거절
 }
 
 // 우리 시스템이 자체 판단한 실패 원인 분류 - PG가 알려주지 않는 사유(pgErrorCode로 표현 불가)를 코드로 필터링하기 위한 용도
 enum PaymentCancelFailureCode {
   AMOUNT_MISMATCH // PG 응답 금액이 요청 금액과 다름(PG는 성공으로 응답했으나 우리가 실패로 재판정)
-  PG_NOT_REACHED  // 락 만료 후 PG 거래조회 결과 "거래 없음" - 요청이 PG에 도달하지 않은 것으로 판단
+  PG_NOT_REACHED // 락 만료 후 PG 거래조회 결과 "거래 없음" - 요청이 PG에 도달하지 않은 것으로 판단
 }
 
 // PG에 대한 취소 실행 1건에 대한 정보 모델 — 한 번의 취소는 상품(OrderItem) 1건만 대상으로 한다
 model PaymentCancel {
-  id        String   @id @default(uuid())
-  paymentId String   @map("payment_id")
-  amount    Int                           // 이 상품에 대한 취소 금액
-  reason    String?                       // 취소 사유(고객이 취소를 요청한 이유)
-  status    PaymentCancelStatus @default(REQUESTED)
-  pgErrorCode String? @map("pg_error_code") // PG가 응답한 원본 에러 코드(PG가 거절한 경우)
-  failureCode PaymentCancelFailureCode? @map("failure_code") // 우리 시스템이 자체 판단한 실패 원인 분류(코드 조회용)
-  failureReason String? @map("failure_reason") // 확정 실패 시 사유 상세(사람이 읽는 설명)
-  pgTransactionId String? @unique @map("pg_transaction_id") // PG사 취소 거래 ID (취소 요청 응답으로 수신)
-  idempotencyKey String? @map("idempotency_key") // 요청 시점의 Idempotency-Key(클라이언트가 보낸 헤더 값) - 낡은 락 정리 시 "이번 요청이 이 시도를 만들었던 그 요청인지" 판단하는 근거
-  requestedAt  DateTime  @map("requested_at")  // 취소 요청 시각
-  cancelledAt  DateTime? @map("cancelled_at")  // 취소 완료 시각
-  failedAt DateTime? @updatedAt @map("failed_at")
+  id              String                    @id @default(uuid())
+  paymentId       String                    @map("payment_id")
+  amount          Int // 이 상품에 대한 취소 금액
+  reason          String? // 취소 사유(고객이 취소를 요청한 이유)
+  status          PaymentCancelStatus       @default(REQUESTED)
+  pgErrorCode     String?                   @map("pg_error_code") // PG가 응답한 원본 에러 코드(PG가 거절한 경우)
+  failureCode     PaymentCancelFailureCode? @map("failure_code") // 우리 시스템이 자체 판단한 실패 원인 분류(코드 조회용)
+  failureReason   String?                   @map("failure_reason") // 확정 실패 시 사유 상세(사람이 읽는 설명)
+  pgTransactionId String?                   @unique @map("pg_transaction_id") // PG사 취소 거래 ID (취소 요청 응답으로 수신)
+  idempotencyKey  String?                   @map("idempotency_key") // 요청 시점의 Idempotency-Key(클라이언트가 보낸 헤더 값) - 낡은 락 정리 시 "이번 요청이 이 시도를 만들었던 그 요청인지" 판단하는 근거
+  requestedAt     DateTime                  @map("requested_at") // 취소 요청 시각
+  cancelledAt     DateTime?                 @map("cancelled_at") // 취소 완료 시각
+  failedAt        DateTime?                 @updatedAt @map("failed_at")
 
-  payment Payment @relation(fields: [paymentId], references: [id])
-  orderItemId String @map("order_item_id") // 이 취소 요청의 대상 상품(1:1 — 한 번의 취소는 상품 1건만 대상)
-  orderItem OrderItem @relation(fields: [orderItemId], references: [id])
-  locks RefundLock[] // 이 취소 요청이 보유 중인 상품별 락(확정되면 삭제됨)
-  ledger Ledger? // SUCCEEDED 확정 시 생성되는 원장 레코드(1:1 — 멱등키로 1건만 허용)
+  payment     Payment      @relation(fields: [paymentId], references: [id])
+  orderItemId String       @map("order_item_id") // 이 취소 요청의 대상 상품(1:1 — 한 번의 취소는 상품 1건만 대상)
+  orderItem   OrderItem    @relation(fields: [orderItemId], references: [id])
+  locks       RefundLock[] // 이 취소 요청이 보유 중인 상품별 락(확정되면 삭제됨)
+  ledger      Ledger? // SUCCEEDED 확정 시 생성되는 원장 레코드(1:1 — 멱등키로 1건만 허용)
 
   @@index([paymentId])
   @@index([orderItemId])
@@ -396,11 +440,11 @@ model PaymentCancel {
 // PaymentCancel 생성과 같은 트랜잭션에서 INSERT, 확정(성공/실패) 시 같은 트랜잭션에서 DELETE
 // expiresAt: 서버 크래시로 락 해제가 누락된 경우, 다음 락 획득 시도 시 만료된 락을 정리(자가 치유)하기 위한 TTL
 model RefundLock {
-  orderItemId String @id @map("order_item_id")
-  paymentCancelId String @map("payment_cancel_id")
-  expiresAt DateTime @map("expires_at")
+  orderItemId     String   @id @map("order_item_id")
+  paymentCancelId String   @map("payment_cancel_id")
+  expiresAt       DateTime @map("expires_at")
 
-  orderItem OrderItem @relation(fields: [orderItemId], references: [id])
+  orderItem     OrderItem     @relation(fields: [orderItemId], references: [id])
   paymentCancel PaymentCancel @relation(fields: [paymentCancelId], references: [id])
 
   createdAt DateTime @default(now()) @map("created_at")
@@ -420,22 +464,22 @@ enum UsageSessionStatus {
 // 실제 이용중인 이용권 관리 모델
 // 정기권: 만료일 체크만 수행, planned_end_at/BullMQ 등록 없음 (소비 개념이 없으므로)
 model UsageSession {
-  id String @id @default(uuid())
-  ticketId String @map("ticket_id")
-  seatId String @map("seat_id")
-  shopId String @map("shop_id")
-  userId String @map("user_id")
-  startedAt DateTime @default(now()) @map("started_at")
-  plannedEndAt DateTime @map("planned_end_at") // 시작 시점의 이용권 잔여시간으로 계산한 예정 종료 시간
-  endedAt DateTime? @map("ended_at") // 실제 종료 시각(조기퇴실이면 plannedEndAt 보다 빠름)
-  status UsageSessionStatus @default(ACTIVE)
-  failureReason String? @map("failure_reason") // 활성화 실패 시 원인 상세 (Prisma 에러 코드, 외부 API 응답 등)
-  bullmqJobId String?
+  id            String             @id @default(uuid())
+  ticketId      String             @map("ticket_id")
+  seatId        String             @map("seat_id")
+  shopId        String             @map("shop_id")
+  userId        String             @map("user_id")
+  startedAt     DateTime           @default(now()) @map("started_at")
+  plannedEndAt  DateTime           @map("planned_end_at") // 시작 시점의 이용권 잔여시간으로 계산한 예정 종료 시간
+  endedAt       DateTime?          @map("ended_at") // 실제 종료 시각(조기퇴실이면 plannedEndAt 보다 빠름)
+  status        UsageSessionStatus @default(ACTIVE)
+  failureReason String?            @map("failure_reason") // 활성화 실패 시 원인 상세 (Prisma 에러 코드, 외부 API 응답 등)
+  bullmqJobId   String?
 
   ticket Ticket @relation(fields: [ticketId], references: [id])
-  seat Seat @relation(fields: [seatId], references: [id])
-  shop Shop @relation(fields: [shopId], references: [id])
-  user User @relation(fields: [userId], references: [id])
+  seat   Seat   @relation(fields: [seatId], references: [id])
+  shop   Shop   @relation(fields: [shopId], references: [id])
+  user   User   @relation(fields: [userId], references: [id])
 
   // NOTE: Partial Unique Index → (ticket_id) WHERE ended_at IS NULL
   // 활성 세션(ended_at IS NULL)은 ticketId당 하나만 허용 (raw migration으로 관리)
@@ -447,20 +491,19 @@ model UsageSession {
   @@index([shopId, status])
   // 현재 사용자가 이용 중인 좌석 조회
   @@index([userId, status, updatedAt])
-
   @@map("usage_sessions")
 }
 
 // 티겟 상품 변경 이력 관리 모델(delete/update 불가 이력 관리용)
 model ProductHistory {
-  id String @id @default(uuid())
-  changeGroupId String @map("change_group_id") // 동시에 여러 필드가 바뀐 '한 번의 수정'을 묶는 그룹 id
-  productId String @map("product_id")
-  changedField String @map("changed_field")
-  oldValue String? @map("old_value")
-  newValue String? @map("new_value")
-  changedBy String @map("changed_by")
-  user User @relation(fields: [changedBy], references: [id])
+  id            String  @id @default(uuid())
+  changeGroupId String  @map("change_group_id") // 동시에 여러 필드가 바뀐 '한 번의 수정'을 묶는 그룹 id
+  productId     String  @map("product_id")
+  changedField  String  @map("changed_field")
+  oldValue      String? @map("old_value")
+  newValue      String? @map("new_value")
+  changedBy     String  @map("changed_by")
+  user          User    @relation(fields: [changedBy], references: [id])
 
   product Product @relation(fields: [productId], references: [id])
 
@@ -470,19 +513,21 @@ model ProductHistory {
   @@index([productId, changedAt])
   // 같은 시점 변경 묶음 조회
   @@index([changeGroupId])
-
   @@map("product_histories")
 }
 
 // 매장 관리 모델
 model Shop {
-  id String @id @default(uuid())
-  name String @unique
-  owners ShopOwner[] // 이 매장의 공동 점주 목록. 점주 한 명이 여러 매장을 가질 수도 있다(User.ownedShops 참고).
-  seats Seat[]
-  products Product[]
-  usageSessions UsageSession[]
-  orders Order[]
+  id                String                 @id @default(uuid())
+  name              String                 @unique
+  owners            ShopOwner[] // 이 매장의 공동 점주 목록. 점주 한 명이 여러 매장을 가질 수도 있다(User.ownedShops 참고).
+  seats             Seat[]
+  products          Product[]
+  usageSessions     UsageSession[]
+  orders            Order[]
+  ledgers           Ledger[]
+  payouts           Payout[]
+  settlementAccount ShopSettlementAccount?
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -491,8 +536,26 @@ model Shop {
   deletedAt DateTime? @map("deleted_at") // 소프트 삭제
 
   @@index([name])
-
   @@map("shops")
+}
+
+// 정산 송금(Payout) 수취 계좌 정보. Shop과 1:1 - 매장은 정산 수취 계좌를
+// 하나만 등록한다(여러 계좌로 분배하는 정책은 범위 밖).
+// 실제 PG/은행 가입 전이므로 계좌 실명 검증(예금주 조회 API 연동)은
+// 아직 하지 않는다 - 입력값을 그대로 신뢰한다.
+model ShopSettlementAccount {
+  id     String @id @default(uuid())
+  shopId String @unique @map("shop_id")
+  shop   Shop   @relation(fields: [shopId], references: [id])
+
+  bankName      String @map("bank_name") // 은행명
+  accountNumber String @map("account_number") // 계좌번호
+  accountHolder String @map("account_holder") // 예금주명
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("shop_settlement_accounts")
 }
 
 // Shop ↔ User의 N:N 관계(공동 점주). 명시적 조인 모델로 두어
@@ -511,23 +574,23 @@ model ShopOwner {
 }
 
 enum SeatStatus {
-  AVAILABLE   // 사용 가능
+  AVAILABLE // 사용 가능
   UNAVAILABLE // 이용 불가 (고장, 점검 등)
 }
 
 // 좌석 관리 모델
 model Seat {
-  id     String     @id @default(uuid())
-  number Int
-  name   String     @default("")
-  shopId String     @map("shop_id")
-  status SeatStatus @default(AVAILABLE)
-  shop Shop @relation(fields: [shopId], references: [id])
+  id           String         @id @default(uuid())
+  number       Int
+  name         String         @default("")
+  shopId       String         @map("shop_id")
+  status       SeatStatus     @default(AVAILABLE)
+  shop         Shop           @relation(fields: [shopId], references: [id])
   usageSession UsageSession[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
-  
+
   // 매장별 좌석 조회 및 정렬 + 매장 내 좌석 번호 중복 방지
   @@unique([shopId, number])
   @@map("seats")

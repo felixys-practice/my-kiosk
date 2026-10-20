@@ -9,9 +9,9 @@ import {
 export class LedgerQueryService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getSellerDashboard(sellerId: string): Promise<SellerDashboardDto> {
+  async getSellerDashboard(shopId: string): Promise<SellerDashboardDto> {
     const rows = await this.prisma.ledger.findMany({
-      where: { sellerId, status: 'SETTLED' },
+      where: { shopId, status: 'SETTLED' },
     });
 
     return {
