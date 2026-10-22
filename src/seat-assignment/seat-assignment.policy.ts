@@ -6,12 +6,12 @@ import {
 } from '@prisma/client';
 
 /**
- * 좌석 지정 유효 판정 규칙(업무 규칙)
+ * 좌석 배정 유효 판정 규칙(업무 규칙)
  * - DB 상태값(HELD·ACTIVE)이 남아 있어도, 기한이 지났으면 조회 시점에 "무효"로 본다(지연 해제, research R3)
  * - 판정이 필요한 모든 곳은 이 함수 하나를 쓴다
  */
 
-/** 판정에 필요한 지정 필드 */
+/** 판정에 필요한 배정 필드 */
 export type AssignmentForJudge = {
   status: SeatAssignmentStatus;
   heldUntil: Date | null;
@@ -26,16 +26,16 @@ export type AssignmentTicketSnapshot = {
   minuteExpireDeadline: Date | null;
 };
 
-// 지정이 살아 있을 수 있는 이용권 상태
+// 배정이 살아 있을 수 있는 이용권 상태
 const liveTicketStatuses: TicketStatus[] = [
   TicketStatus.UNUSED,
   TicketStatus.ACTIVE,
 ];
 
 /**
- * 좌석 지정이 지금 시점에 유효한지 판정한다
- * @param assignment 판정할 지정
- * @param ticket 지정에 연결된 이용권(HELD이면 null)
+ * 좌석 배정이 지금 시점에 유효한지 판정한다
+ * @param assignment 판정할 배정
+ * @param ticket 배정에 연결된 이용권(HELD이면 null)
  * @param now 판정 기준 시각
  * @returns 유효하면 true
  */
@@ -59,8 +59,8 @@ export function isValidAssignment(
 }
 
 /**
- * 무효로 판정된 지정을 해제할 때 기록할 사유를 고른다
- * @param assignment 무효로 판정된 지정
+ * 무효로 판정된 배정을 해제할 때 기록할 사유를 고른다
+ * @param assignment 무효로 판정된 배정
  * @returns 선점이면 HOLD_EXPIRED, 확정이면 TICKET_EXPIRED
  */
 export function getInvalidReleaseReason(
@@ -72,7 +72,7 @@ export function getInvalidReleaseReason(
 }
 
 /**
- * 이용권 종류별로 지정이 유지되는 마지막 시각을 구한다
+ * 이용권 종류별로 배정이 유지되는 마지막 시각을 구한다
  * @param ticket 이용권
  * @returns 기간권은 만료일(활성화 전이면 활성화 기한), 시간권은 소진 기한
  */

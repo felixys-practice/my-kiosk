@@ -77,7 +77,7 @@ describe('좌석 타입 (E2E)', () => {
   }
 
   /**
-   * 좌석에 유효한 선점(HELD) 지정을 만든다
+   * 좌석에 유효한 선점(HELD) 배정을 만든다
    * @param seatId 좌석 ID
    */
   async function holdSeat(seatId: string): Promise<void> {
@@ -279,7 +279,7 @@ describe('좌석 타입 (E2E)', () => {
   });
 
   describe('좌석 수정 가드', () => {
-    it('유효 지정이 있는 고정석을 자유석으로 수정하면 409 (QS-23)', async () => {
+    it('유효 배정이 있는 고정석을 자유석으로 수정하면 409 (QS-23)', async () => {
       const seatId = await createSeat(SeatType.FIXED);
       await holdSeat(seatId);
 
@@ -310,7 +310,7 @@ describe('좌석 타입 (E2E)', () => {
       expect(seat.type).toBe(SeatType.FIXED);
     });
 
-    it('유효 지정이 있는 고정석을 이용 불가로 수정하면 409 (QS-27)', async () => {
+    it('유효 배정이 있는 고정석을 이용 불가로 수정하면 409 (QS-27)', async () => {
       const seatId = await createSeat(SeatType.FIXED);
       await holdSeat(seatId);
 

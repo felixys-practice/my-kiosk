@@ -10,7 +10,7 @@ import {
   isValidAssignment,
 } from './seat-assignment.policy';
 
-describe('좌석 지정 유효 판정', () => {
+describe('좌석 배정 유효 판정', () => {
   const now = new Date('2026-10-21T12:00:00Z');
   const past = new Date('2026-10-21T11:59:00Z');
   const future = new Date('2026-10-21T12:01:00Z');
@@ -117,7 +117,7 @@ describe('좌석 지정 유효 판정', () => {
   });
 
   describe('해제(RELEASED)', () => {
-    it('해제된 지정은 항상 무효다', () => {
+    it('해제된 배정은 항상 무효다', () => {
       expect(
         isValidAssignment(
           { status: SeatAssignmentStatus.RELEASED, heldUntil: future },

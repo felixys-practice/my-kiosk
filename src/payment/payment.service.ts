@@ -10,10 +10,11 @@ import { OrderItemRepository } from 'src/order-item/order-item.repository';
 import { addDays } from 'date-fns';
 import { TicketStatus } from '@prisma/client';
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 const requestVan = async (paymentId: string) => {
   if (Math.random() < 0.3) {
-    // 에러 발생 확룰
-    throw new Error('테스트 에러');
+    await sleep(100);
   }
   return { pgTransactionId: paymentId };
 };

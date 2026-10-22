@@ -78,11 +78,11 @@ export class SeatService {
    * @returns 없음
    * @throws SeatNotFoundError 좌석이 없을 때
    * @throws SeatAlreadyOccupiedError 이용 중인 좌석의 타입·상태를 바꿀 때
-   * @throws SeatHasAssignmentError 유효 지정이 있는 고정석을 자유석·이용 불가로 바꿀 때
+   * @throws SeatHasAssignmentError 유효 배정이 있는 고정석을 자유석·이용 불가로 바꿀 때
    */
   async updateSeat(seatId: string, dto: UpdateSeatDto): Promise<void> {
     await this.repository.runInTransaction(async (tx) => {
-      // 좌석을 잠가 동시 수정·지정과 직렬화한다
+      // 좌석을 잠가 동시 수정·배정과 직렬화한다
       const seat = await this.repository.findByIdForUpdate(seatId, tx);
 
       // 좌석이 없으면 404
@@ -99,7 +99,7 @@ export class SeatService {
         throw new SeatAlreadyOccupiedError(seatId);
       }
 
-      // 고정석을 자유석·이용 불가로 바꾸면 유효 지정을 확인한다(FR-022)
+      // 고정석을 자유석·이용 불가로 바꾸면 유효 배정을 확인한다(FR-022)
       const releasesFixedSeat =
         seat.type === SeatType.FIXED &&
         (dto.type === SeatType.FREE || dto.status === SeatStatus.UNAVAILABLE);
@@ -111,17 +111,17 @@ export class SeatService {
             tx,
           );
 
-        // 유효 지정이 있으면 자유석으로 바꿀 수 없다
+        // 유효 배정이 있으면 자유석으로 바꿀 수 없다
         if (validAssignment && dto.type === SeatType.FREE) {
           throw new SeatHasAssignmentError(
-            '유효한 지정이 있는 고정석은 자유석으로 바꿀 수 없습니다',
+            '배정된 고정석은 자유석으로 바꿀 수 없습니다',
           );
         }
 
-        // 유효 지정이 있으면 이용 불가로 바꿀 수 없다(FR-022)
+        // 유효 배정이 있으면 이용 불가로 바꿀 수 없다(FR-022)
         if (validAssignment && dto.status === SeatStatus.UNAVAILABLE) {
           throw new SeatHasAssignmentError(
-            '유효한 이용권에 지정된 고정석은 이용 불가로 바꿀 수 없습니다. 먼저 이용권의 좌석을 변경하세요',
+            '유효한 이용권에 배정된 고정석은 이용 불가로 바꿀 수 없습니다. 먼저 이용권의 좌석을 변경하세요',
           );
         }
       }

@@ -210,18 +210,18 @@ enum TicketStatus {
 
 // 좌석 타입 - 좌석·상품·이용권이 공통으로 사용
 enum SeatType {
-  FIXED // 고정석: 구매 시 지정한 좌석 하나만 이용
+  FIXED // 고정석: 구매 시 배정된 좌석 하나만 이용
   FREE // 자유석: 자유석 타입 좌석 중 빈 좌석을 골라 이용
 }
 
-// 좌석 지정(SeatAssignment) 상태
+// 좌석 배정(SeatAssignment) 상태
 enum SeatAssignmentStatus {
   HELD // 주문 선점: 결제 전 임시로 좌석을 잡아 둔 상태(heldUntil까지 유효)
-  ACTIVE // 이용권 확정: 결제 성공 또는 점주 지정으로 이용권에 좌석이 지정된 상태
-  RELEASED // 해제: 더 이상 유효하지 않은 지정(이력으로 보존)
+  ACTIVE // 이용권 확정: 결제 성공 또는 점주 변경으로 이용권에 좌석이 배정된 상태
+  RELEASED // 해제: 더 이상 유효하지 않은 배정(이력으로 보존)
 }
 
-// 좌석 지정 해제 사유
+// 좌석 배정 해제 사유
 enum SeatReleaseReason {
   ORDER_CANCELLED // 이용자가 주문을 취소함(뒤로 가기·취소)
   PAYMENT_FAILED // 결제 승인 실패
@@ -231,7 +231,7 @@ enum SeatReleaseReason {
   TICKET_REVOKED // 환불 확정으로 이용권 소멸
   TICKET_PAUSED // 이용권 일시정지
   SEAT_TYPE_CHANGED // 점주가 이용권을 고정석에서 자유석으로 변경
-  SEAT_MOVED // 점주가 이용권의 지정 좌석을 다른 고정석으로 이동
+  SEAT_MOVED // 점주가 이용권의 배정 좌석을 다른 고정석으로 이동
 }
 
 // 이용권 좌석 변경 종류
@@ -249,7 +249,7 @@ model Ticket {
   seatType        SeatType           @default(FREE) @map("seat_type") // 현재 좌석 타입(점주 변경 시 갱신)
   usageSessions   UsageSession[]
   ticketPauses    TicketPause[]
-  seatAssignments SeatAssignment[] // 좌석 지정 이력(ACTIVE는 최대 1건)
+  seatAssignments SeatAssignment[] // 좌석 배정 이력(ACTIVE는 최대 1건)
   seatChanges     TicketSeatChange[] // 점주의 좌석 변경 이력
 
   // 시간권 전용
@@ -627,7 +627,7 @@ model Seat {
   type            SeatType           @default(FREE) @map("type") // 좌석 타입(기존 좌석은 자유석으로 이전)
   shop            Shop               @relation(fields: [shopId], references: [id])
   usageSession    UsageSession[]
-  seatAssignments SeatAssignment[] // 이 좌석의 지정 기록
+  seatAssignments SeatAssignment[] // 이 좌석의 배정 기록
   changesFromSeat TicketSeatChange[] @relation("TicketSeatChangeFromSeat")
   changesToSeat   TicketSeatChange[] @relation("TicketSeatChangeToSeat")
 
@@ -639,11 +639,11 @@ model Seat {
   @@map("seats")
 }
 
-// 좌석 지정 - 고정석 좌석과 이용권(또는 결제 전 주문 항목)의 지정 1건
+// 좌석 배정 - 고정석 좌석과 이용권(또는 결제 전 주문 항목)의 배정 1건
 model SeatAssignment {
   id            String               @id @default(uuid())
   seatId        String               @map("seat_id")
-  orderItemId   String?              @map("order_item_id") // 구매로 생긴 지정이면 선점한 주문 항목
+  orderItemId   String?              @map("order_item_id") // 구매로 생긴 배정이면 선점한 주문 항목
   ticketId      String?              @map("ticket_id") // 확정된 이용권(HELD 동안은 null)
   status        SeatAssignmentStatus @default(HELD)
   heldUntil     DateTime?            @map("held_until") // HELD 유효시간 - 지나면 지연 해제 대상
@@ -656,14 +656,14 @@ model SeatAssignment {
   ticket    Ticket?    @relation(fields: [ticketId], references: [id])
 
   // NOTE: Partial Unique Index → (seat_id) WHERE status IN ('HELD','ACTIVE')
-  // 좌석당 유효 지정(선점·확정)은 하나만 허용 (raw migration으로 관리)
+  // 좌석당 유효 배정(선점·확정)은 하나만 허용 (raw migration으로 관리)
   // NOTE: Partial Unique Index → (ticket_id) WHERE status = 'ACTIVE'
-  // 이용권당 확정 지정은 하나만 허용 (raw migration으로 관리)
+  // 이용권당 확정 배정은 하나만 허용 (raw migration으로 관리)
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  // 이용권의 현재 지정 조회
+  // 이용권의 현재 배정 조회
   @@index([ticketId, status])
   // 주문 항목의 선점 조회
   @@index([orderItemId])
@@ -677,8 +677,8 @@ model TicketSeatChange {
   changeType     TicketSeatChangeType @map("change_type")
   fromSeatType   SeatType             @map("from_seat_type")
   toSeatType     SeatType             @map("to_seat_type")
-  fromSeatId     String?              @map("from_seat_id") // 변경 전 지정 좌석(자유석이면 null)
-  toSeatId       String?              @map("to_seat_id") // 변경 후 지정 좌석(자유석이면 null)
+  fromSeatId     String?              @map("from_seat_id") // 변경 전 배정 좌석(자유석이면 null)
+  toSeatId       String?              @map("to_seat_id") // 변경 후 배정 좌석(자유석이면 null)
   reason         String // 변경 사유(필수, 최대 500자)
   changedBy      String               @map("changed_by") // 변경한 점주
   endedSessionId String?              @map("ended_session_id") // 이 변경으로 종료된 이용 세션(즉시 퇴실 시)

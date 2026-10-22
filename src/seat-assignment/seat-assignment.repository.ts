@@ -8,7 +8,7 @@ import {
 import { PrismaService, TransactionClient } from 'src/prisma/prisma.service';
 import { AssignmentTicketSnapshot } from './seat-assignment.policy';
 
-/** 열린(HELD·ACTIVE) 지정 + 판정에 필요한 이용권 필드 */
+/** 열린(HELD·ACTIVE) 배정 + 판정에 필요한 이용권 필드 */
 export type OpenSeatAssignment = {
   id: string;
   seatId: string;
@@ -26,7 +26,7 @@ export type LockedSeat = {
   type: SeatType;
 };
 
-/** 지정 상태 갱신 데이터 */
+/** 배정 상태 갱신 데이터 */
 export type SeatAssignmentStatusUpdate =
   | {
       status: typeof SeatAssignmentStatus.RELEASED;
@@ -39,7 +39,7 @@ export type SeatAssignmentStatusUpdate =
       assignedAt: Date;
     };
 
-// 열린 지정 상태
+// 열린 배정 상태
 const openStatuses: SeatAssignmentStatus[] = [
   SeatAssignmentStatus.HELD,
   SeatAssignmentStatus.ACTIVE,
@@ -65,7 +65,7 @@ const openAssignmentSelect = {
 } satisfies Prisma.SeatAssignmentSelect;
 
 /**
- * 좌석 지정 데이터 접근
+ * 좌석 배정 데이터 접근
  * - 쿼리만 담당한다. 유효 판정·해제 결정·순서 조율은 SeatAssignmentService가 한다(헌법 원칙 I)
  */
 @Injectable()
@@ -82,7 +82,7 @@ export class SeatAssignmentRepository {
     seatId: string,
     tx: TransactionClient,
   ): Promise<LockedSeat | null> {
-    // 같은 좌석에 대한 동시 선점·지정을 직렬화
+    // 같은 좌석에 대한 동시 선점·배정을 직렬화
     const [seat] = await tx.$queryRaw<LockedSeat[]>`
       SELECT id, shop_id AS "shopId", type
         FROM seats
@@ -93,10 +93,10 @@ export class SeatAssignmentRepository {
   }
 
   /**
-   * 좌석의 열린(HELD·ACTIVE) 지정을 조회한다
+   * 좌석의 열린(HELD·ACTIVE) 배정을 조회한다
    * @param seatId 좌석 ID
    * @param tx 트랜잭션 클라이언트
-   * @returns 열린 지정 목록
+   * @returns 열린 배정 목록
    */
   async findOpenBySeat(
     seatId: string,
@@ -109,9 +109,9 @@ export class SeatAssignmentRepository {
   }
 
   /**
-   * 여러 좌석의 열린 지정을 조회한다(좌석 목록의 선택 가능 여부 계산용)
+   * 여러 좌석의 열린 배정을 조회한다(좌석 목록의 선택 가능 여부 계산용)
    * @param seatIds 좌석 ID 목록
-   * @returns 열린 지정 목록
+   * @returns 열린 배정 목록
    */
   async findOpenBySeatIds(seatIds: string[]): Promise<OpenSeatAssignment[]> {
     return this.prisma.seatAssignment.findMany({
@@ -121,10 +121,10 @@ export class SeatAssignmentRepository {
   }
 
   /**
-   * 이용권의 확정(ACTIVE) 지정을 조회한다
+   * 이용권의 확정(ACTIVE) 배정을 조회한다
    * @param ticketId 이용권 ID
    * @param client 트랜잭션 클라이언트(없으면 기본 클라이언트)
-   * @returns 확정 지정(없으면 null)
+   * @returns 확정 배정(없으면 null)
    */
   async findActiveByTicket(
     ticketId: string,
@@ -137,10 +137,10 @@ export class SeatAssignmentRepository {
   }
 
   /**
-   * 주문 항목들의 선점(HELD) 지정을 조회한다
+   * 주문 항목들의 선점(HELD) 배정을 조회한다
    * @param orderItemIds 주문 항목 ID 목록
    * @param tx 트랜잭션 클라이언트
-   * @returns 선점 지정 목록
+   * @returns 선점 배정 목록
    */
   async findHeldByOrderItems(
     orderItemIds: string[],
@@ -156,10 +156,10 @@ export class SeatAssignmentRepository {
   }
 
   /**
-   * 주문 항목의 가장 최근 지정을 상태와 무관하게 조회한다
+   * 주문 항목의 가장 최근 배정을 상태와 무관하게 조회한다
    * @param orderItemId 주문 항목 ID
    * @param tx 트랜잭션 클라이언트
-   * @returns 가장 최근 지정(없으면 null)
+   * @returns 가장 최근 배정(없으면 null)
    */
   async findLatestByOrderItem(
     orderItemId: string,
@@ -173,7 +173,7 @@ export class SeatAssignmentRepository {
   }
 
   /**
-   * 지정을 생성한다
+   * 배정을 생성한다
    * @param data 생성 데이터
    * @param tx 트랜잭션 클라이언트
    * @throws Prisma.PrismaClientKnownRequestError P2002 - 부분 유일 인덱스 위반
@@ -186,8 +186,8 @@ export class SeatAssignmentRepository {
   }
 
   /**
-   * 지정 상태를 갱신한다
-   * @param ids 지정 ID 목록
+   * 배정 상태를 갱신한다
+   * @param ids 배정 ID 목록
    * @param data 갱신 데이터
    * @param tx 트랜잭션 클라이언트
    * @throws Prisma.PrismaClientKnownRequestError P2002 - 부분 유일 인덱스 위반

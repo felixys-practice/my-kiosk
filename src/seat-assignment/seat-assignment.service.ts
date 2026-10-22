@@ -19,7 +19,7 @@ import {
 import { SeatNotAssignableError, SeatTypeMismatchError } from './errors';
 
 /**
- * 좌석 지정(선점·확정·해제) 업무 로직
+ * 좌석 배정(선점·확정·해제) 업무 로직
  * - 다른 모듈은 Repository가 아니라 이 Service를 사용한다
  * - 모든 쓰기 메서드는 호출부의 트랜잭션(tx) 안에서 실행된다
  */
@@ -28,18 +28,18 @@ export class SeatAssignmentService {
   constructor(private readonly repository: SeatAssignmentRepository) {}
 
   /**
-   * 좌석의 유효한 지정을 찾는다. 기한이 지난 지정은 같은 트랜잭션에서 해제한다(지연 해제)
+   * 좌석의 유효한 배정을 찾는다. 기한이 지난 배정은 같은 트랜잭션에서 해제한다(지연 해제)
    * @param seatId 좌석 ID
    * @param now 판정 기준 시각
    * @param tx 트랜잭션 클라이언트
-   * @returns 유효한 지정(없으면 null)
+   * @returns 유효한 배정(없으면 null)
    */
   async findValidBySeat(
     seatId: string,
     now: Date,
     tx: TransactionClient,
   ): Promise<OpenSeatAssignment | null> {
-    // 열린 지정을 유효/무효로 나눈다
+    // 열린 배정을 유효/무효로 나눈다
     const rows = await this.repository.findOpenBySeat(seatId, tx);
     let valid: OpenSeatAssignment | null = null;
     const invalidByReason = new Map<SeatReleaseReason, string[]>();
@@ -55,7 +55,7 @@ export class SeatAssignmentService {
       ]);
     }
 
-    // 무효 지정은 사유별로 해제
+    // 무효 배정은 사유별로 해제
     for (const [reason, ids] of invalidByReason) {
       await this.repository.updateStatus(
         ids,
@@ -79,7 +79,7 @@ export class SeatAssignmentService {
    * @throws DomainNotFoundError 좌석이 없음
    * @throws SeatTypeMismatchError 고정석이 아님
    * @throws DomainBadRequestError 다른 매장의 좌석
-   * @throws SeatNotAssignableError 이미 유효한 지정이 있음
+   * @throws SeatNotAssignableError 이미 유효한 배정이 있음
    */
   async hold(
     input: {
@@ -91,7 +91,7 @@ export class SeatAssignmentService {
     now: Date,
     tx: TransactionClient,
   ): Promise<void> {
-    // 좌석 잠금 + 고정석·매장 검증 + 유효 지정 확인
+    // 좌석 잠금 + 고정석·매장 검증 + 유효 배정 확인
     await this.lockAssignableFixedSeat(input.seatId, input.shopId, now, tx);
 
     // 선점 생성 (동시 요청은 부분 유일 인덱스가 최종 방어)
@@ -122,7 +122,7 @@ export class SeatAssignmentService {
     now: Date,
     tx: TransactionClient,
   ): Promise<boolean> {
-    // 주문 항목의 최근 지정 조회
+    // 주문 항목의 최근 배정 조회
     const row = await this.repository.findLatestByOrderItem(orderItemId, tx);
     if (!row) {
       throw new DomainNotFoundError(
@@ -175,14 +175,14 @@ export class SeatAssignmentService {
    * @throws DomainNotFoundError 좌석이 없음
    * @throws SeatTypeMismatchError 고정석이 아님
    * @throws DomainBadRequestError 다른 매장의 좌석
-   * @throws SeatNotAssignableError 이미 유효한 지정이 있음
+   * @throws SeatNotAssignableError 이미 유효한 배정이 있음
    */
   async assign(
     input: { seatId: string; shopId: string; ticketId: string },
     now: Date,
     tx: TransactionClient,
   ): Promise<void> {
-    // 좌석 잠금 + 고정석·매장 검증 + 유효 지정 확인
+    // 좌석 잠금 + 고정석·매장 검증 + 유효 배정 확인
     await this.lockAssignableFixedSeat(input.seatId, input.shopId, now, tx);
 
     // 확정 생성
@@ -199,12 +199,12 @@ export class SeatAssignmentService {
   }
 
   /**
-   * 이용권의 확정 지정을 해제한다
+   * 이용권의 확정 배정을 해제한다
    * @param ticketId 이용권 ID
    * @param reason 해제 사유
    * @param now 기준 시각
    * @param tx 트랜잭션 클라이언트
-   * @returns 해제한 지정(없었으면 null)
+   * @returns 해제한 배정(없었으면 null)
    */
   async releaseByTicket(
     ticketId: string,
@@ -212,7 +212,7 @@ export class SeatAssignmentService {
     now: Date,
     tx: TransactionClient,
   ): Promise<OpenSeatAssignment | null> {
-    // 확정 지정이 없으면 할 일 없음(자유석 이용권 등)
+    // 확정 배정이 없으면 할 일 없음(자유석 이용권 등)
     const row = await this.repository.findActiveByTicket(ticketId, tx);
     if (!row) return null;
 
@@ -259,10 +259,10 @@ export class SeatAssignmentService {
   }
 
   /**
-   * 이용권의 확정 지정을 조회한다
+   * 이용권의 확정 배정을 조회한다
    * @param ticketId 이용권 ID
    * @param tx 트랜잭션 클라이언트(선택)
-   * @returns 확정 지정(없으면 null)
+   * @returns 확정 배정(없으면 null)
    */
   async getActiveByTicket(
     ticketId: string,
@@ -281,7 +281,7 @@ export class SeatAssignmentService {
     seats: { id: string; type: SeatType }[],
     now: Date,
   ): Promise<Map<string, boolean>> {
-    // 고정석만 지정 조회 대상
+    // 고정석만 배정 조회 대상
     const fixedIds = seats
       .filter((seat) => seat.type === SeatType.FIXED)
       .map((seat) => seat.id);
@@ -290,7 +290,7 @@ export class SeatAssignmentService {
         ? await this.repository.findOpenBySeatIds(fixedIds)
         : [];
 
-    // 유효 지정이 있는 좌석 집합
+    // 유효 배정이 있는 좌석 집합
     const taken = new Set(
       rows
         .filter((row) => isValidAssignment(row, row.ticket, now))
@@ -306,7 +306,7 @@ export class SeatAssignmentService {
   }
 
   /**
-   * 좌석을 잠그고, 같은 매장의 고정석이며 유효 지정이 없는지 확인한다
+   * 좌석을 잠그고, 같은 매장의 고정석이며 유효 배정이 없는지 확인한다
    * @param seatId 좌석 ID
    * @param shopId 매장 ID
    * @param now 기준 시각
@@ -315,7 +315,7 @@ export class SeatAssignmentService {
    * @throws DomainNotFoundError 좌석이 없음
    * @throws SeatTypeMismatchError 고정석이 아님
    * @throws DomainBadRequestError 다른 매장의 좌석
-   * @throws SeatNotAssignableError 이미 유효한 지정이 있음
+   * @throws SeatNotAssignableError 이미 유효한 배정이 있음
    */
   private async lockAssignableFixedSeat(
     seatId: string,
@@ -335,7 +335,7 @@ export class SeatAssignmentService {
       throw new DomainBadRequestError(`다른 매장의 좌석입니다: ${seatId}`);
     }
 
-    // 유효 지정 확인(만료된 지정은 이 안에서 해제됨)
+    // 유효 배정 확인(만료된 배정은 이 안에서 해제됨)
     if (await this.findValidBySeat(seatId, now, tx)) {
       throw new SeatNotAssignableError(seatId);
     }
@@ -343,11 +343,11 @@ export class SeatAssignmentService {
   }
 
   /**
-   * 지정을 생성하고, 부분 유일 인덱스 위반은 SeatNotAssignableError로 바꾼다
+   * 배정을 생성하고, 부분 유일 인덱스 위반은 SeatNotAssignableError로 바꾼다
    * @param data 생성 데이터
    * @param seatId 오류 메시지용 좌석 ID
    * @param tx 트랜잭션 클라이언트
-   * @throws SeatNotAssignableError 동시 요청으로 이미 지정됨
+   * @throws SeatNotAssignableError 동시 요청으로 이미 배정됨
    */
   private async createOrConflict(
     data: Prisma.SeatAssignmentUncheckedCreateInput,

@@ -17,7 +17,7 @@ describe('SeatService', () => {
   let seatAssignmentService: jest.Mocked<SeatAssignmentService>;
   let service: SeatService;
 
-  /** 유효한 지정 1건 */
+  /** 유효한 배정 1건 */
   const validAssignment: OpenSeatAssignment = {
     id: 'assignment-1',
     seatId,
@@ -47,7 +47,7 @@ describe('SeatService', () => {
     } as unknown as jest.Mocked<SeatAssignmentService>;
     service = new SeatService(repository, seatAssignmentService);
 
-    // 기본: 이용 중이 아닌 사용 가능한 고정석, 유효 지정 없음
+    // 기본: 이용 중이 아닌 사용 가능한 고정석, 유효 배정 없음
     repository.findByIdForUpdate.mockResolvedValue({
       id: seatId,
       type: SeatType.FIXED,
@@ -119,7 +119,7 @@ describe('SeatService', () => {
       ).rejects.toBeInstanceOf(SeatAlreadyOccupiedError);
     });
 
-    it('유효 지정이 있는 고정석을 자유석으로 바꾸면 SeatHasAssignmentError(409)를 던진다', async () => {
+    it('유효 배정이 있는 고정석을 자유석으로 바꾸면 SeatHasAssignmentError(409)를 던진다', async () => {
       seatAssignmentService.findValidBySeat.mockResolvedValue(validAssignment);
 
       await expect(
@@ -128,7 +128,7 @@ describe('SeatService', () => {
       expect(repository.updateSeat).not.toHaveBeenCalled();
     });
 
-    it('유효 지정이 있는 고정석을 이용 불가로 바꾸면 SeatHasAssignmentError(409)를 던진다', async () => {
+    it('유효 배정이 있는 고정석을 이용 불가로 바꾸면 SeatHasAssignmentError(409)를 던진다', async () => {
       seatAssignmentService.findValidBySeat.mockResolvedValue(validAssignment);
 
       await expect(
@@ -136,7 +136,7 @@ describe('SeatService', () => {
       ).rejects.toBeInstanceOf(SeatHasAssignmentError);
     });
 
-    it('유효 지정이 없는 고정석은 자유석으로 바꿀 수 있다', async () => {
+    it('유효 배정이 없는 고정석은 자유석으로 바꿀 수 있다', async () => {
       await service.updateSeat(seatId, { type: SeatType.FREE });
 
       expect(seatAssignmentService.findValidBySeat).toHaveBeenCalledWith(

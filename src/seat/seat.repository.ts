@@ -60,7 +60,7 @@ export class SeatRepository {
     seatId: string,
     tx: TransactionClient,
   ): Promise<LockedSeatForUpdate | null> {
-    // 같은 좌석의 동시 수정·지정을 직렬화한다
+    // 같은 좌석의 동시 수정·배정을 직렬화한다
     const [seat] = await tx.$queryRaw<LockedSeatForUpdate[]>`
       SELECT id, type, status
         FROM seats
