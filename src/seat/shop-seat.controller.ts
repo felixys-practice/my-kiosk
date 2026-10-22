@@ -31,11 +31,7 @@ export class ShopSeatController {
     @Param('shopId') shopId: string,
     @Body() createSeatDto: CreateSeatDto,
   ): Promise<void> {
-    await this.service.createSeat(
-      shopId,
-      createSeatDto.name,
-      createSeatDto.number,
-    );
+    await this.service.createSeat(shopId, createSeatDto);
   }
 
   @ApiOperation({ summary: '좌석 목록 조회' })

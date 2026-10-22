@@ -283,14 +283,20 @@ describe('좌석 타입 (E2E)', () => {
       const seatId = await createSeat(SeatType.FIXED);
       await holdSeat(seatId);
 
-      await patchSeat(seatId, { type: SeatType.FREE }).expect(409);
+      const { body } = await patchSeat(seatId, { type: SeatType.FREE }).expect(
+        409,
+      );
+      expect(body.error.code).toBe('SeatHasAssignmentError');
     });
 
     it('이용 중인 좌석의 타입 변경은 409, 점주가 퇴실 처리한 뒤에는 성공한다 (QS-26)', async () => {
       const seatId = await createSeat(SeatType.FREE);
       const sessionId = await occupySeat(seatId);
 
-      await patchSeat(seatId, { type: SeatType.FIXED }).expect(409);
+      const { body: rejected } = await patchSeat(seatId, {
+        type: SeatType.FIXED,
+      }).expect(409);
+      expect(rejected.error.code).toBe('SeatAlreadyOccupiedError');
 
       await request(server)
         .patch(`/usage-sessions/${sessionId}/end`)
@@ -308,14 +314,20 @@ describe('좌석 타입 (E2E)', () => {
       const seatId = await createSeat(SeatType.FIXED);
       await holdSeat(seatId);
 
-      await patchSeat(seatId, { status: SeatStatus.UNAVAILABLE }).expect(409);
+      const { body } = await patchSeat(seatId, {
+        status: SeatStatus.UNAVAILABLE,
+      }).expect(409);
+      expect(body.error.code).toBe('SeatHasAssignmentError');
     });
 
     it('이용 중인 자유석을 이용 불가로 수정하면 409, 점주가 퇴실 처리한 뒤에는 성공한다 (QS-27a)', async () => {
       const seatId = await createSeat(SeatType.FREE);
       const sessionId = await occupySeat(seatId);
 
-      await patchSeat(seatId, { status: SeatStatus.UNAVAILABLE }).expect(409);
+      const { body: rejected } = await patchSeat(seatId, {
+        status: SeatStatus.UNAVAILABLE,
+      }).expect(409);
+      expect(rejected.error.code).toBe('SeatAlreadyOccupiedError');
 
       await request(server)
         .patch(`/usage-sessions/${sessionId}/end`)

@@ -131,48 +131,55 @@ npm run test:e2e -- --testPathPatterns=seat-type -t "\(QS-n\)"
 
 #### 동작 1. 등록 시 좌석 타입을 저장한다
 
-- [ ] T021 [US1] 실패 확인:
+- [x] T021 [US1] 실패 확인:
   ① 실패 확인: 단위 단건(`src/seat/seat.service.spec.ts`, "지정한 좌석 타입으로 좌석을 등록한다").
      기대 사유: 현재 시그니처 `createSeat(shopId, name?, number?)`가 DTO 객체를 `name` 자리로 받아 `repository.createSeat`가 `type` 없이 호출됨
-- [ ] T022 [US1] 구현 + 통과 확인:
+  - 실제 실패(2026-10-22): `toHaveBeenCalledWith` 불일치. 실제 호출은 `{ name: { name, number, type }, number: NaN, shop }`로 최상위 `type` 없음. 기대 사유와 같음
+- [x] T022 [US1] 구현 + 통과 확인:
   ① 구현: `src/seat/seat.service.ts`의 `createSeat`를 `createSeat(shopId: string, dto: CreateSeatDto)`로 바꾸고 `repository.createSeat`에 `type`을 함께 넘긴다.
      `src/seat/shop-seat.controller.ts`는 `createSeatDto`를 그대로 넘긴다
   ② 통과 확인: 단위 단건 통과, `npm run test -- --testPathPatterns=src/seat/` 전체에서 DTO 테스트 회귀 없음
+  - 결과(2026-10-22): 단건 통과. `src/seat/` 19개 중 11개 통과, 실패 8개는 이후 사이클 대상(DTO 8개 회귀 없음)
 
 #### 동작 2. 번호 없이 등록하면 마지막 번호 다음 값을 쓴다 — 동작 1 구현으로 함께 통과
 
-- [ ] T023 [US1] 조건 깨뜨리기:
+- [x] T023 [US1] 조건 깨뜨리기:
   ① 통과 확인: 단위 단건("좌석 번호가 없으면 마지막 번호 다음 값으로 등록한다") 통과
   ② 조건 깨뜨리기: `createSeat`의 `getLastSeatNumber(...) + 1`에서 `+ 1`을 잠시 지워 단건이 실패하는지 확인한다
   ③ 원복 후 통과 확인: 원복하고 단건 통과. ②에서 실패하지 않으면 멈추고 사용자에게 알린다
+  - 결과(2026-10-22): ① 통과 → ② `+ 1` 제거 시 `number: 7`(기대 8)로 실패 → ③ 원복 후 통과
 
 #### 동작 3. 이름·번호 수정은 트랜잭션 안에서 가드 없이 수정한다
 
-- [ ] T024 [US1] 실패 확인:
+- [x] T024 [US1] 실패 확인:
   ① 실패 확인: 단위 단건("이름·번호만 바꾸면 이용 중이어도 그대로 수정한다").
      기대 사유: `repository.updateSeat`가 세 번째 인자 `tx` 없이 `(seatId, data)`로 호출됨
-- [ ] T025 [US1] 구현 + 통과 확인:
+  - 실제 실패(2026-10-22): 호출 인자가 `("seat-1", {name: "B1"})`로 세 번째 인자(`tx`) 없음. 기대 사유와 같음
+- [x] T025 [US1] 구현 + 통과 확인:
   ① 구현: `src/seat/seat.repository.ts`에 `runInTransaction(work)`(`PrismaService.executeTransaction` 위임), `findByIdForUpdate(seatId, tx)`
      (raw SQL `SELECT id, type, status ... FOR UPDATE`, 테이블명은 `schema.prisma`의 `@@map` 확인, 결과 `{ id, type, status } | null`)를 추가하고
      `updateSeat(seatId, data, tx?)`가 `tx`를 받게 한다. `src/seat/seat.service.ts`의 `updateSeat(seatId, dto: UpdateSeatDto)`는
      `runInTransaction` 안에서 `findByIdForUpdate` → `repository.updateSeat(seatId, dto, tx)` 순서로 호출한다(가드는 넣지 않는다)
   ② 통과 확인: 단위 단건 통과, `src/seat/` 전체 회귀 없음
+  - 결과(2026-10-22): 단건 통과. `src/seat/` 19개 중 12개 통과(회귀 없음)
 
 #### 동작 4. 없는 좌석을 수정하면 404
 
-- [ ] T026 [US1] 실패 확인:
+- [x] T026 [US1] 실패 확인:
   ⓪ 기대값 변경(2026-10-22 사용자 확인, 헌법 III·VI): `src/seat/seat.service.spec.ts`의
      「좌석이 없으면 DomainNotFoundError를 던진다」를 「좌석이 없으면 SeatNotFoundError를 던진다」로 바꾸고
      `toBeInstanceOf(SeatNotFoundError)`로 검증한다. 에러 파일이 없어 `Cannot find module`이면 `src/seat/errors/seat-not-found.error.ts`에
      빈 클래스(`DomainNotFoundError` 상속, `name = 'SeatNotFoundError'`)를 두고 다시 확인한다
   ① 실패 확인: 단위 단건("좌석이 없으면 SeatNotFoundError를 던진다"). 기대 사유: 예외 없이 resolve됨
-- [ ] T027 [US1] 구현 + 통과 확인:
+  - 실제 실패(2026-10-22): ⓪ 변경 후 1차 `Cannot find module './errors/seat-not-found.error'` → `SeatNotFoundError` 클래스를 두고 2차 `Received promise resolved instead of rejected`. 기대 사유와 같음
+- [x] T027 [US1] 구현 + 통과 확인:
   ① 구현: `src/seat/seat.service.ts`의 `updateSeat`에서 `findByIdForUpdate` 결과가 `null`이면 `SeatNotFoundError`(`src/seat/errors/seat-not-found.error.ts`, 안내 문구 '좌석을 찾을 수 없습니다')
   ② 통과 확인: 단위 단건 통과, `src/seat/` 전체 회귀 없음
+  - 결과(2026-10-22): 단건 통과. `src/seat/` 19개 중 13개 통과(회귀 없음)
 
 #### 동작 5. 이용 중인 좌석의 타입 변경은 409 (QS-26)
 
-- [ ] T028 [US1] 실패 확인:
+- [x] T028 [US1] 실패 확인:
   ⓪ 기대값 변경(2026-10-22 사용자 확인, 헌법 III·VI): `src/seat/seat.service.spec.ts`의
      「이용 중인 좌석의 타입을 바꾸면 DomainConflictError(409)를 던진다」를
      「이용 중인 좌석의 타입을 바꾸면 SeatAlreadyOccupiedError(409)를 던진다」로 바꾸고 `toBeInstanceOf(SeatAlreadyOccupiedError)`로 검증한다
@@ -180,48 +187,56 @@ npm run test:e2e -- --testPathPatterns=seat-type -t "\(QS-n\)"
   ① E2E 실패 확인: E2E 단건(QS-26). 기대 사유: 첫 `PATCH /seats/:seatId`가 409가 아니라 200.
      500이 나오면 동작 3의 `findByIdForUpdate` SQL을 먼저 고친다
   ② 단위 실패 확인: 단위 단건("이용 중인 좌석의 타입을 바꾸면 SeatAlreadyOccupiedError(409)를 던진다"). 기대 사유: 예외 없이 resolve됨
-- [ ] T029 [US1] 구현 + 통과 확인:
+  - 실제 실패(2026-10-22): ⓪ 변경 반영. E2E(QS-26) `expected 409 "Conflict", got 200 "OK"`(500 아님, `findByIdForUpdate` 정상) /
+    단위 `Received promise resolved instead of rejected`. 둘 다 기대 사유와 같음
+- [x] T029 [US1] 구현 + 통과 확인:
   ① 구현: `src/seat/seat.repository.ts`에 `hasActiveSession(seatId, tx)`(`UsageSession` 중 `status = ACTIVE`인 행 존재 여부)를 추가한다.
      `src/seat/seat.service.ts`의 `updateSeat`에서 `dto.type`이 있고 **현재 `type`과 다를 때** 이용 중이면
      `SeatAlreadyOccupiedError(seatId)`. `status` 조건은 동작 7에서 넣는다 (FR-003, research R9)
   ② 단위 통과 확인: 단위 단건 통과, `src/seat/` 전체 회귀 없음
   ③ E2E 통과 확인: E2E 단건(QS-26) 통과(퇴실 처리 후 변경 성공까지)
+  - 결과(2026-10-22): 단위 단건 통과, `src/seat/` 19개 중 14개 통과(회귀 없음), E2E(QS-26) 통과
 
 #### 동작 6. 현재와 같은 값이면 가드에 걸리지 않는다 — 구현 전부터 통과
 
-- [ ] T030 [US1] 조건 깨뜨리기:
+- [x] T030 [US1] 조건 깨뜨리기:
   ① 통과 확인: 단위 단건("현재와 같은 값으로 바꾸면 이용 중이어도 가드에 걸리지 않는다") 통과
   ② 조건 깨뜨리기: 동작 5 구현의 "현재 `type`과 다를 때" 비교를 잠시 지워(값이 있기만 하면 가드) 단건이 `SeatAlreadyOccupiedError`로 실패하는지 확인한다
   ③ 원복 후 통과 확인: 원복하고 단건과 `src/seat/` 전체 통과. ②에서 실패하지 않으면 멈추고 사용자에게 알린다
+  - 결과(2026-10-22): ① 통과 → ② 비교 제거 시 `SeatAlreadyOccupiedError`로 실패 → ③ 원복 후 단건 통과, `src/seat/` 14개 통과
 
 #### 동작 7. 이용 중인 좌석의 상태 변경은 409 (QS-27a)
 
-- [ ] T031 [US1] 실패 확인:
+- [x] T031 [US1] 실패 확인:
   ⓪ 기대값 변경(2026-10-22 사용자 확인, 헌법 III·VI): `src/seat/seat.service.spec.ts`의
      「이용 중인 좌석의 상태를 바꾸면 DomainConflictError(409)를 던진다」를
      「이용 중인 좌석의 상태를 바꾸면 SeatAlreadyOccupiedError(409)를 던진다」로 바꾸고 `toBeInstanceOf(SeatAlreadyOccupiedError)`로 검증한다.
      E2E(QS-27a)의 첫 `PATCH`에 `error.code = SeatAlreadyOccupiedError` 검증을 추가한다
   ① E2E 실패 확인: E2E 단건(QS-27a). 기대 사유: 첫 `PATCH`(`status = UNAVAILABLE`)가 409가 아니라 200
   ② 단위 실패 확인: 단위 단건("이용 중인 좌석의 상태를 바꾸면 SeatAlreadyOccupiedError(409)를 던진다"). 기대 사유: 예외 없이 resolve됨
-- [ ] T032 [US1] 구현 + 통과 확인:
+  - 실제 실패(2026-10-22): ⓪ 변경 반영. E2E(QS-27a) `expected 409 "Conflict", got 200 "OK"` / 단위 `Received promise resolved instead of rejected`. 둘 다 기대 사유와 같음
+- [x] T032 [US1] 구현 + 통과 확인:
   ① 구현: `src/seat/seat.service.ts`의 이용 중 가드 조건에 "`dto.status`가 있고 현재 `status`와 다름"을 추가한다 (research R8)
   ② 단위 통과 확인: 단위 단건 통과, `src/seat/` 전체 회귀 없음
   ③ E2E 통과 확인: E2E 단건(QS-27a) 통과
+  - 결과(2026-10-22): 단위 단건 통과, `src/seat/` 19개 중 15개 통과(회귀 없음), E2E(QS-27a) 통과
 
 #### 동작 8. 유효 지정이 없는 고정석은 자유석으로 바꿀 수 있다 (지정 확인을 거친다)
 
-- [ ] T033 [US1] 실패 확인:
+- [x] T033 [US1] 실패 확인:
   ① 실패 확인: 단위 단건("유효 지정이 없는 고정석은 자유석으로 바꿀 수 있다"). 기대 사유: `seatAssignmentService.findValidBySeat`가 호출되지 않음
-- [ ] T034 [US1] 구현 + 통과 확인:
+  - 실제 실패(2026-10-22): `findValidBySeat` 기대 호출 `("seat-1", Any<Date>, {})`, 실제 호출 0회. 기대 사유와 같음
+- [x] T034 [US1] 구현 + 통과 확인:
   ① 구현: `src/seat/seat.service.ts` 생성자에 `SeatAssignmentService`를 주입하고 `src/seat/seat.module.ts`에서 `SeatAssignmentModule`을 import한다.
      현재 `type = FIXED`이고 (`type`을 `FREE`로 바꾸거나 `status`를 `UNAVAILABLE`로 바꾸는) 경우 `findValidBySeat(seatId, new Date(), tx)`를 호출한다.
      결과에 따른 거부는 동작 9·10에서 넣는다
   ② 통과 확인: 단위 단건 통과, `src/seat/` 전체 회귀 없음
   ③ 주입 확인: `npm run test:e2e -- --testPathPatterns=seat-type`로 의존성 주입 오류 없이 QS-1·QS-26·QS-27a가 계속 통과하는지 확인한다
+  - 결과(2026-10-22): 단건 통과, `src/seat/` 19개 중 16개 통과(회귀 없음). E2E 주입 오류 없음, QS-1·26·27a 통과(QS-2·23·27은 이후 사이클 대상)
 
 #### 동작 9. 유효 지정이 있는 고정석을 자유석으로 바꾸면 409 (QS-23)
 
-- [ ] T035 [US1] 실패 확인:
+- [x] T035 [US1] 실패 확인:
   ⓪ 기대값 변경(2026-10-22 사용자 확인, 헌법 III·VI): `src/seat/seat.service.spec.ts`의
      「유효 지정이 있는 고정석을 자유석으로 바꾸면 DomainConflictError(409)를 던진다」를
      「유효 지정이 있는 고정석을 자유석으로 바꾸면 SeatHasAssignmentError(409)를 던진다」로 바꾸고 `toBeInstanceOf(SeatHasAssignmentError)`로 검증한다.
@@ -229,41 +244,50 @@ npm run test:e2e -- --testPathPatterns=seat-type -t "\(QS-n\)"
      `src/seat/errors/seat-has-assignment.error.ts`에 빈 클래스(`DomainConflictError` 상속, `name = 'SeatHasAssignmentError'`)를 두고 다시 확인한다
   ① E2E 실패 확인: E2E 단건(QS-23). 기대 사유: 409가 아니라 200
   ② 단위 실패 확인: 단위 단건("유효 지정이 있는 고정석을 자유석으로 바꾸면 SeatHasAssignmentError(409)를 던진다"). 기대 사유: 예외 없이 resolve되고 `updateSeat`가 호출됨
-- [ ] T036 [US1] 구현 + 통과 확인:
+  - 실제 실패(2026-10-22): ⓪ 변경 반영. E2E(QS-23) `expected 409 "Conflict", got 200 "OK"` / 단위 1차 `Cannot find module './errors/seat-has-assignment.error'` → 클래스를 두고 2차 `Received promise resolved instead of rejected`. 기대 사유와 같음
+- [x] T036 [US1] 구현 + 통과 확인:
   ① 구현: `src/seat/seat.service.ts`에서 `type`을 `FREE`로 바꾸는 경우 `findValidBySeat`가 행을 반환하면
      `SeatHasAssignmentError`(안내 문구 '유효한 지정이 있는 고정석은 자유석으로 바꿀 수 없습니다'). `UNAVAILABLE` 조건은 동작 10에서 넣는다
   ② 단위 통과 확인: 단위 단건 통과, `src/seat/` 전체 회귀 없음
   ③ E2E 통과 확인: E2E 단건(QS-23) 통과
+  - 결과(2026-10-22): 단위 단건 통과, `src/seat/` 19개 중 17개 통과(회귀 없음), E2E(QS-23) 통과
 
 #### 동작 10. 유효 지정이 있는 고정석을 이용 불가로 바꾸면 409 (QS-27)
 
-- [ ] T037 [US1] 실패 확인:
+- [x] T037 [US1] 실패 확인:
   ⓪ 기대값 변경(2026-10-22 사용자 확인, 헌법 III·VI): `src/seat/seat.service.spec.ts`의
      「유효 지정이 있는 고정석을 이용 불가로 바꾸면 DomainConflictError(409)를 던진다」를
      「유효 지정이 있는 고정석을 이용 불가로 바꾸면 SeatHasAssignmentError(409)를 던진다」로 바꾸고 `toBeInstanceOf(SeatHasAssignmentError)`로 검증한다.
      E2E(QS-27)에 `error.code = SeatHasAssignmentError` 검증을 추가한다
   ① E2E 실패 확인: E2E 단건(QS-27). 기대 사유: 409가 아니라 200
   ② 단위 실패 확인: 단위 단건("유효 지정이 있는 고정석을 이용 불가로 바꾸면 SeatHasAssignmentError(409)를 던진다"). 기대 사유: 예외 없이 resolve됨
-- [ ] T038 [US1] 구현 + 통과 확인:
+  - 실제 실패(2026-10-22): ⓪ 변경 반영. E2E(QS-27) `expected 409 "Conflict", got 200 "OK"` / 단위 `Received promise resolved instead of rejected`. 둘 다 기대 사유와 같음
+- [x] T038 [US1] 구현 + 통과 확인:
   ① 구현: `src/seat/seat.service.ts`에서 `status`를 `UNAVAILABLE`로 바꾸는 경우에도 유효 지정이 있으면
      `SeatHasAssignmentError`(안내 문구 '유효한 이용권에 지정된 고정석은 이용 불가로 바꿀 수 없습니다. 먼저 이용권의 좌석을 변경하세요') (FR-022)
   ② 단위 통과 확인: 단위 단건 통과, `src/seat/` 전체 회귀 없음
   ③ E2E 통과 확인: E2E 단건(QS-27) 통과
+  - 결과(2026-10-22): 단위 단건 통과, `src/seat/` 19개 중 18개 통과(회귀 없음), E2E(QS-27) 통과
 
 #### 동작 11. 좌석 목록에 타입과 선택 가능 여부를 보여 준다 (QS-2)
 
-- [ ] T039 [US1] 실패 확인:
+- [x] T039 [US1] 실패 확인:
   ① E2E 실패 확인: E2E 단건(QS-2). 기대 사유: 목록 항목에 `type`·`isAssignable`이 없음
   ② 단위 실패 확인: 단위 단건("조회 결과에 좌석 타입과 선택 가능 여부를 포함한다"). 기대 사유: 결과에 `type`·`isAssignable`이 없음
-- [ ] T040 [US1] 구현 + 통과 확인:
+  - 실제 실패(2026-10-22): E2E(QS-2) `toMatchObject` 불일치, 목록 항목에 `type`·`isAssignable` 없음 / 단위 `toEqual` 불일치, 같은 이유. 기대 사유와 같음
+- [x] T040 [US1] 구현 + 통과 확인:
   ① 구현: `src/seat/dto/get-seat-out.dto.ts`에 `type: SeatType`, `isAssignable: boolean`(`@ApiProperty` 한글 설명, 자유석은 항상 false)을 추가하고,
      `src/seat/seat.service.ts`의 `getSeat`에서 `seatAssignmentService.getAssignableMap(좌석 ID 목록, new Date())`로 계산한다(조회 시점 판정, research R3)
   ② 단위 통과 확인: 단위 단건 통과, `src/seat/` 전체 회귀 없음
   ③ E2E 통과 확인: E2E 단건(QS-2) 통과
+  - 결과(2026-10-22): 단위 단건 통과, `src/seat/` 19개 모두 통과, E2E `seat-type` 6개 모두 통과
 
 #### US1 마무리
 
-- [ ] T041 [US1] `npm run test -- --testPathPatterns="src/seat/|seat-assignment"`, `npm run test:e2e -- --testPathPatterns=seat-type`, `npx eslint src/seat`, `npm run build`를 실행해 모두 통과하는지 확인한다. 기대값은 바꾸지 않는다
+- [x] T041 [US1] `npm run test -- --testPathPatterns="src/seat/|seat-assignment"`, `npm run test:e2e -- --testPathPatterns=seat-type`, `npx eslint src/seat`, `npm run build`를 실행해 모두 통과하는지 확인한다. 기대값은 바꾸지 않는다
+  - 결과(2026-10-22): 단위 4개 파일 54개 통과, E2E `seat-type` 6개 통과, `npx eslint src/seat` 통과(기존 미사용 import `Get`·`Seat` 정리), `npm run build` 성공.
+    체크포인트 확인: 기존 데이터는 seats 6·products 6·tickets 24건 모두 `FREE`.
+    참고: `test/seat-type.e2e-spec.ts:274`(T017 작성분)와 `test/app.e2e-spec.ts:20`에 lint 오류가 있어 T190(`npx eslint .`)에서 처리가 필요하다
 
 **체크포인트**: US1 단독으로 동작·검증 가능(MVP).
 

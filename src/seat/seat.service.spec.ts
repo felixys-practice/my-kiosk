@@ -1,9 +1,11 @@
 /* eslint-disable @typescript-eslint/unbound-method -- jest 목(mock) 메서드를 expect로 검증할 때 생기는 오탐 */
 import { SeatStatus, SeatType } from '@prisma/client';
 import { TransactionClient } from 'src/prisma/prisma.service';
-import { DomainConflictError, DomainNotFoundError } from 'src/common/errors';
 import { SeatAssignmentService } from 'src/seat-assignment/seat-assignment.service';
 import { OpenSeatAssignment } from 'src/seat-assignment/seat-assignment.repository';
+import { SeatAlreadyOccupiedError } from 'src/usage-session/errors/seat-already-occupied.error';
+import { SeatHasAssignmentError } from './errors/seat-has-assignment.error';
+import { SeatNotFoundError } from './errors/seat-not-found.error';
 import { SeatRepository } from './seat.repository';
 import { SeatService } from './seat.service';
 
@@ -95,16 +97,16 @@ describe('SeatService', () => {
       );
     });
 
-    it('이용 중인 좌석의 타입을 바꾸면 DomainConflictError(409)를 던진다', async () => {
+    it('이용 중인 좌석의 타입을 바꾸면 SeatAlreadyOccupiedError(409)를 던진다', async () => {
       repository.hasActiveSession.mockResolvedValue(true);
 
       await expect(
         service.updateSeat(seatId, { type: SeatType.FREE }),
-      ).rejects.toBeInstanceOf(DomainConflictError);
+      ).rejects.toBeInstanceOf(SeatAlreadyOccupiedError);
       expect(repository.updateSeat).not.toHaveBeenCalled();
     });
 
-    it('이용 중인 좌석의 상태를 바꾸면 DomainConflictError(409)를 던진다', async () => {
+    it('이용 중인 좌석의 상태를 바꾸면 SeatAlreadyOccupiedError(409)를 던진다', async () => {
       repository.findByIdForUpdate.mockResolvedValue({
         id: seatId,
         type: SeatType.FREE,
@@ -114,24 +116,24 @@ describe('SeatService', () => {
 
       await expect(
         service.updateSeat(seatId, { status: SeatStatus.UNAVAILABLE }),
-      ).rejects.toBeInstanceOf(DomainConflictError);
+      ).rejects.toBeInstanceOf(SeatAlreadyOccupiedError);
     });
 
-    it('유효 지정이 있는 고정석을 자유석으로 바꾸면 DomainConflictError(409)를 던진다', async () => {
+    it('유효 지정이 있는 고정석을 자유석으로 바꾸면 SeatHasAssignmentError(409)를 던진다', async () => {
       seatAssignmentService.findValidBySeat.mockResolvedValue(validAssignment);
 
       await expect(
         service.updateSeat(seatId, { type: SeatType.FREE }),
-      ).rejects.toBeInstanceOf(DomainConflictError);
+      ).rejects.toBeInstanceOf(SeatHasAssignmentError);
       expect(repository.updateSeat).not.toHaveBeenCalled();
     });
 
-    it('유효 지정이 있는 고정석을 이용 불가로 바꾸면 DomainConflictError(409)를 던진다', async () => {
+    it('유효 지정이 있는 고정석을 이용 불가로 바꾸면 SeatHasAssignmentError(409)를 던진다', async () => {
       seatAssignmentService.findValidBySeat.mockResolvedValue(validAssignment);
 
       await expect(
         service.updateSeat(seatId, { status: SeatStatus.UNAVAILABLE }),
-      ).rejects.toBeInstanceOf(DomainConflictError);
+      ).rejects.toBeInstanceOf(SeatHasAssignmentError);
     });
 
     it('유효 지정이 없는 고정석은 자유석으로 바꿀 수 있다', async () => {
@@ -157,12 +159,12 @@ describe('SeatService', () => {
       expect(repository.updateSeat).toHaveBeenCalled();
     });
 
-    it('좌석이 없으면 DomainNotFoundError를 던진다', async () => {
+    it('좌석이 없으면 SeatNotFoundError를 던진다', async () => {
       repository.findByIdForUpdate.mockResolvedValue(null);
 
       await expect(
         service.updateSeat(seatId, { type: SeatType.FREE }),
-      ).rejects.toBeInstanceOf(DomainNotFoundError);
+      ).rejects.toBeInstanceOf(SeatNotFoundError);
     });
   });
 
