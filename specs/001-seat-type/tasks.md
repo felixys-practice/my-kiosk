@@ -1074,45 +1074,53 @@ QS-30은 동작 38·39를 거쳐야 통과한다. 동작 38에서 E2E를 작성�
 
 #### 동작 1. 좌석 타입은 필수이고 FIXED·FREE만 허용한다
 
-- [ ] T139 [US4] 작성 + 실패 확인:
+- [x] T139 [US4] 작성 + 실패 확인:
   ① 작성: `src/ticket/ticket-seat/dto/change-ticket-seat.dto.spec.ts`(신규)에 `it('좌석 타입이 없거나 고정석·자유석 이외면 isEnum 오류다')`
   ② 실패 확인: 단위 단건. 파일이 없으면 빈 클래스 `ChangeTicketSeatDto {}`를 두고 다시 확인한다. 기대 사유: `seatType` 오류에 `isEnum`이 없음
-- [ ] T140 [US4] 구현 + 통과 확인:
+  - 실제 실패(2026-10-23): 1차 `Cannot find module` → 빈 클래스를 두고 2차 `seatType` 오류 항목 없음(`constraints` undefined). 노리는 사유(enum 검증 없음)와 같음
+- [x] T140 [US4] 구현 + 통과 확인:
   ① 구현: `src/ticket/ticket-seat/dto/change-ticket-seat.dto.ts`에 `seatType`(`@IsEnum(SeatType)`, 한글 `@ApiProperty`)
   ② 통과 확인: 단위 단건 통과
+  - 결과(2026-10-23): 단건 통과
 
 #### 동작 2. 고정석으로 바꿀 때는 좌석 ID가 필수다
 
-- [ ] T141 [US4] 작성 + 실패 확인:
+- [x] T141 [US4] 작성 + 실패 확인:
   ① 작성: `change-ticket-seat.dto.spec.ts`에 `it('좌석 타입이 고정석인데 좌석 ID가 없으면 isUuid 오류다')`
   ② 실패 확인: 단위 단건. 기대 사유: `seatId` 오류가 없음
-- [ ] T142 [US4] 구현 + 통과 확인:
+  - 실제 실패(2026-10-23): `seatId` 오류 항목 없음. 기대 사유와 같음
+- [x] T142 [US4] 구현 + 통과 확인:
   ① 구현: `seatId?`(`@ValidateIf((dto) => dto.seatType === SeatType.FIXED) @IsUUID('4')`)
   ② 통과 확인: 단위 단건 통과, 파일 전체 회귀 없음
+  - 결과(2026-10-23): 단건 통과, 파일 2개 통과
 
 #### 동작 3. 변경 사유는 필수다
 
-- [ ] T143 [US4] 작성 + 실패 확인:
+- [x] T143 [US4] 작성 + 실패 확인:
   ① 작성: `change-ticket-seat.dto.spec.ts`에 `it('변경 사유가 없으면 isNotEmpty 오류다')`
   ② 실패 확인: 단위 단건. 기대 사유: `reason` 오류에 `isNotEmpty`가 없음(whitelist 오류만 있거나 오류 없음)
-- [ ] T144 [US4] 구현 + 통과 확인:
+  - 실제 실패(2026-10-23): `reason` 오류 항목 없음. 기대 사유와 같음
+- [x] T144 [US4] 구현 + 통과 확인:
   ① 구현: `reason`(`@IsNotEmpty() @IsString()`)
   ② 통과 확인: 단위 단건 통과, 파일 전체 회귀 없음
+  - 결과(2026-10-23): 단건 통과, 파일 3개 통과
 
 #### 동작 4. 변경 사유는 500자 이하다
 
-- [ ] T145 [US4] 작성 + 실패 확인:
+- [x] T145 [US4] 작성 + 실패 확인:
   ① 작성: `change-ticket-seat.dto.spec.ts`에 `it('변경 사유가 500자를 넘으면 maxLength 오류다')`
   ② 실패 확인: 단위 단건. 기대 사유: 오류 없음
-- [ ] T146 [US4] 구현 + 통과 확인:
+  - 실제 실패(2026-10-23): `reason` 오류 없음. 기대 사유와 같음
+- [x] T146 [US4] 구현 + 통과 확인:
   ① 구현: `reason`에 `@MaxLength(500)`
   ② 통과 확인: 단위 단건 통과, 파일 전체 회귀 없음
 
 ### 이용권 좌석 변경 (FR-013~015b, FR-019, FR-021)
+  - 결과(2026-10-23): 단건 통과, 파일 4개 통과
 
 #### 동작 5. 이용 중이 아닌 자유석 이용권을 고정석으로 바꾼다 (QS-13a)
 
-- [ ] T147 [US4] 작성 + 실패 확인:
+- [x] T147 [US4] 작성 + 실패 확인:
   ① E2E 작성: `test/seat-type.e2e-spec.ts`에 `describe('사용자 스토리 4')`를 만들고
      `it('이용 중이 아닌 자유석 이용권을 고정석으로 바꾸면 좌석이 지정되고 이력이 1건 남는다 (QS-13a)')`를 작성한다
   ② E2E 실패 확인: E2E 단건(QS-13a). 라우트가 없어 404이면 빈 구현을 둔다: `src/ticket/ticket-seat/ticket-seat.controller.ts`
@@ -1121,235 +1129,282 @@ QS-30은 동작 38·39를 거쳐야 통과한다. 동작 38에서 E2E를 작성�
   ③ 단위 작성: `src/ticket/ticket-seat/ticket-seat.service.spec.ts`(신규)에 `it('자유석 이용권을 고정석으로 바꾸면 새 지정을 만들고 이력 1행을 남긴다')`.
      목: `TicketSeatRepository`, `PrismaService.executeTransaction`, `SeatAssignmentService`, `SessionLifecycleService`, BullMQ 큐
   ④ 단위 실패 확인: 단위 단건. 기대 사유: `assign`·이력 생성이 호출되지 않음
-- [ ] T148 [US4] 구현 + 통과 확인:
+  - 실제 실패(2026-10-23): E2E(QS-13a) 1차 404(라우트 없음) → 빈 컨트롤러·서비스를 두고 2차 이용권 `seatType` `Expected "FIXED", Received "FREE"` / 단위 `assign` 호출 0회. 기대 사유와 같음. 준비 함수 `changeTicketSeat` 추가, 테스트 이름은 "배정" 용어 사용
+- [x] T148 [US4] 구현 + 통과 확인:
   ① 구현: `src/ticket/ticket-seat/ticket-seat.repository.ts`(신규)에 이용권 `FOR UPDATE` 조회, 이용권 `seatType` 변경, `TicketSeatChange` 생성을 둔다.
      `changeSeat`는 트랜잭션에서 이용권 잠금 → `SeatAssignmentService.assign(seatId, ticketId, now, tx)` → 이용권 `seatType = FIXED`
      → 이력(`changeType = TYPE_CHANGE`, 전후 타입·좌석, 사유, 변경자) 순서. `TicketModule`에서 `SeatAssignmentModule` import
   ② 단위 통과 확인: 단위 단건 통과, `src/ticket/` 전체 회귀 없음
   ③ E2E 통과 확인: E2E 단건(QS-13a) 통과
+  - 결과(2026-10-23): `TicketSeatRepository`(이용권 `FOR UPDATE` 조회·타입 변경·이력 생성·활성 세션 조회) 추가. 이용권 매장은 주문의 매장으로 조회한다. 단위 통과, `src/ticket/` 6개 통과, `tsc` 오류 없음, E2E(QS-13a) 통과
 
 #### 동작 6. 이용 중인 이용권의 타입을 바꾸면 즉시 퇴실시킨다 (QS-13)
 
-- [ ] T149 [US4] 작성 + 실패 확인:
+- [x] T149 [US4] 작성 + 실패 확인:
   ① E2E 작성: `it('이용 중인 시간권을 자유석에서 고정석으로 바꾸면 세션이 종료되고 자동 입실되지 않는다 (QS-13)')`(잔여시간 차감, 이력 1건 확인)
   ② E2E 실패 확인: E2E 단건(QS-13). 기대 사유: 세션이 `ACTIVE`로 남음
   ③ 단위 작성: `ticket-seat.service.spec.ts`에 `it('이용 중에 타입을 바꾸면 세션을 종료하고 이력에 종료 세션 ID를 남긴다')`(커밋 후 BullMQ Job 제거 포함)
   ④ 단위 실패 확인: 단위 단건. 기대 사유: `endSession`이 호출되지 않음
-- [ ] T150 [US4] 구현 + 통과 확인:
+  - 실제 실패(2026-10-23): E2E(QS-13) 세션 `Expected "ENDED", Received "ACTIVE"` / 단위 `endSession` 호출 0회. 기대 사유와 같음
+- [x] T150 [US4] 구현 + 통과 확인:
   ① 구현: 활성 세션 조회(`ticket-seat.repository.ts`)가 있으면 트랜잭션 안에서 `SessionLifecycleService.endSession` 호출, 이력에 `endedSessionId`,
      커밋 후 Job 제거(`TicketPauseService.pauseTicket`과 같은 패턴, research R6). `TicketModule`에서 `SessionLifecycleModule`, BullMQ `usage-session` 큐 import (FR-019)
   ② 단위 통과 확인: 단위 단건 통과, 파일 전체 회귀 없음
   ③ E2E 통과 확인: E2E 단건(QS-13) 통과
+  - 결과(2026-10-23): 트랜잭션 안에서 활성 세션을 `endSession`으로 종료하고 이력에 `endedSessionId`, 커밋 후 BullMQ Job 제거. 단위 7개 통과, `tsc` 오류 없음, E2E QS-13·13a 통과
 
 #### 동작 7. 이용 중이 아닌 고정석 이용권을 자유석으로 바꾼다 (QS-14a)
 
-- [ ] T151 [US4] 작성 + 실패 확인:
+- [x] T151 [US4] 작성 + 실패 확인:
   ① E2E 작성: `it('이용 중이 아닌 고정석 이용권을 자유석으로 바꾸면 지정이 SEAT_TYPE_CHANGED로 해제된다 (QS-14a)')`
   ② E2E 실패 확인: E2E 단건(QS-14a). 기대 사유: 지정이 `ACTIVE`로 남음
   ③ 단위 작성: `ticket-seat.service.spec.ts`에 `it('고정석 이용권을 자유석으로 바꾸면 지정을 SEAT_TYPE_CHANGED로 해제한다')`
   ④ 단위 실패 확인: 단위 단건. 기대 사유: `releaseByTicket`이 호출되지 않음
-- [ ] T152 [US4] 구현 + 통과 확인:
+  - 실제 실패(2026-10-23): E2E(QS-14a) 배정이 `ACTIVE`로 남음(기대 사유와 같음).
+    단위는 처음에 테스트 파일의 `SeatReleaseReason` import가 빠져 **노리는 사유가 아닌 이유로** 실패했다 → import를 고치고, 이미 넣은 구현을 잠시 빼고
+    다시 실행해 `releaseByTicket` 호출 0회(노리는 사유)를 확인한 뒤 구현을 되돌렸다
+- [x] T152 [US4] 구현 + 통과 확인:
   ① 구현: `FIXED → FREE`면 `releaseByTicket(ticketId, SEAT_TYPE_CHANGED, now, tx)`, 이용권 `seatType = FREE`, 이력 1행 (FR-015)
   ② 단위 통과 확인: 단위 단건 통과, 파일 전체 회귀 없음
   ③ E2E 통과 확인: E2E 단건(QS-14a) 통과
+  - 결과(2026-10-23): 단위 8개 통과, `tsc` 오류 없음, E2E(QS-14a) 통과
 
 #### 동작 8. 이용 중인 기간권을 자유석으로 바꾸면 퇴실하고 만료일은 그대로다 (QS-14) — 동작 6·7 구현으로 함께 통과
 
-- [ ] T153 [US4] 작성 + 조건 깨뜨리기:
+- [x] T153 [US4] 작성 + 조건 깨뜨리기:
   ① E2E 작성: `it('이용 중인 기간권을 고정석에서 자유석으로 바꾸면 세션이 종료되고 만료일은 바뀌지 않는다 (QS-14)')`
   ② 조건 깨뜨리기: E2E 단건(QS-14) 통과를 확인한 뒤 동작 6의 세션 종료 조건을 잠시 "자유석 → 고정석일 때만"으로 좁혀 실패하는지 확인한다
   ③ 원복 후 통과 확인: 원복하고 E2E 단건(QS-14)과 `ticket-seat` 단위 전체 통과. ②에서 실패하지 않으면 멈추고 사용자에게 알린다
+  - 결과(2026-10-23): ① QS-14 통과 → ② 세션 종료 조건을 "자유석 → 고정석일 때만"으로 좁히자 세션 `Expected "ENDED", Received "ACTIVE"`로 실패 → ③ 원복 후 QS-14, `ticket-seat` 단위 7개 통과
 
 #### 동작 9. 이용 중이 아닌 고정석 이용권을 다른 고정석으로 옮긴다 (QS-15a)
 
-- [ ] T154 [US4] 작성 + 실패 확인:
+- [x] T154 [US4] 작성 + 실패 확인:
   ① E2E 작성: `it('이용 중이 아닌 고정석 이용권을 다른 빈 고정석으로 옮기면 기존 좌석이 SEAT_MOVED로 해제된다 (QS-15a)')`
   ② E2E 실패 확인: E2E 단건(QS-15a). 기대 사유: 지정 좌석이 그대로이거나 409(새 지정이 이용권당 ACTIVE 1개 인덱스에 걸림)
   ③ 단위 작성: `ticket-seat.service.spec.ts`에 `it('고정석을 다른 고정석으로 옮기면 기존 지정을 SEAT_MOVED로 해제하고 새 지정을 만든다')`(이력 `changeType = SEAT_MOVE`)
   ④ 단위 실패 확인: 단위 단건. 기대 사유: `SEAT_MOVED` 해제가 호출되지 않음
-- [ ] T155 [US4] 구현 + 통과 확인:
+  - 실제 실패(2026-10-23): E2E(QS-15a) `expected 200, got 409`(이용권당 ACTIVE 1개 인덱스) / 단위 `SEAT_MOVED` 해제 호출 0회. 기대 사유와 같음. 단위는 해제가 배정보다 먼저인지도 검증한다
+- [x] T155 [US4] 구현 + 통과 확인:
   ① 구현: `FIXED → FIXED`(다른 좌석)면 `releaseByTicket(SEAT_MOVED)` 후 `assign`, 이력 `SEAT_MOVE` (FR-015a, FR-015b)
   ② 단위 통과 확인: 단위 단건 통과, 파일 전체 회귀 없음
   ③ E2E 통과 확인: E2E 단건(QS-15a) 통과
+  - 결과(2026-10-23): 단위 9개 통과, `tsc` 오류 없음, E2E(QS-15a) 통과
 
 #### 동작 10. 이용 중인 고정석 이동은 세션을 유지한 채 좌석만 바꾼다 (QS-15)
 
-- [ ] T156 [US4] 작성 + 실패 확인:
+- [x] T156 [US4] 작성 + 실패 확인:
   ① E2E 작성: `it('이용 중인 고정석 이용권을 옮기면 같은 세션에서 좌석만 바뀌고 기존 좌석은 선택 가능해진다 (QS-15)')`
   ② E2E 실패 확인: E2E 단건(QS-15). 기대 사유: 세션이 종료됨(동작 6의 퇴실이 이동에도 적용됨)
   ③ 단위 작성: `ticket-seat.service.spec.ts`에 `it('이용 중에 고정석을 옮기면 세션을 종료하지 않고 세션 좌석만 바꾼다')`
   ④ 단위 실패 확인: 단위 단건. 기대 사유: `endSession`이 호출되고 세션 좌석 변경은 호출되지 않음
-- [ ] T157 [US4] 구현 + 통과 확인:
+  - 실제 실패(2026-10-23): E2E(QS-15) 세션이 `ENDED`, 좌석이 기존 좌석(기대 사유와 같음) / 단위는 처음에 `endSession` 목이 값을 돌려주지 않아 `TypeError`로 실패 →
+    테스트 준비 코드에 `endSession` 기본 반환값을 넣고 다시 실행해 `endSession` 호출 1회(기대 0회, 노리는 사유)를 확인
+- [x] T157 [US4] 구현 + 통과 확인:
   ① 구현: 이동이면 `endSession` 대신 `ticket-seat.repository.ts`의 세션 `seatId` 변경을 같은 `tx`에서 호출한다 (research R5)
   ② 단위 통과 확인: 단위 단건 통과, 파일 전체 회귀 없음
   ③ E2E 통과 확인: E2E 단건(QS-15) 통과
+  - 결과(2026-10-23): `TicketSeatRepository.updateSessionSeat` 추가, 이동이면 세션 종료 대신 세션 좌석만 바꾼다. 단위 10개 통과, `tsc` 오류 없음, E2E QS-13·13a·14·14a·15·15a 통과
 
 #### 동작 11. 이동할 좌석에 다른 이용자의 활성 세션이 있으면 409
 
-- [ ] T158 [US4] 작성 + 실패 확인:
+- [x] T158 [US4] 작성 + 실패 확인:
   ① 작성: `ticket-seat.service.spec.ts`에 `it('옮길 좌석에 다른 활성 세션이 있으면 SeatAlreadyOccupiedError다')`
   ② 실패 확인: 단위 단건. 기대 사유: 예외 없이 이동함
-- [ ] T159 [US4] 구현 + 통과 확인:
+  - 실제 실패(2026-10-23): `Received promise resolved instead of rejected`. 기대 사유와 같음
+- [x] T159 [US4] 구현 + 통과 확인:
   ① 구현: 이동 대상 좌석의 활성 세션을 조회해 있으면 `SeatAlreadyOccupiedError`(`src/usage-session/errors/seat-already-occupied.error.ts` 재사용)
   ② 통과 확인: 단위 단건 통과, 파일 전체 회귀 없음
+  - 결과(2026-10-23): `TicketSeatRepository.hasOtherActiveSessionOnSeat`(변경 대상 이용권 제외) 추가, 이동일 때만 확인. 단위 11개 통과, `tsc` 오류 없음
 
 #### 동작 12. 이미 지정된 고정석으로 옮기면 409 (QS-15b) — `assign`의 유효 지정 검사로 이미 통과
 
-- [ ] T160 [US4] 작성 + 조건 깨뜨리기:
+- [x] T160 [US4] 작성 + 조건 깨뜨리기:
   ① E2E 작성: `it('이미 다른 이용권에 지정된 고정석으로 옮기면 409 (QS-15b)')`. 상태 코드와 `error.code = SeatNotAssignableError`를 검증한다
   ② 조건 깨뜨리기: E2E 단건(QS-15b) 통과를 확인한 뒤 `changeSeat`의 이동 분기에서 `assign` 호출을 잠시 지워 409가 아니게 되는지 확인한다
   ③ 원복 후 통과 확인: 원복하고 E2E 단건(QS-15b) 통과. ②에서 실패하지 않으면 멈추고 사용자에게 알린다
+  - 결과(2026-10-23): ① QS-15b 통과(`error.code = SeatNotAssignableError`) → ② 이동일 때 `assign` 호출을 빼자 `expected 409, got 200`으로 실패 → ③ 원복 후 QS-15·15b 통과
 
 #### 동작 13. 대상 좌석이 자유석이면 400
 
-- [ ] T161 [US4] 작성 + 실패 확인:
+- [x] T161 [US4] 작성 + 실패 확인:
   ① 작성: `ticket-seat.service.spec.ts`에 `it('고정석으로 바꿀 좌석이 자유석이면 SeatTypeMismatchError다')`
   ② 실패 확인: 단위 단건. 기대 사유: `assign`이 던지는 오류가 다르거나(목은 성공) 예외 없음
-- [ ] T162 [US4] 구현 + 통과 확인:
+  - 실제 실패(2026-10-23): `Received promise resolved instead of rejected`(목 `assign`은 성공). 기대 사유와 같음
+- [x] T162 [US4] 구현 + 통과 확인:
   ① 구현: 대상 좌석을 조회해 자유석이면 `SeatTypeMismatchError`
   ② 통과 확인: 단위 단건 통과, 파일 전체 회귀 없음
+  - 결과(2026-10-23): `TicketSeatRepository.findSeat`(타입·매장) 추가, 고정석 대상 좌석을 상태 변경 전에 검증한다. `assign` 내부 검사는 공용 에러를 던지므로 헌법 VI 코드를 위해 서비스에서 먼저 확인한다. 단위 12개 통과, `tsc` 오류 없음
 
 #### 동작 14. 대상 좌석이 다른 매장 좌석이면 400
 
-- [ ] T163 [US4] 작성 + 실패 확인:
+- [x] T163 [US4] 작성 + 실패 확인:
   ① 작성: `ticket-seat.service.spec.ts`에 `it('고정석으로 바꿀 좌석이 다른 매장 좌석이면 SeatShopMismatchError다')`
   ② 실패 확인: 단위 단건. 기대 사유: 예외 없음
-- [ ] T164 [US4] 구현 + 통과 확인:
+  - 실제 실패(2026-10-23): `Received promise resolved instead of rejected`. 기대 사유와 같음
+- [x] T164 [US4] 구현 + 통과 확인:
   ① 구현: 좌석 `shopId`와 이용권 매장(주문의 `shopId`)이 다르면 `SeatShopMismatchError`(US2 동작 16에서 만든 `src/seat-assignment/errors/seat-shop-mismatch.error.ts`)
   ② 통과 확인: 단위 단건 통과, 파일 전체 회귀 없음
+  - 결과(2026-10-23): 이용권 매장(주문의 매장)과 좌석 매장이 다르면 `SeatShopMismatchError`(US2에서 만든 에러). 단위 13개 통과, `tsc` 오류 없음
 
 #### 동작 15. 자유석 이용권을 자유석으로 바꾸면 400 (QS-16a 시작)
 
 QS-16a는 동작 15·16을 거쳐야 통과한다. 동작 15에서 E2E를 작성해 실패를 확인하고, 동작 16에서 통과를 확인한다.
 
-- [ ] T165 [US4] 작성 + 실패 확인:
+- [x] T165 [US4] 작성 + 실패 확인:
   ① E2E 작성: `it('자유석 이용권을 자유석으로, 고정석 이용권을 같은 좌석으로 바꾸면 400 (QS-16a)')`. 두 요청 모두 상태 코드와 `error.code = TicketSeatUnchangedError`를 검증한다
   ② E2E 실패 확인: E2E 단건(QS-16a). 기대 사유: 400이 아니라 200(자유석 → 자유석) 또는 409(같은 좌석 재지정)
   ③ 단위 작성: `ticket-seat.service.spec.ts`에 `it('자유석 이용권을 자유석으로 바꾸면 TicketSeatUnchangedError다')`
   ④ 단위 실패 확인: 단위 단건. 에러 파일이 없어 `Cannot find module`이면 `src/ticket/errors/ticket-seat-unchanged.error.ts`에 빈 클래스(`DomainBadRequestError` 상속, `name = 'TicketSeatUnchangedError'`)를 두고 다시 확인한다. 기대 사유: 예외 없이 이력이 생성됨
-- [ ] T166 [US4] 구현 + 통과 확인:
+  - 실제 실패(2026-10-23): 에러 클래스를 먼저 두고 실행. E2E(QS-16a) 자유석 → 자유석이 `expected 400, got 200` / 단위 `Received promise resolved instead of rejected`. 기대 사유와 같음
+- [x] T166 [US4] 구현 + 통과 확인:
   ① 구현: 현재 `FREE`이고 요청 `FREE`면 `TicketSeatUnchangedError`(안내 문구 '바뀌는 내용이 없습니다')
   ② 통과 확인: 단위 단건 통과, 파일 전체 회귀 없음(E2E QS-16a는 동작 16에서 확인)
+  - 결과(2026-10-23): 단위 14개 통과, `tsc` 오류 없음(E2E QS-16a는 동작 16에서 확인)
 
 #### 동작 16. 고정석 이용권을 같은 좌석으로 바꾸면 400 (QS-16a 완료)
 
-- [ ] T167 [US4] 작성 + 실패 확인:
+- [x] T167 [US4] 작성 + 실패 확인:
   ① 작성: `ticket-seat.service.spec.ts`에 `it('고정석 이용권을 같은 좌석으로 바꾸면 TicketSeatUnchangedError다')`
   ② 실패 확인: 단위 단건. 기대 사유: 예외 없이 해제·재지정이 호출됨
-- [ ] T168 [US4] 구현 + 통과 확인:
+  - 실제 실패(2026-10-23): `Received promise resolved instead of rejected`. 기대 사유와 같음
+- [x] T168 [US4] 구현 + 통과 확인:
   ① 구현: 현재 `FIXED`이고 요청 좌석이 현재 지정 좌석과 같으면 `TicketSeatUnchangedError`
   ② 단위 통과 확인: 단위 단건 통과, 파일 전체 회귀 없음
   ③ E2E 통과 확인: E2E 단건(QS-16a) 통과
+  - 결과(2026-10-23): 변경 전 배정 좌석과 요청 좌석이 같으면 `TicketSeatUnchangedError`. 단위 15개 통과, `tsc` 오류 없음, E2E(QS-16a) 통과
 
 #### 동작 17. 종료된 이용권은 좌석을 바꿀 수 없다
 
-- [ ] T169 [US4] 작성 + 실패 확인:
+- [x] T169 [US4] 작성 + 실패 확인:
   ① 작성: `ticket-seat.service.spec.ts`에 `it('종료 상태(EXPIRED·EXHAUSTED·REVOKED) 이용권이면 TicketClosedError다')`(`it.each`로 세 상태)
   ② 실패 확인: 단위 단건. 에러 파일이 없어 `Cannot find module`이면 `src/ticket/errors/ticket-closed.error.ts`에 빈 클래스(`DomainBadRequestError` 상속, `name = 'TicketClosedError'`)를 두고 다시 확인한다. 기대 사유: 예외 없음
-- [ ] T170 [US4] 구현 + 통과 확인:
+  - 실제 실패(2026-10-23): 에러 클래스를 먼저 두고 실행, 세 상태 모두 `Received promise resolved instead of rejected`. 기대 사유와 같음
+- [x] T170 [US4] 구현 + 통과 확인:
   ① 구현: 이용권 상태가 종료 상태면 `TicketClosedError`
   ② 통과 확인: 단위 단건 통과, 파일 전체 회귀 없음
+  - 결과(2026-10-23): 단위 18개 통과(`it.each` 3건 포함), `tsc` 오류 없음
 
 #### 동작 18. 일시정지 중인 이용권은 좌석을 바꿀 수 없다
 
-- [ ] T171 [US4] 작성 + 실패 확인:
+- [x] T171 [US4] 작성 + 실패 확인:
   ① 작성: `ticket-seat.service.spec.ts`에 `it('일시정지 중인 이용권이면 TicketPausedError다')`
   ② 실패 확인: 단위 단건. 에러 파일이 없어 `Cannot find module`이면 `src/ticket/errors/ticket-paused.error.ts`에 빈 클래스(`DomainBadRequestError` 상속, `name = 'TicketPausedError'`)를 두고 다시 확인한다. 기대 사유: 예외 없음
-- [ ] T172 [US4] 구현 + 통과 확인:
+  - 실제 실패(2026-10-23): 에러 클래스를 먼저 두고 실행, `Received promise resolved instead of rejected`. 기대 사유와 같음
+- [x] T172 [US4] 구현 + 통과 확인:
   ① 구현: 활성 `TicketPause`가 있으면(`ticket-seat.repository.ts` 조회 추가) `TicketPausedError`
   ② 통과 확인: 단위 단건 통과, 파일 전체 회귀 없음
+  - 결과(2026-10-23): `TicketSeatRepository.hasActivePause` 추가. 단위 19개 통과, `tsc` 오류 없음
 
 #### 동작 19. 없는 이용권이면 404
 
-- [ ] T173 [US4] 작성 + 실패 확인:
+- [x] T173 [US4] 작성 + 실패 확인:
   ① 작성: `ticket-seat.service.spec.ts`에 `it('이용권이 없으면 TicketNotFoundError다')`
   ② 실패 확인: 단위 단건. 에러 파일이 없어 `Cannot find module`이면 `src/ticket/errors/ticket-not-found.error.ts`에 빈 클래스(`DomainNotFoundError` 상속, `name = 'TicketNotFoundError'`)를 두고 다시 확인한다. 기대 사유: `TypeError`(null 접근)
-- [ ] T174 [US4] 구현 + 통과 확인:
+  - 실제 실패(2026-10-23): 에러 클래스를 먼저 두고 실행, `Received constructor: TypeError`(null 접근). 기대 사유와 같음
+- [x] T174 [US4] 구현 + 통과 확인:
   ① 구현: 이용권 조회 결과가 `null`이면 `TicketNotFoundError`
   ② 통과 확인: 단위 단건 통과, 파일 전체 회귀 없음
+  - 결과(2026-10-23): 임시 non-null 단언 제거. 단위 20개 통과, `tsc` 오류 없음
 
 #### 동작 19a. 고정석으로 바꿀 좌석이 없으면 404
 
-- [ ] T174a [US4] 작성 + 실패 확인:
+- [x] T174a [US4] 작성 + 실패 확인:
   ① 작성: `ticket-seat.service.spec.ts`에 `it('고정석으로 바꿀 좌석이 없으면 SeatNotFoundError다')`(대상 좌석 조회가 `null` 반환)
   ② 실패 확인: 단위 단건. 기대 사유: `SeatNotFoundError`가 아닌 `TypeError`(동작 13의 좌석 `type` 접근) 또는 다른 오류
-- [ ] T174b [US4] 구현 + 통과 확인:
+  - 실제 실패(2026-10-23): `Received promise resolved instead of rejected`. 기대 문구(`TypeError`)와 다른데, 동작 13·14 구현이 `target?.`로 null을 안전하게 다뤄 예외 없이 진행됐기 때문이다. "`SeatNotFoundError`를 던지지 않음"이라는 노리는 사유와는 같다
+- [x] T174b [US4] 구현 + 통과 확인:
   ① 구현: 동작 13의 대상 좌석 조회 결과가 `null`이면 `SeatNotFoundError`(US1 동작 4에서 만든 `src/seat/errors/seat-not-found.error.ts`).
      자유석·다른 매장 검사(동작 13·14)보다 먼저 확인한다
   ② 통과 확인: 단위 단건 통과, 파일 전체 회귀 없음
+  - 결과(2026-10-23): 대상 좌석이 없으면 매장·타입 검사보다 먼저 `SeatNotFoundError`(US1의 에러). 단위 21개 통과, `tsc` 오류 없음
 
 #### 동작 20. 사유 없이 바꾸면 400 (QS-16) — 동작 3으로 이미 통과
 
-- [ ] T175 [US4] 작성 + 조건 깨뜨리기:
+- [x] T175 [US4] 작성 + 조건 깨뜨리기:
   ① E2E 작성: `it('사유 없이 이용권 좌석을 바꾸면 400 (QS-16)')`
   ② 조건 깨뜨리기: E2E 단건(QS-16) 통과를 확인한 뒤 `reason`의 `@IsNotEmpty()`를 잠시 지워 400이 아니게 되는지 확인한다
   ③ 원복 후 통과 확인: 원복하고 E2E 단건(QS-16)과 DTO 단위 전체 통과. ②에서 실패하지 않으면 멈추고 사용자에게 알린다
+  - 결과(2026-10-23): `reason`에는 `@IsString()`도 있어 필드를 빼면 `@IsNotEmpty()`를 지워도 400이 나므로, 사유 검증만 겨냥하도록 빈 문자열(`reason: ''`)로 작성했다.
+    ① QS-16 통과 → ② `@IsNotEmpty()`를 지우자 `expected 400, got 200`으로 실패 → ③ 원복 후 QS-16, DTO 단위 4개 통과
 
 #### 동작 21. 변경 이력을 최신순으로 조회한다 (QS-17)
 
-- [ ] T176 [US4] 작성 + 실패 확인:
+- [x] T176 [US4] 작성 + 실패 확인:
   ① E2E 작성: `it('이용권 좌석 변경 이력을 조회하면 변경자·시각·전후 값·사유가 최신순으로 나온다 (QS-17)')`
   ② E2E 실패 확인: E2E 단건(QS-17). 라우트가 없어 404이면 `ticket-seat.controller.ts`에 `@Get(':ticketId/seat-changes')`
      (`@Roles(Role.OWNER, Role.MANAGER)`, `ParseUUIDPipe`)와 빈 `getSeatChanges`를 둔다. 기대 사유: 빈 목록
   ③ 단위 작성: `ticket-seat.service.spec.ts`에 `it('이용권의 좌석 변경 이력을 최신순으로 반환한다')`
   ④ 단위 실패 확인: 단위 단건. 기대 사유: 이력 조회 쿼리가 호출되지 않음
-- [ ] T177 [US4] 구현 + 통과 확인:
+  - 실제 실패(2026-10-23): E2E(QS-17) 1차 404 → 빈 라우트·서비스를 두고 2차 `Expected length: 2, Received length: 0` / 단위 이력 조회 호출 0회. 기대 사유와 같음
+- [x] T177 [US4] 구현 + 통과 확인:
   ① 구현: `ticket-seat.repository.ts`에 이용권별 이력 조회(`changedAt desc`), `getSeatChanges(ticketId)`에서 반환 (SC-005)
   ② 단위 통과 확인: 단위 단건 통과, 파일 전체 회귀 없음
   ③ E2E 통과 확인: E2E 단건(QS-17) 통과
+  - 결과(2026-10-23): `TicketSeatRepository.findSeatChanges`(`changedAt desc`) 추가. 단위 22개 통과, `tsc` 오류 없음, E2E(QS-17) 통과
 
 ### 일시정지·재개 (FR-018)
 
 #### 동작 22. 고정석 이용권을 일시정지하면 지정을 해제한다 (QS-18)
 
-- [ ] T178 [US4] 작성 + 실패 확인:
+- [x] T178 [US4] 작성 + 실패 확인:
   ① E2E 작성: `it('고정석 기간권을 일시정지하면 그 좌석이 선택 가능해진다 (QS-18)')`
   ② E2E 실패 확인: E2E 단건(QS-18). 기대 사유: 정지 후에도 `isAssignable = false`
   ③ 단위 작성: `src/ticket/ticket-pause/ticket-pause.service.spec.ts`(신규)에 `it('고정석 이용권을 일시정지하면 같은 트랜잭션에서 TICKET_PAUSED로 지정을 해제한다')`.
      목: `TicketPauseRepository`, `SessionLifecycleService`, BullMQ 큐, `SeatAssignmentService` 등 생성자 의존성
   ④ 단위 실패 확인: 단위 단건. 기대 사유: `releaseByTicket`이 호출되지 않음
-- [ ] T179 [US4] 구현 + 통과 확인:
+  - 실제 실패(2026-10-23): E2E(QS-18) 정지 후 `isAssignable` `Expected true, Received false`(정지는 이용권 상태를 바꾸지 않아 배정이 유효하게 남음) / 단위 `releaseByTicket` 호출 0회. 기대 사유와 같음. 활성 기간권은 첫 입실로 준비한다
+- [x] T179 [US4] 구현 + 통과 확인:
   ① 구현: `src/ticket/ticket-pause/ticket-pause.service.ts`의 `pauseTicket` 트랜잭션에 고정석이면 `releaseByTicket(TICKET_PAUSED)`
   ② 단위 통과 확인: 단위 단건 통과, `src/ticket/` 전체 회귀 없음
   ③ E2E 통과 확인: E2E 단건(QS-18) 통과
+  - 결과(2026-10-23): `TicketPauseRepository.getTicketForUpdate`가 `seatType`·`shopId`(주문의 매장)도 조회하도록 SQL에 조인을 추가하고, 고정석이면 정지 트랜잭션에서 `releaseByTicket(TICKET_PAUSED)`. 단위 23개 통과, `tsc` 오류 없음, E2E QS-18과 기존 `ticket-pause` 10개 통과
 
 #### 동작 23. 고정석 이용권을 재개할 때 좌석을 다시 지정한다
 
-- [ ] T180 [US4] 작성 + 실패 확인:
+- [x] T180 [US4] 작성 + 실패 확인:
   ① 작성: `ticket-pause.service.spec.ts`에 `it('고정석 이용권을 재개하면 요청한 좌석으로 다시 지정한다')`
   ② 실패 확인: 단위 단건. `seatId`가 DTO에 없어 타입·whitelist 오류면 `src/ticket/ticket-pause/dto/resume-ticket.dto.ts`에
      `seatId?`(`@IsOptional() @IsUUID('4')`)만 두고 다시 확인한다. 기대 사유: `assign`이 호출되지 않음
-- [ ] T181 [US4] 구현 + 통과 확인:
+  - 실제 실패(2026-10-23): `assign` 호출 0회. 기대 사유와 같음(서비스 인자를 직접 넘기는 단위 테스트라 DTO 오류는 생기지 않았다)
+- [x] T181 [US4] 구현 + 통과 확인:
   ① 구현: `resumeTicket` 트랜잭션에서 고정석이면 `assign(dto.seatId, ticketId, now, tx)`. `ticket-pause.controller.ts`에서 `dto.seatId` 전달
   ② 통과 확인: 단위 단건 통과, 파일 전체 회귀 없음
+  - 결과(2026-10-23): `resumeTicket(ticketId, resumedBy, reason, seatId)`, 재개 트랜잭션 끝에서 고정석이면 `assign`. `ResumeTicketDto.seatId`(`@IsOptional() @IsUUID('4')`) 추가, 컨트롤러에서 전달. 단위 24개 통과, `tsc` 오류 없음
 
 #### 동작 24. 고정석 이용권을 좌석 없이 재개하면 400
 
-- [ ] T182 [US4] 작성 + 실패 확인:
+- [x] T182 [US4] 작성 + 실패 확인:
   ① 작성: `ticket-pause.service.spec.ts`에 `it('고정석 이용권을 좌석 없이 재개하면 SeatSelectionRequiredError다')`
   ② 실패 확인: 단위 단건. 기대 사유: `assign`이 `undefined` 좌석으로 호출되거나 예외 없음
-- [ ] T183 [US4] 구현 + 통과 확인:
+  - 실제 실패(2026-10-23): `Received promise resolved instead of rejected`. 기대 사유와 같음
+- [x] T183 [US4] 구현 + 통과 확인:
   ① 구현: 고정석이고 `seatId`가 없으면 `SeatSelectionRequiredError`
   ② 통과 확인: 단위 단건 통과, 파일 전체 회귀 없음
+  - 결과(2026-10-23): 재개 상태 확인 직후(정지 해제·기한 연장 전) 고정석이고 `seatId`가 없으면 `SeatSelectionRequiredError`. 단위 25개 통과, `tsc` 오류 없음
 
 #### 동작 25. 지정할 수 없는 좌석이면 재개를 거부하고 정지를 유지한다 (QS-19) — 동작 23으로 이미 통과
 
-- [ ] T184 [US4] 작성 + 조건 깨뜨리기:
+- [x] T184 [US4] 작성 + 조건 깨뜨리기:
   ① E2E 작성: `it('정지 중 그 좌석을 다른 이용자가 차지하면 재개가 409이고 정지가 유지된다 (QS-19)')`(상태 코드와 `error.code = SeatNotAssignableError` 검증)
   ② 조건 깨뜨리기: `assign`이 재개 트랜잭션 안에서 실패하면 롤백되므로 이미 통과한다. E2E 단건(QS-19) 통과를 확인한 뒤
      `assign` 호출을 재개 트랜잭션 커밋 뒤로 잠시 옮겨 정지가 풀린 채 남아 실패하는지 확인한다
   ③ 원복 후 통과 확인: 원복하고 E2E 단건(QS-19) 통과. ②에서 실패하지 않으면 멈추고 사용자에게 알린다
+  - 결과(2026-10-23): ① QS-19 통과 → ② 재개의 `assign`을 커밋 뒤 별도 트랜잭션으로 옮기자 409는 그대로지만 정지 기록이 해제돼 `Received: null`로 실패 → ③ 원복 후 통과. 다른 이용자는 `otherUser`로 주문·결제한다
 
 #### 동작 26. 자유석 이용권의 정지·재개는 기존과 같다 — 구현 전부터 통과
 
-- [ ] T185 [US4] 작성 + 조건 깨뜨리기:
+- [x] T185 [US4] 작성 + 조건 깨뜨리기:
   ① 작성: `ticket-pause.service.spec.ts`에 `it('자유석 이용권은 좌석 없이 재개하고 지정을 만들지 않는다')`
   ② 조건 깨뜨리기: 기존 재개 동작으로 통과하는 테스트다. 단건 통과를 확인한 뒤 동작 24의 "고정석이고" 조건을 잠시 지워(모든 이용권에 좌석 요구) 실패하는지 확인한다
   ③ 원복 후 통과 확인: 원복하고 파일 전체 통과. ②에서 실패하지 않으면 멈추고 사용자에게 알린다
+  - 결과(2026-10-23): ① 통과 → ② 좌석 요구 조건에서 "고정석이고"를 지우자 `SeatSelectionRequiredError`로 실패 → ③ 원복 후 `ticket-pause.service` 4개 통과
 
 #### US4 마무리
 
-- [ ] T186 [US4] `npm run test -- --testPathPatterns="ticket|seat"`, `npm run test:e2e -- --testPathPatterns=seat-type`, `npx eslint src`, `npm run build`를 실행해 모두 통과하는지 확인한다
+- [x] T186 [US4] `npm run test -- --testPathPatterns="ticket|seat"`, `npm run test:e2e -- --testPathPatterns=seat-type`, `npx eslint src`, `npm run build`를 실행해 모두 통과하는지 확인한다
+  - 결과(2026-10-23): 단위 8개 파일 81개 통과, E2E 전체(병렬) 51개 중 50개 통과(기존 `app.e2e` 1건만 실패, `seat-type` 40개 모두 통과), `npm run build` 성공,
+    `npx eslint src` 새로 생긴 오류 0건(US3 커밋 `249a171` 기준 66건 그대로)
 
 **체크포인트**: 모든 사용자 스토리가 독립적으로 동작.
 

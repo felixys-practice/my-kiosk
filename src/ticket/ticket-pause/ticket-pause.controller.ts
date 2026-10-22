@@ -36,6 +36,7 @@ export class TicketPauseController {
       ticketId,
       user.userId,
       dto.reason,
+      dto.seatId,
     );
   }
 }
