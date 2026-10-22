@@ -2,100 +2,96 @@ import { Injectable } from '@nestjs/common';
 import {
   Order,
   PaymentStatus,
-  Prisma,
-  TicketType,
+  Product,
+  SeatType,
   UsageSessionStatus,
 } from '@prisma/client';
-import { PrismaService } from 'src/prisma/prisma.service';
-import { ProductNotFoundError } from './errors/product-not-found.error';
+import { PrismaService, TransactionClient } from 'src/prisma/prisma.service';
 import { MissingOrderFilterError } from './errors/missing-order-filter.error';
-import { OrderOutData } from './order.types';
+import { CreateOrderWithItemsData } from './order.types';
 
 @Injectable()
 export class OrderRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  async createOrder(
-    shopId: string,
-    userId: string,
-    products: { productId: string; quantity: number }[],
-  ) {
-    return await this.prisma.executeTransaction(async (tx) => {
-      // 상품들 상세 정보 조회
-      const queriedProductIds = products.map((item) => item.productId);
-      const queriedProducts = await tx.product.findMany({
-        where: {
-          id: { in: queriedProductIds },
-          isActive: true,
-          deletedAt: null,
-        },
-      });
+  /**
+   * 판매 중인(활성·미삭제) 상품을 조회한다
+   * @param productIds 상품 ID 목록
+   * @param tx 트랜잭션 클라이언트
+   * @returns 조회된 상품 목록
+   */
+  async findActiveProducts(
+    productIds: string[],
+    tx: TransactionClient,
+  ): Promise<Product[]> {
+    return tx.product.findMany({
+      where: {
+        id: { in: productIds },
+        isActive: true,
+        deletedAt: null,
+      },
+    });
+  }
 
-      // orderItems 데이터 생성
-      const createOrderItems = products.reduce<
-        {
-          ticketType: TicketType; // 구매 시점 티켓 타입(시간권, 기간권)
-          originalAmount: number; // 구매 시점 가격 스냅샷
-          discountAmount: number; // 항목 할인액
-          amount: number; // 실결제 금액 스냅샷(originalAmount - discountAmount)
-          purchasedMinutes: number | null; // 시간권: 구매 시점 분 스냅샷
-          purchasedDurationDays: number | null; // 정기권: 구매 시점 기간 스냅샷
-          productId: string;
-          usableDays: number;
-        }[]
-      >((acc, product) => {
-        const foundProduct = queriedProducts.find(
-          (p) => p.id === product.productId,
-        );
-        if (!foundProduct) {
-          throw new ProductNotFoundError(
-            `상품을 찾을 수 없습니다: ${product.productId}`,
-          );
-        }
+  /**
+   * 주문 항목에 지정된 좌석을 조회한다
+   * @param seatIds 좌석 ID 목록
+   * @param tx 트랜잭션 클라이언트
+   * @returns 좌석의 ID·매장·타입 목록
+   */
+  async findSeats(
+    seatIds: string[],
+    tx: TransactionClient,
+  ): Promise<{ id: string; shopId: string; type: SeatType }[]> {
+    return tx.seat.findMany({
+      where: { id: { in: seatIds } },
+      select: { id: true, shopId: true, type: true },
+    });
+  }
 
-        // TODO: 나중에 할인 데이터 받아와서 추가
-        const discountAmount = 0;
+  /**
+   * 취소할 주문을 주문 항목 ID·결제 상태와 함께 조회한다
+   * @param orderId 주문 ID
+   * @param tx 트랜잭션 클라이언트
+   * @returns 주문(주문 항목 ID, 결제 상태 포함), 없으면 null
+   */
+  async findOrderWithPayments(
+    orderId: string,
+    tx: TransactionClient,
+  ): Promise<{
+    id: string;
+    orderItems: { id: string }[];
+    payments: { status: PaymentStatus }[];
+  } | null> {
+    return tx.order.findUnique({
+      where: { id: orderId },
+      select: {
+        id: true,
+        orderItems: { select: { id: true } },
+        payments: { select: { status: true } },
+      },
+    });
+  }
 
-        for (let i = 0; i < product.quantity; i++) {
-          acc.push({
-            ticketType: foundProduct.ticketType,
-            originalAmount: foundProduct.amount,
-            discountAmount: discountAmount,
-            amount: foundProduct.amount - discountAmount,
-            purchasedMinutes: foundProduct.purchasedMinutes,
-            purchasedDurationDays: foundProduct.purchasedDurationDays,
-            productId: foundProduct.id,
-            usableDays: foundProduct.usableDays,
-          });
-        }
-        return acc;
-      }, []);
-
-      // 주문 금액 계산
-      const { originalAmount, discountAmount, totalAmount } =
-        createOrderItems.reduce(
-          (acc, orderItem) => {
-            return {
-              originalAmount: acc.originalAmount + orderItem.amount,
-              discountAmount: acc.discountAmount + orderItem.discountAmount,
-              totalAmount:
-                acc.totalAmount + orderItem.amount - orderItem.discountAmount,
-            };
-          },
-          { originalAmount: 0, discountAmount: 0, totalAmount: 0 },
-        );
-
-      // order + orderItem 데이터 생성
-      return await tx.order.create({
-        data: {
-          shopId,
-          userId,
-          originalAmount,
-          discountAmount,
-          totalAmount,
-          orderItems: { create: createOrderItems },
-        },
-      });
+  /**
+   * 주문과 주문 항목을 함께 저장한다
+   * @param data 주문 데이터(주문 항목 포함)
+   * @param tx 트랜잭션 클라이언트
+   * @returns 저장한 주문
+   */
+  async createOrderWithItems(
+    data: CreateOrderWithItemsData,
+    tx: TransactionClient,
+  ): Promise<Order> {
+    return tx.order.create({
+      data: {
+        shopId: data.shopId,
+        userId: data.userId,
+        originalAmount: data.originalAmount,
+        discountAmount: data.discountAmount,
+        totalAmount: data.totalAmount,
+        orderItems: { create: data.orderItems },
+      },
     });
   }
 

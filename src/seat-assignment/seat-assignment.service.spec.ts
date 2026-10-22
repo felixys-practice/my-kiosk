@@ -467,4 +467,44 @@ describe('SeatAssignmentService', () => {
       expect(map.get('fixed-expired')).toBe(true);
     });
   });
+
+  describe('releaseInvalidHolds', () => {
+    it('주문 항목의 선점 중 무효인 것을 HOLD_EXPIRED로 해제하고 그 주문 항목 ID를 반환한다', async () => {
+      repository.findLatestByOrderItem.mockImplementation((orderItemId) => {
+        const rows: Record<string, OpenSeatAssignment | null> = {
+          'item-expired': openRow({
+            id: 'a-expired',
+            orderItemId: 'item-expired',
+            heldUntil: past,
+          }),
+          'item-valid': openRow({ id: 'a-valid', orderItemId: 'item-valid' }),
+          'item-released': openRow({
+            id: 'a-released',
+            orderItemId: 'item-released',
+            status: SeatAssignmentStatus.RELEASED,
+          }),
+          'item-none': null,
+        };
+        return Promise.resolve(rows[orderItemId]);
+      });
+
+      const invalid = await service.releaseInvalidHolds(
+        ['item-expired', 'item-valid', 'item-released', 'item-none'],
+        now,
+        tx,
+      );
+
+      expect(invalid).toEqual(['item-expired', 'item-released', 'item-none']);
+      expect(repository.updateStatus).toHaveBeenCalledTimes(1);
+      expect(repository.updateStatus).toHaveBeenCalledWith(
+        ['a-expired'],
+        {
+          status: SeatAssignmentStatus.RELEASED,
+          releasedAt: now,
+          releaseReason: SeatReleaseReason.HOLD_EXPIRED,
+        },
+        tx,
+      );
+    });
+  });
 });

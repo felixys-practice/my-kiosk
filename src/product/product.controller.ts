@@ -1,4 +1,16 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
+import { CurrentUser } from 'src/auth/decorators/current-user.decorator';
+import { Roles } from 'src/auth/decorators/roles.decorator';
+import { Role } from 'src/auth/enum/role.enum';
 import { ProductService } from './product.service';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
@@ -6,6 +18,7 @@ import {
   GetProductOutDto,
   CreateProductDto,
   ProductParamDto,
+  UpdateProductDto,
 } from './dto';
 import { PaginationResult } from 'src/common/pagination/pagination.types';
 import { PaginationUtil } from 'src/common/pagination/pagination.util';
@@ -30,6 +43,7 @@ export class ProductController {
         usableDays: dto.usableDays,
         isActive: dto.isActive,
         purchasedMinutes: dto.purchasedMinutes!,
+        seatType: dto.seatType,
       });
     }
     return await this.service.createPeriodProduct(shopId, {
@@ -39,7 +53,20 @@ export class ProductController {
       usableDays: dto.usableDays,
       isActive: dto.isActive,
       purchasedDurationDays: dto.purchasedDurationDays!,
+      seatType: dto.seatType,
     });
+  }
+
+  @ApiOperation({ summary: '상품 수정(이용권 종류 제외)' })
+  @Roles(Role.OWNER, Role.MANAGER)
+  @Patch(':productId')
+  async updateProduct(
+    @Param('shopId', ParseUUIDPipe) shopId: string,
+    @Param('productId', ParseUUIDPipe) productId: string,
+    @Body() dto: UpdateProductDto,
+    @CurrentUser('userId') userId: string,
+  ): Promise<void> {
+    await this.service.updateProduct(shopId, productId, dto, userId);
   }
 
   @Get()

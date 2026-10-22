@@ -309,62 +309,70 @@ E2E에 필요한 준비 함수(상품 등록, 주문, 결제 요청·콜백)는 
 
 #### 동작 1. 시간권 상품 등록 시 좌석 타입을 저장하고 목록에 보여 준다 (QS-3)
 
-- [ ] T042 [US2] 작성 + 실패 확인:
+단위 테스트 없이 E2E로만 검증한다(2026-10-22 사용자 결정 A안). 서비스는 받은 데이터를 그대로 Repository에 넘기고
+`seatType`이 빠지는 지점은 Repository의 Prisma `create` 매핑이라, Repository를 목으로 바꾼 서비스 단위 테스트로는 검증할 수 없다.
+DB 매핑은 실제 DB를 쓰는 E2E로 검증한다.
+
+- [x] T042 [US2] 작성 + 실패 확인:
   ① E2E 작성: `test/seat-type.e2e-spec.ts`에 `describe('사용자 스토리 2')`를 만들고
      `it('고정석 시간권 상품을 등록하면 목록에 고정석으로 조회된다 (QS-3)')`를 작성한다. 준비 함수 `createProduct(seatType, ticketType)` 추가
   ② E2E 실패 확인: E2E 단건(QS-3). 기대 사유: 목록 항목에 `seatType`이 없거나 `FREE`.
      `seatType`이 whitelist로 거부(400)되면 `src/product/dto/create-product.dto.ts`에 `seatType` 필드만 두고(저장 경로 미연결) 다시 확인한다
-  ③ 단위 작성: `src/product/product.service.spec.ts`(신규)에 `it('시간권 상품 등록 시 좌석 타입을 저장한다')`.
-     `createTimeProduct`가 `repository`에 `seatType: FIXED`를 넘기는지 검증
-  ④ 단위 실패 확인: 단위 단건. 기대 사유: 저장 데이터에 `seatType`이 없음
-- [ ] T043 [US2] 구현 + 통과 확인:
-  ① 구현: `src/product/dto/create-product.dto.ts`의 `seatType!: SeatType`(`@IsEnum(SeatType)`, 한글 `@ApiProperty`),
-     `src/product/product.service.ts`·`src/product/product.repository.ts`의 시간권 등록 경로에 `seatType` 전달,
-     `src/product/dto/get-product-out.dto.ts`에 `seatType` 추가 (FR-005)
-  ② 단위 통과 확인: 단위 단건 통과, `src/product/` 전체 회귀 없음
-  ③ E2E 통과 확인: E2E 단건(QS-3) 통과
+  - 실제 실패(2026-10-22): 1차 whitelist 400 → DTO에 `seatType` 필드만 두고 2차 `Expected "FIXED", Received undefined`. 기대 사유와 같음.
+    처음 작성한 서비스 단위 테스트는 구현 전부터 통과해(검증 불가 구조) A안 결정에 따라 삭제했다
+- [x] T043 [US2] 구현 + 통과 확인:
+  ① 구현: `src/product/product.type.ts`의 상품 데이터 타입에 `seatType`, `src/product/product.controller.ts`의 **시간권 분기**에서 `seatType` 전달,
+     `src/product/product.repository.ts`의 `create` 매핑과 목록 `select`에 `seatType`, `src/product/dto/get-product-out.dto.ts`에 `seatType` 추가 (FR-005).
+     상품 데이터 타입이 시간권·기간권 공용(`BaseProductData`)이라 기간권 분기에도 `seatType`을 넣어야 컴파일된다. 그래서 기간권 분기도 함께 넣고,
+     동작 2는 조건 깨뜨리기로 검증한다(2026-10-22 구현 중 확인)
+  ② E2E 통과 확인: E2E 단건(QS-3) 통과, `src/product/` 단위 전체 회귀 없음
+  - 결과(2026-10-22): E2E(QS-3) 통과. `src/product/`에는 아직 단위 테스트가 없음(회귀 대상 없음). `tsc --noEmit` 오류 없음(기존 `test/app.e2e-spec.ts:20` 제외)
 
-#### 동작 2. 기간권 상품 등록 시 좌석 타입을 저장한다
+#### 동작 2. 기간권 상품 등록 시 좌석 타입을 저장한다 (QS-3a) — 동작 1 구현으로 함께 통과
 
-- [ ] T044 [US2] 작성 + 실패 확인:
-  ① 작성: `src/product/product.service.spec.ts`에 `it('기간권 상품 등록 시 좌석 타입을 저장한다')`
-  ② 실패 확인: 단위 단건. 기대 사유: `createPeriodProduct` 저장 데이터에 `seatType`이 없음.
-     이미 통과하면(등록 경로가 공용) 조건 깨뜨리기로 바꿔, 기간권 경로의 `seatType` 전달을 잠시 지워 실패하는지 확인하고 원복한 뒤 그 결과를 기록한다
-- [ ] T045 [US2] 구현 + 통과 확인:
-  ① 구현: `src/product/product.service.ts`·`product.repository.ts`의 기간권 등록 경로에 `seatType` 전달(task 1에서 이미 통과했으면 구현 없음)
-  ② 통과 확인: 단위 단건 통과, `src/product/` 전체 회귀 없음
+- [x] T044 [US2] 작성 + 조건 깨뜨리기:
+  ① E2E 작성: `it('고정석 기간권 상품을 등록하면 목록에 고정석으로 조회된다 (QS-3a)')`
+  ② 조건 깨뜨리기: E2E 단건(QS-3a) 통과를 확인한 뒤 `src/product/product.controller.ts` 기간권 분기의 `seatType` 전달을 잠시 지워
+     목록에 `FREE`가 조회되어 실패하는지 확인한다(타입 오류는 jest `isolatedModules`로 실행에는 영향 없음)
+  ③ 원복 후 통과 확인: 원복하고 E2E 단건(QS-3a)·(QS-3) 통과. ②에서 실패하지 않으면 멈추고 사용자에게 알린다
+  - 결과(2026-10-22): ① 통과 → ② 기간권 분기 `seatType` 제거 시 `Expected "FIXED", Received "FREE"`로 실패 → ③ 원복 후 QS-3a·QS-3 통과
 
 ### 상품 수정 (research R8)
 
 #### 동작 3. 상품 수정 DTO는 좌석 타입을 FIXED·FREE만 허용한다
 
-- [ ] T046 [US2] 작성 + 실패 확인:
+- [x] T046 [US2] 작성 + 실패 확인:
   ① 작성: `src/product/dto/update-product.dto.spec.ts`(신규)에 `it('좌석 타입이 고정석·자유석 이외면 isEnum 오류다')`.
      `validate(..., { whitelist: true, forbidNonWhitelisted: true })`로 검증하고 `seatType` 오류의 `constraints`에 `isEnum`이 있는지 확인한다
   ② 실패 확인: 단위 단건. 파일이 없어 `Cannot find module`이면 빈 클래스 `export class UpdateProductDto {}`를 두고 다시 확인한다.
      기대 사유: `constraints`가 `isEnum`이 아니라 `whitelistValidation`
-- [ ] T047 [US2] 구현 + 통과 확인:
+  - 실제 실패(2026-10-22): 1차 `Cannot find module` → 빈 클래스를 두고 2차 `seatType` 오류 항목 자체가 없음(`constraints` undefined).
+    빈 클래스에는 검증 메타데이터가 없어 속성별 whitelist 오류가 생기지 않는다. 기대 문구와는 다르지만 "`seatType`에 enum 검증이 없다"는 노리는 사유와 같다
+- [x] T047 [US2] 구현 + 통과 확인:
   ① 구현: `src/product/dto/update-product.dto.ts`를 `PartialType(OmitType(CreateProductDto, ['type'] as const))`(`@nestjs/swagger`)로 정의한다.
      이용권 종류(`type`)는 받지 않고 나머지(`name`, `amount`, `usableDays`, `isActive`, `purchasedMinutes`, `purchasedDurationDays`, `seatType`)는 모두 선택 입력
   ② 통과 확인: 단위 단건 통과
+  - 결과(2026-10-22): 단건 통과. `src/product/dto/index.ts`에서 export
 
 #### 동작 4. 상품 수정 DTO는 모든 필드가 선택 입력이다 — 동작 3 구현으로 함께 통과
 
-- [ ] T048 [US2] 작성 + 조건 깨뜨리기:
+- [x] T048 [US2] 작성 + 조건 깨뜨리기:
   ① 작성: `src/product/dto/update-product.dto.spec.ts`에 `it('좌석 타입만 보내도 오류가 없다')`
   ② 조건 깨뜨리기: 단건 통과를 확인한 뒤 `PartialType`을 잠시 지워(`OmitType`만) 필수 필드 누락 오류로 실패하는지 확인한다
   ③ 원복 후 통과 확인: 원복하고 파일 전체 통과. ②에서 실패하지 않으면 멈추고 사용자에게 알린다
+  - 결과(2026-10-22): ① 통과 → ② `PartialType` 제거 시 필수 필드 누락 오류로 실패 → ③ 원복 후 파일 3개 통과
 
 #### 동작 5. 상품 수정 DTO는 이용권 종류(type)를 받지 않는다 — 동작 3 구현으로 함께 통과
 
-- [ ] T049 [US2] 작성 + 조건 깨뜨리기:
+- [x] T049 [US2] 작성 + 조건 깨뜨리기:
   ① 작성: `src/product/dto/update-product.dto.spec.ts`에 `it('이용권 종류(type)를 보내면 whitelist 오류다')`
   ② 조건 깨뜨리기: 단건 통과를 확인한 뒤 `OmitType`을 잠시 지워(`PartialType(CreateProductDto)`) 실패하는지 확인한다
   ③ 원복 후 통과 확인: 원복하고 파일 전체 통과. ②에서 실패하지 않으면 멈추고 사용자에게 알린다
+  - 결과(2026-10-22): ① 통과 → ② `OmitType` 제거 시 `type` whitelist 오류가 없어져 실패 → ③ 원복 후 파일 3개 통과
 
 #### 동작 6. 상품을 수정하면 바뀐 필드마다 변경 이력을 남긴다 (QS-28)
 
-- [ ] T050 [US2] 작성 + 실패 확인:
+- [x] T050 [US2] 작성 + 실패 확인:
   ① E2E 작성: `it('상품의 좌석 타입과 금액을 수정하면 반영되고 바뀐 필드마다 이력이 남는다 (QS-28)')`.
      `PATCH /shops/:shopId/products/:productId`로 `seatType`·`amount` 수정 → 목록 조회로 반영 확인 → `prisma.productHistory`에서 같은 `changeGroupId`의 2행 확인
   ② E2E 실패 확인: E2E 단건(QS-28). 라우트가 없어 404이면 빈 구현을 둔다: `src/product/product.controller.ts`에 `@Patch(':productId')` +
@@ -373,207 +381,261 @@ E2E에 필요한 준비 함수(상품 등록, 주문, 결제 요청·콜백)는 
   ③ 단위 작성: `src/product/product.service.spec.ts`에 `it('상품 수정 시 바뀐 필드마다 같은 변경 묶음 ID로 이력을 만든다')`.
      기존 값과 같은 필드는 이력에서 빠지는지, 이력 행의 `oldValue`·`newValue`가 문자열인지 검증
   ④ 단위 실패 확인: 단위 단건. 기대 사유: `repository.updateProductWithHistories`가 호출되지 않음(목에 메서드를 두고 확인)
-- [ ] T051 [US2] 구현 + 통과 확인:
+  - 실제 실패(2026-10-22): E2E 1차 404(라우트 없음) → 빈 라우트·서비스를 두고 2차 400 `property productId should not exist`
+    (`@Param() ProductParamDto`가 경로 파라미터 전체를 whitelist로 검증) → 라우트를 `@Param('shopId'/'productId', ParseUUIDPipe)`로 고치고 3차
+    `amount 10000·seatType FREE`로 값이 바뀌지 않음(기대 사유와 같음) / 단위 `updateProductWithHistories` 호출 0회(기대 사유와 같음)
+- [x] T051 [US2] 구현 + 통과 확인:
   ① 구현: `src/product/product.repository.ts`에 `findProductForUpdate(shopId, productId)`(`deletedAt = null` 조건)와
      `updateProductWithHistories(productId, data, histories)`(같은 트랜잭션에서 상품 갱신과 `ProductHistory` 다건 저장만, 비교 로직 없음, 헌법 원칙 I)를 추가한다.
      `src/product/product.service.ts`의 `updateProduct`는 기존 값과 비교해 바뀐 필드 목록과 이력 행 데이터(`changeGroupId = randomUUID()`, `changedBy = userId`)를 만든다
   ② 단위 통과 확인: 단위 단건 통과, `src/product/` 전체 회귀 없음
   ③ E2E 통과 확인: E2E 단건(QS-28) 통과
+  - 결과(2026-10-22): 단위 통과, `src/product/` 4개 통과(회귀 없음), E2E(QS-28) 통과
 
 #### 동작 7. 시간권 상품에 기간 필드를 보내면 400
 
-- [ ] T052 [US2] 작성 + 실패 확인:
+- [x] T052 [US2] 작성 + 실패 확인:
   ① 작성: `src/product/product.service.spec.ts`에 `it('시간권 상품에 이용 기간(purchasedDurationDays)을 보내면 ProductFieldMismatchError다')`
   ② 실패 확인: 단위 단건. 에러 파일이 없어 `Cannot find module`이면 `src/product/errors/product-field-mismatch.error.ts`에 빈 클래스(`DomainBadRequestError` 상속, `name = 'ProductFieldMismatchError'`)를 두고 다시 확인한다. 기대 사유: 예외 없이 resolve됨
-- [ ] T053 [US2] 구현 + 통과 확인:
+  - 실제 실패(2026-10-22): 1차 `Cannot find module './errors/product-field-mismatch.error'` → 클래스를 두고 2차 `Received promise resolved instead of rejected`. 기대 사유와 같음
+- [x] T053 [US2] 구현 + 통과 확인:
   ① 구현: `updateProduct`에서 현재 상품이 시간권이고 `dto.purchasedDurationDays`가 있으면 `ProductFieldMismatchError`
   ② 통과 확인: 단위 단건 통과, 파일 전체 회귀 없음
+  - 결과(2026-10-22): 단건 통과, `src/product/` 5개 통과(회귀 없음)
 
 #### 동작 8. 기간권 상품에 시간 필드를 보내면 400
 
-- [ ] T054 [US2] 작성 + 실패 확인:
+- [x] T054 [US2] 작성 + 실패 확인:
   ① 작성: `src/product/product.service.spec.ts`에 `it('기간권 상품에 이용 시간(purchasedMinutes)을 보내면 ProductFieldMismatchError다')`
   ② 실패 확인: 단위 단건. 기대 사유: 예외 없이 resolve됨
-- [ ] T055 [US2] 구현 + 통과 확인:
+  - 실제 실패(2026-10-22): `Received promise resolved instead of rejected`. 기대 사유와 같음
+- [x] T055 [US2] 구현 + 통과 확인:
   ① 구현: `updateProduct`에서 현재 상품이 기간권이고 `dto.purchasedMinutes`가 있으면 `ProductFieldMismatchError`
   ② 통과 확인: 단위 단건 통과, 파일 전체 회귀 없음
+  - 결과(2026-10-22): 단건 통과, `src/product/` 6개 통과(회귀 없음)
 
 #### 구조 정리: `ProductNotFoundError`를 product 모듈로 옮긴다 (동작 변경 없음)
 
-- [ ] T055a [US2] 구조 정리 + 회귀 확인:
+- [x] T055a [US2] 구조 정리 + 회귀 확인:
   ① 구조 정리: `src/order/errors/product-not-found.error.ts`를 `src/product/errors/product-not-found.error.ts`로 옮기고
      `src/order/order.repository.ts`의 import를 바꾼다. 클래스 내용은 바꾸지 않는다
   ② 회귀 확인: `npm run test -- --testPathPatterns="src/order/|src/product/"`, `npm run test:e2e`가 옮기기 전과 같은 결과인지 확인한다
+  - 결과(2026-10-22): `git mv`로 이동, `order.repository.ts` import 변경. 단위 6개 통과(전후 같음).
+    E2E 이동 전 20개 중 18개 통과(`app.e2e` `request is not a function` — 기존 문제, `ticket-pause` 「인증 없이 요청하면 401 반환」 404 — 전체 실행에서만 간헐 실패, 단독 실행 시 통과) /
+    이동 후 20개 중 19개 통과(`app.e2e`만 실패). 이동으로 생긴 회귀 없음. `ticket-pause` 간헐 실패는 이 기능과 무관한 기존 문제로 T187에서 다시 확인한다
 
 #### 동작 9. 삭제됐거나 다른 매장 상품을 수정하면 404
 
-- [ ] T056 [US2] 작성 + 실패 확인:
+- [x] T056 [US2] 작성 + 실패 확인:
   ① 작성: `src/product/product.service.spec.ts`에 `it('삭제됐거나 다른 매장 상품이면 ProductNotFoundError다')`(`findProductForUpdate`가 `null` 반환)
   ② 실패 확인: 단위 단건. 기대 사유: `ProductNotFoundError`가 아닌 `TypeError`(null 속성 접근) 또는 resolve
-- [ ] T057 [US2] 구현 + 통과 확인:
+  - 실제 실패(2026-10-22): `Received constructor: TypeError`(null 속성 접근). 기대 사유와 같음
+- [x] T057 [US2] 구현 + 통과 확인:
   ① 구현: `updateProduct`에서 조회 결과가 `null`이면 `ProductNotFoundError('상품을 찾을 수 없습니다')`(T055a로 옮긴 `src/product/errors/product-not-found.error.ts`)
   ② 통과 확인: 단위 단건 통과, 파일 전체 회귀 없음
+  - 결과(2026-10-22): 단건 통과, `src/product/` 7개 통과(회귀 없음). 임시 non-null 단언(`product!`) 제거
 
 #### 동작 10. 상품 수정 API로 이용권 종류를 바꾸려 하면 400 (QS-29) — 동작 5로 이미 통과
 
-- [ ] T058 [US2] 작성 + 조건 깨뜨리기:
+- [x] T058 [US2] 작성 + 조건 깨뜨리기:
   ① E2E 작성: `it('상품 수정에서 이용권 종류를 보내면 400 (QS-29)')`
   ② 조건 깨뜨리기: E2E 단건(QS-29) 통과를 확인한 뒤 `UpdateProductDto`의 `OmitType`을 잠시 지워 400이 아니게 되는지 확인한다
   ③ 원복 후 통과 확인: 원복하고 E2E 단건(QS-29)과 `src/product/` 단위 전체 통과. ②에서 실패하지 않으면 멈추고 사용자에게 알린다
+  - 결과(2026-10-22): ① E2E(QS-29) 통과 → ② `OmitType`을 지워도 400으로 **실패하지 않음**. `type`이 허용되면 `CreateProductDto`의
+    `@ValidateIf(type === PERIOD) @IsNotEmpty` 때문에 "기간권인데 이용 기간 없음"이라는 다른 사유로 400이 난다 → 멈추고 사용자 확인.
+    사용자 결정(A안): QS-29 E2E는 "엔드포인트가 400으로 거부한다"까지만 보장하고, 거부 사유(`type` whitelist)는 조건 깨뜨리기를 통과한
+    단위 테스트 T049로 보장한다. 테스트는 고치지 않았다. ③ 원복 후 QS-29 통과, `src/product/` 7개 통과
+  - 알려진 한계(2026-10-22 사용자 결정, 헌법 IV): `UpdateProductDto`는 `type`이 없어 `purchasedMinutes`·`purchasedDurationDays`의
+    `@ValidateIf` 조건이 항상 거짓이므로 범위 검증(`@Min`·`@Max`)이 동작하지 않는다. 이번 범위에서는 보완하지 않는다
 
 ### 주문
 
 #### 구조 정리: 주문 생성 로직을 Service로 옮긴다 (동작 변경 없음)
 
-- [ ] T059 [US2] 구조 정리 + 회귀 확인:
+- [x] T059 [US2] 구조 정리 + 회귀 확인:
   ① 구조 정리(헌법 원칙 I): `src/order/order.repository.ts`의 `createOrder`에 있는 상품 조회·검증·금액 계산을 `src/order/order.service.ts`로 옮긴다.
      Service가 `PrismaService.executeTransaction`으로 트랜잭션을 열고, Repository는 `findActiveProducts(productIds, tx)`, `createOrderWithItems(data, tx)`
      쿼리 메서드만 갖는다(이 메서드만 대상, 다른 기존 Repository는 건드리지 않는다). 동작은 바꾸지 않는다
   ② 회귀 확인: `npm run test:e2e`(주문을 쓰는 기존 E2E 포함)가 구조 정리 전과 같은 결과인지 확인한다
+  - 결과(2026-10-22): Repository는 `findActiveProducts`·`createOrderWithItems`만 남기고 상품 검증·금액 계산을 `OrderService.createOrder`로 옮겼다
+    (`PrismaService.executeTransaction` 사용, 저장 데이터 타입 `CreateOrderWithItemsData`는 `order.types.ts`). `tsc` 오류 없음.
+    E2E 전후 같은 결과(21개 중 20개 통과, 기존 `app.e2e`만 실패). **주의**: 기존 E2E 중 `POST /orders`를 호출하는 테스트가 없어
+    이 회귀 확인은 주문 생성 경로를 검증하지 못한다. 첫 검증은 QS-4(T062)·QS-6(T096)·QS-10(T116)에서 이뤄진다.
+    참고: 옮긴 금액 계산 코드(`originalAmount`에 `amount`를 더하고, `totalAmount`에서 할인을 한 번 더 빼는 부분)는 할인 0원인 지금은 결과가 같지만
+    할인이 생기면 값이 틀어진다. 동작을 바꾸지 않는 구조 정리라 그대로 두었다
 
 #### 동작 11. 주문 항목의 좌석 ID는 UUID여야 한다
 
-- [ ] T060 [US2] 작성 + 실패 확인:
+- [x] T060 [US2] 작성 + 실패 확인:
   ① 작성: `src/order/dto/create-order.dto.spec.ts`(신규)에 `it('주문 항목의 좌석 ID가 UUID가 아니면 오류다')`(`orderedProducts[0].seatId = 'abc'`, 중첩 오류 `isUuid` 확인)
   ② 실패 확인: 단위 단건. 기대 사유: 중첩 검증이 없어 오류가 없음
-- [ ] T061 [US2] 구현 + 통과 확인:
+  - 실제 실패(2026-10-22): `seatId` 중첩 오류의 `constraints`가 undefined(중첩 검증 없음). 기대 사유와 같음
+- [x] T061 [US2] 구현 + 통과 확인:
   ① 구현: `src/order/dto/create-order.dto.ts`의 항목을 `OrderedProductDto`로 분리한다: `productId`(`@IsUUID('4')`), `quantity`(`@IsInt() @Min(1)`),
      `seatId?`(`@IsOptional() @IsUUID('4')`). `orderedProducts`에 `@ValidateNested({ each: true }) @Type(() => OrderedProductDto)`. 한글 `@ApiProperty`
   ② 통과 확인: 단위 단건 통과
+  - 결과(2026-10-22): 단건 통과, `tsc` 오류 없음
 
 #### 동작 12. 고정석 상품을 좌석 없이 주문하면 400 (QS-4)
 
-- [ ] T062 [US2] 작성 + 실패 확인:
+- [x] T062 [US2] 작성 + 실패 확인:
   ① E2E 작성: `it('고정석 상품을 좌석 없이 주문하면 400 (QS-4)')`. 상태 코드와 `error.code = SeatSelectionRequiredError`를 검증한다. 준비 함수 `createOrder(userToken, items)` 추가
   ② E2E 실패 확인: E2E 단건(QS-4). 기대 사유: 400이 아니라 201
   ③ 단위 작성: `src/order/order.service.spec.ts`(신규)에 `it('고정석 상품 줄에 좌석이 없으면 SeatSelectionRequiredError다')`.
      목: `OrderRepository`(`findActiveProducts`, `createOrderWithItems`), `PrismaService.executeTransaction`, `SeatAssignmentService.hold`, `ConfigService`
   ④ 단위 실패 확인: 단위 단건. 기대 사유: 예외 없이 주문이 저장됨(`createOrderWithItems` 호출)
-- [ ] T063 [US2] 구현 + 통과 확인:
+  - 실제 실패(2026-10-22): E2E(QS-4) `expected 400, got 201`(T059 구조 정리 후 주문 생성 경로가 동작함을 처음 확인) / 단위 `Received promise resolved instead of rejected`. 기대 사유와 같음
+- [x] T063 [US2] 구현 + 통과 확인:
   ① 구현: `src/order/order.service.ts`의 `createOrder`에서 상품 `seatType = FIXED`인 줄에 `seatId`가 없으면 `SeatSelectionRequiredError`.
      `OrderModule`에서 `SeatAssignmentModule` import (FR-007)
   ② 단위 통과 확인: 단위 단건 통과, `src/order/` 전체 회귀 없음
   ③ E2E 통과 확인: E2E 단건(QS-4) 통과
+  - 결과(2026-10-22): 단위 통과, `src/order/` 2개 통과, E2E(QS-4) 통과(`error.code = SeatSelectionRequiredError`). 생성자에 `SeatAssignmentService`·`ConfigService` 주입(동작 18에서 사용)
 
 #### 동작 13. 고정석 상품 줄의 수량이 1이 아니면 400
 
-- [ ] T064 [US2] 작성 + 실패 확인:
+- [x] T064 [US2] 작성 + 실패 확인:
   ① 작성: `src/order/order.service.spec.ts`에 `it('고정석 상품 줄의 수량이 1이 아니면 FixedSeatQuantityError다')`
   ② 실패 확인: 단위 단건. 에러 파일이 없어 `Cannot find module`이면 `src/order/errors/fixed-seat-quantity.error.ts`에 빈 클래스(`DomainBadRequestError` 상속, `name = 'FixedSeatQuantityError'`)를 두고 다시 확인한다. 기대 사유: 예외 없이 주문이 저장됨
-- [ ] T065 [US2] 구현 + 통과 확인:
+  - 실제 실패(2026-10-22): 1차 `Cannot find module` → 클래스를 두고 2차 `Received promise resolved instead of rejected`. 기대 사유와 같음
+- [x] T065 [US2] 구현 + 통과 확인:
   ① 구현: 고정석 줄의 `quantity !== 1`이면 `FixedSeatQuantityError`(안내 문구 '고정석 상품은 좌석 하나에 한 개씩 주문합니다')
   ② 통과 확인: 단위 단건 통과, 파일 전체 회귀 없음
+  - 결과(2026-10-22): 단건 통과. 진행 순서 메모: T066 테스트를 T065 통과 확인 전에 추가해 파일 전체가 `Cannot find module`로 실행되지 않았고, `SeatNotAllowedError` 클래스를 먼저 둔 뒤 T065 통과(`src/order/` 3개 통과)·T066 실패를 각각 확인했다
 
 #### 동작 14. 자유석 상품 줄에 좌석을 보내면 400
 
-- [ ] T066 [US2] 작성 + 실패 확인:
+- [x] T066 [US2] 작성 + 실패 확인:
   ① 작성: `src/order/order.service.spec.ts`에 `it('자유석 상품 줄에 좌석이 있으면 SeatNotAllowedError다')`
   ② 실패 확인: 단위 단건. 에러 파일이 없어 `Cannot find module`이면 `src/order/errors/seat-not-allowed.error.ts`에 빈 클래스(`DomainBadRequestError` 상속, `name = 'SeatNotAllowedError'`)를 두고 다시 확인한다. 기대 사유: 예외 없이 주문이 저장됨
-- [ ] T067 [US2] 구현 + 통과 확인:
+  - 실제 실패(2026-10-22): `Received promise resolved instead of rejected`. 기대 사유와 같음
+- [x] T067 [US2] 구현 + 통과 확인:
   ① 구현: 자유석 줄에 `seatId`가 있으면 `SeatNotAllowedError`
   ② 통과 확인: 단위 단건 통과, 파일 전체 회귀 없음
+  - 결과(2026-10-22): 단건 통과, `src/order/` 4개 통과(회귀 없음)
 
 #### 동작 15. 고정석 상품을 자유석 좌석으로 주문하면 400 (QS-5)
 
-- [ ] T068 [US2] 작성 + 실패 확인:
+- [x] T068 [US2] 작성 + 실패 확인:
   ① E2E 작성: `it('고정석 상품을 자유석 좌석으로 주문하면 400 (QS-5)')`. 상태 코드와 `error.code = SeatTypeMismatchError`를 검증한다
   ② E2E 실패 확인: E2E 단건(QS-5). 기대 사유: 400이 아니라 201
   ③ 단위 작성: `src/order/order.service.spec.ts`에 `it('고정석 상품 줄의 좌석이 자유석이면 SeatTypeMismatchError다')`
   ④ 단위 실패 확인: 단위 단건. 기대 사유: 예외 없이 주문이 저장됨
-- [ ] T069 [US2] 구현 + 통과 확인:
+  - 실제 실패(2026-10-22): E2E(QS-5) `expected 400, got 201` / 단위 `Received promise resolved instead of rejected`. 기대 사유와 같음
+- [x] T069 [US2] 구현 + 통과 확인:
   ① 구현: 고정석 줄의 좌석을 조회(`OrderRepository.findSeats(seatIds, tx)` 추가)해 `type = FREE`이면 `SeatTypeMismatchError`
   ② 단위 통과 확인: 단위 단건 통과, 파일 전체 회귀 없음
   ③ E2E 통과 확인: E2E 단건(QS-5) 통과
+  - 결과(2026-10-22): `OrderRepository.findSeats` 추가, 단위 통과, `src/order/` 5개 통과(회귀 없음), E2E(QS-5) 통과
 
 #### 동작 16. 고정석 상품을 다른 매장 좌석으로 주문하면 400
 
-- [ ] T070 [US2] 작성 + 실패 확인:
+- [x] T070 [US2] 작성 + 실패 확인:
   ① 작성: `src/order/order.service.spec.ts`에 `it('고정석 상품 줄의 좌석이 다른 매장 좌석이면 SeatShopMismatchError다')`
   ② 실패 확인: 단위 단건. 에러 파일이 없어 `Cannot find module`이면 `src/seat-assignment/errors/seat-shop-mismatch.error.ts`에 빈 클래스(`DomainBadRequestError` 상속, `name = 'SeatShopMismatchError'`)를 두고 다시 확인한다. 기대 사유: 예외 없이 주문이 저장됨
-- [ ] T071 [US2] 구현 + 통과 확인:
+  - 실제 실패(2026-10-22): 에러 클래스를 먼저 두고 실행, `Received promise resolved instead of rejected`. 기대 사유와 같음
+- [x] T071 [US2] 구현 + 통과 확인:
   ① 구현: 좌석의 `shopId`가 주문의 `shopId`와 다르면(조회되지 않는 경우 포함) `SeatShopMismatchError`. 이용권 좌석 변경(US4 동작 14)도 같은 에러를 쓰므로 `src/seat-assignment/errors/index.ts`에서 export한다
   ② 통과 확인: 단위 단건 통과, 파일 전체 회귀 없음
+  - 결과(2026-10-22): 단건 통과, `src/order/` 6개 통과(회귀 없음). 매장 검사는 타입 검사보다 먼저 한다. `src/seat-assignment/errors/index.ts`에서 export
 
 #### 동작 17. 한 주문에서 같은 좌석을 두 번 고르면 409
 
-- [ ] T072 [US2] 작성 + 실패 확인:
+- [x] T072 [US2] 작성 + 실패 확인:
   ① 작성: `src/order/order.service.spec.ts`에 `it('같은 주문 안에서 같은 좌석을 중복 선택하면 DuplicateSeatInOrderError다')`
   ② 실패 확인: 단위 단건. 에러 파일이 없어 `Cannot find module`이면 `src/order/errors/duplicate-seat-in-order.error.ts`에 빈 클래스(`DomainConflictError` 상속, `name = 'DuplicateSeatInOrderError'`)를 두고 다시 확인한다. 기대 사유: 예외 없이 주문이 저장됨
-- [ ] T073 [US2] 구현 + 통과 확인:
+  - 실제 실패(2026-10-22): 에러 클래스를 먼저 두고 실행, `Received promise resolved instead of rejected`. 기대 사유와 같음
+- [x] T073 [US2] 구현 + 통과 확인:
   ① 구현: 고정석 줄의 `seatId` 중복이 있으면 `DuplicateSeatInOrderError`
   ② 통과 확인: 단위 단건 통과, 파일 전체 회귀 없음
+  - 결과(2026-10-22): 단건 통과, `src/order/` 7개 통과(회귀 없음)
 
 #### 동작 18. 고정석 줄마다 좌석을 선점(HELD)한다
 
-- [ ] T074 [US2] 작성 + 실패 확인:
+- [x] T074 [US2] 작성 + 실패 확인:
   ① 작성: `src/order/order.service.spec.ts`에 `it('고정석 줄마다 선점 유효시간만큼 좌석을 선점한다')`.
      `hold`가 `(seatId, orderItemId, heldUntil = now + SEAT_HOLD_MINUTES분, tx)`로 호출되는지 검증(시각은 `jest.useFakeTimers().setSystemTime`)
   ② 실패 확인: 단위 단건. 기대 사유: `hold`가 호출되지 않음
-- [ ] T075 [US2] 구현 + 통과 확인:
+  - 실제 실패(2026-10-22): `hold` 기대 호출 1회, 실제 0회. 기대 사유와 같음. 테스트는 계획의 인자 형태 대신 실제 시그니처 `hold({ seatId, shopId, orderItemId, heldUntil }, now, tx)`로 검증한다
+- [x] T075 [US2] 구현 + 통과 확인:
   ① 구현: 주문 저장 후 같은 `tx`에서 고정석 주문 항목마다 `SeatAssignmentService.hold` 호출. 선점 유효시간은 `ConfigService`의 `seat.holdMinutes` (research R2·R4)
   ② 통과 확인: 단위 단건 통과, 파일 전체 회귀 없음
+  - 결과(2026-10-22): 단건 통과, `src/order/` 8개 통과(회귀 없음), `tsc` 오류 없음.
+    중첩 생성(`orderItems: { create }`)은 만든 항목과 입력 좌석의 대응을 보장하지 않으므로 주문 항목 ID를 서비스에서 `randomUUID()`로 미리 만들어
+    `CreateOrderItemData.id`로 넘기고, 같은 ID로 `hold`를 호출한다
 
 #### 동작 19. 주문 항목에 좌석 타입을 스냅샷으로 저장한다
 
-- [ ] T076 [US2] 작성 + 실패 확인:
+- [x] T076 [US2] 작성 + 실패 확인:
   ① 작성: `src/order/order.service.spec.ts`에 `it('주문 항목에 구매 시점 상품의 좌석 타입을 저장한다')`
   ② 실패 확인: 단위 단건. 기대 사유: `createOrderWithItems` 데이터의 항목에 `seatType`이 없음
-- [ ] T077 [US2] 구현 + 통과 확인:
+  - 실제 실패(2026-10-22): `toEqual` 불일치, 항목의 `seatType`이 undefined. 기대 사유와 같음
+- [x] T077 [US2] 구현 + 통과 확인:
   ① 구현: 주문 항목 데이터에 상품의 `seatType`을 복사한다
   ② 통과 확인: 단위 단건 통과, 파일 전체 회귀 없음
+  - 결과(2026-10-22): 단건 통과, `src/order/` 9개 통과(회귀 없음)
 
 #### 동작 20. 이미 지정된 좌석으로 주문하면 409 (QS-7) — 동작 18과 기반 단계로 이미 통과
 
-- [ ] T078 [US2] 작성 + 조건 깨뜨리기:
+- [x] T078 [US2] 작성 + 조건 깨뜨리기:
   ① E2E 작성: `it('이미 지정된 좌석으로 다른 이용자가 주문하면 409 (QS-7)')`. 상태 코드와 `error.code = SeatNotAssignableError`를 검증한다
   ② 조건 깨뜨리기: E2E 단건(QS-7) 통과를 확인한 뒤 `createOrder`의 `hold` 호출을 잠시 지워 201로 실패하는지 확인한다
   ③ 원복 후 통과 확인: 원복하고 E2E 단건(QS-7) 통과. ②에서 실패하지 않으면 멈추고 사용자에게 알린다
+  - 결과(2026-10-22): ① QS-7 통과 → ② `hold` 호출 제거 시 `expected 409, got 201`로 실패 → ③ 원복 후 통과
 
 #### 동작 21. 같은 좌석 동시 주문은 한 건만 성공한다 (QS-8) — 기반 단계의 잠금·인덱스로 이미 통과
 
-- [ ] T079 [US2] 작성 + 조건 깨뜨리기:
+- [x] T079 [US2] 작성 + 조건 깨뜨리기:
   ① E2E 작성: `it('같은 좌석으로 두 주문을 동시에 만들면 한 건만 성공한다 (QS-8)')`. `Promise.all`로 동시 요청 → 상태 코드 `[201, 409]`(순서 무관), 409 응답의 `error.code = SeatNotAssignableError`
   ② 조건 깨뜨리기: E2E 단건(QS-8) 통과를 확인한 뒤 `createOrder`의 `hold` 호출을 잠시 지워 두 건 모두 201로 실패하는지 확인한다
   ③ 원복 후 통과 확인: 원복하고 E2E 단건(QS-8) 통과. ②에서 실패하지 않으면 멈추고 사용자에게 알린다
+  - 결과(2026-10-22): ① QS-8 통과 → ② `hold` 호출 제거 시 상태 코드가 `[201, 201]`이 되어 실패 → ③ 원복 후 통과
 
 #### 동작 22. 주문을 취소하면 선점이 즉시 풀린다 (QS-24)
 
-- [ ] T080 [US2] 작성 + 실패 확인:
+- [x] T080 [US2] 작성 + 실패 확인:
   ① E2E 작성: `it('고정석 주문을 취소하면 그 좌석이 즉시 선택 가능해진다 (QS-24)')`
   ② E2E 실패 확인: E2E 단건(QS-24). 라우트가 없어 404이면 빈 구현을 둔다: `src/order/order.controller.ts`에 `@Patch(':orderId/cancel')`(`ParseUUIDPipe`)와
      빈 `OrderService.cancelOrder(orderId)`. 기대 사유: 취소 후 그 좌석 `isAssignable = false`
   ③ 단위 작성: `src/order/order.service.spec.ts`에 `it('주문을 취소하면 주문 항목의 선점을 ORDER_CANCELLED로 해제한다')`
   ④ 단위 실패 확인: 단위 단건. 기대 사유: `releaseByOrderItems`가 호출되지 않음
-- [ ] T081 [US2] 구현 + 통과 확인:
+  - 실제 실패(2026-10-22): E2E 1차 404(라우트 없음) → 빈 라우트·서비스를 두고 2차 취소 후 `isAssignable` `Expected true, Received false` / 단위 `releaseByOrderItems` 호출 0회. 기대 사유와 같음. 준비 함수 `isSeatAssignable(seatId)` 추가
+- [x] T081 [US2] 구현 + 통과 확인:
   ① 구현: `cancelOrder`가 트랜잭션에서 주문 항목 ID를 조회(`OrderRepository.findOrderWithPayments(orderId, tx)` 추가)하고
      `SeatAssignmentService.releaseByOrderItems(ids, ORDER_CANCELLED, now, tx)` 호출. 이미 해제된 경우 그대로 성공(멱등, `releaseByOrderItems`의 동작) (research R2)
   ② 단위 통과 확인: 단위 단건 통과, 파일 전체 회귀 없음
   ③ E2E 통과 확인: E2E 단건(QS-24) 통과
+  - 결과(2026-10-22): `OrderRepository.findOrderWithPayments` 추가, 단위 통과, `src/order/` 10개 통과(회귀 없음), E2E(QS-24) 통과. 주문 조회 결과의 null 처리는 동작 23에서 넣는다
 
 #### 동작 23. 없는 주문을 취소하면 404
 
-- [ ] T082 [US2] 작성 + 실패 확인:
+- [x] T082 [US2] 작성 + 실패 확인:
   ① 작성: `src/order/order.service.spec.ts`에 `it('없는 주문을 취소하면 OrderNotFoundError다')`
   ② 실패 확인: 단위 단건. 에러 파일이 없어 `Cannot find module`이면 `src/order/errors/order-not-found.error.ts`에 빈 클래스(`DomainNotFoundError` 상속, `name = 'OrderNotFoundError'`)를 두고 다시 확인한다. 기대 사유: `OrderNotFoundError`가 아닌 `TypeError` 또는 resolve
-- [ ] T083 [US2] 구현 + 통과 확인:
+  - 실제 실패(2026-10-22): 에러 클래스를 먼저 두고 실행, `Received constructor: TypeError`(null 접근). 기대 사유와 같음
+- [x] T083 [US2] 구현 + 통과 확인:
   ① 구현: 주문 조회 결과가 `null`이면 `OrderNotFoundError`
   ② 통과 확인: 단위 단건 통과, 파일 전체 회귀 없음
+  - 결과(2026-10-22): 단건 통과, 임시 non-null 단언 제거. 파일 전체 회귀는 T084 테스트를 함께 둔 상태로 확인해 T084 외 11개 통과
 
 #### 동작 24. 결제가 성공한 주문은 취소할 수 없다
 
-- [ ] T084 [US2] 작성 + 실패 확인:
+- [x] T084 [US2] 작성 + 실패 확인:
   ① 작성: `src/order/order.service.spec.ts`에 `it('결제가 성공한 주문을 취소하면 OrderAlreadyPaidError다')`
   ② 실패 확인: 단위 단건. 에러 파일이 없어 `Cannot find module`이면 `src/order/errors/order-already-paid.error.ts`에 빈 클래스(`DomainConflictError` 상속, `name = 'OrderAlreadyPaidError'`)를 두고 다시 확인한다. 기대 사유: 예외 없이 해제가 호출됨
-- [ ] T085 [US2] 구현 + 통과 확인:
+  - 실제 실패(2026-10-22): 에러 클래스를 먼저 두고 실행, `Received promise resolved instead of rejected`. 기대 사유와 같음
+- [x] T085 [US2] 구현 + 통과 확인:
   ① 구현: 주문의 결제 중 `SUCCESS`가 있으면 `OrderAlreadyPaidError`(안내 문구 '결제가 완료된 주문은 환불 API를 사용하세요')
   ② 통과 확인: 단위 단건 통과, 파일 전체 회귀 없음
+  - 결과(2026-10-22): 단건 통과, `src/order/` 12개 통과(회귀 없음), `tsc` 오류 없음
 
 #### 동작 25. 결제 없이 방치된 선점은 10분 뒤 풀린다 (QS-25) — 기반 단계의 조회 시점 판정으로 이미 통과
 
-- [ ] T086 [US2] 작성 + 조건 깨뜨리기:
+- [x] T086 [US2] 작성 + 조건 깨뜨리기:
   ① E2E 작성: `it('고정석 주문 후 방치되면 좌석이 선택 가능해지고 같은 좌석으로 새 주문이 성공한다 (QS-25)')`. `heldUntil`을 DB에서 과거로 바꿔 방치 상황을 만든다
   ② 조건 깨뜨리기: E2E 단건(QS-25) 통과를 확인한 뒤 `src/seat-assignment/seat-assignment.policy.ts`의 `HELD` 만료 비교를 잠시 지워(항상 유효) 실패하는지 확인한다 (research R3)
   ③ 원복 후 통과 확인: 원복하고 E2E 단건(QS-25), `npm run test -- --testPathPatterns=seat-assignment` 통과. ②에서 실패하지 않으면 멈추고 사용자에게 알린다
+  - 결과(2026-10-22): ① QS-25 통과 → ② `isValidAssignment`의 HELD 만료 비교를 `return true`로 바꾸자 방치 후 `isAssignable` `Expected true, Received false`로 실패 → ③ 원복 후 QS-25 통과, `seat-assignment` 35개 통과
 
 ### 환불: 시스템 자동 취소 (research R12-A)
 
@@ -581,92 +643,116 @@ E2E에 필요한 준비 함수(상품 등록, 주문, 결제 요청·콜백)는 
 
 #### 동작 26. 시스템 자동 취소는 소유자 검사 없이 미사용 자동 환불 경로를 탄다
 
-- [ ] T087 [US2] 작성 + 실패 확인:
+- [x] T087 [US2] 작성 + 실패 확인:
   ① 작성: `src/refund/refund.service.spec.ts`(신규)에 `it('시스템 자동 취소는 소유자 검사 없이 PG 취소를 요청한다')`.
      목: `RefundRepository`, `TransactionLoggerService`, `PgService` 등 생성자 의존성. 미사용 이용권에 대해 `pgService.requestPaymentCancel`이 호출되는지 검증
   ② 실패 확인: 단위 단건. `refundBySystem is not a function`이면 빈 공개 메서드 `refundBySystem(ticketId, reason)`을 두고 다시 확인한다.
      기대 사유: `requestPaymentCancel`이 호출되지 않음
-- [ ] T088 [US2] 구현 + 통과 확인:
+  - 실제 실패(2026-10-22): 1차 `service.refundBySystem is not a function` → 빈 메서드를 두고 2차 `requestPaymentCancel` 호출 0회. 기대 사유와 같음
+- [x] T088 [US2] 구현 + 통과 확인:
   ① 구현: `src/refund/refund.service.ts`의 `refundBySystem(ticketId, reason)`이 이용권을 조회하고 기존 `processAutoRefund` 경로
      (`createRefundWithLock` → `pgService.requestPaymentCancel`)를 탄다. 기존 `refund`의 공통 검증 중 소유자 검사는 하지 않는다.
      `src/refund/refund.module.ts`에 `exports: [RefundService]`
   ② 통과 확인: 단위 단건 통과, 파일 전체 회귀 없음
+  - 결과(2026-10-22): 단건 통과, `RefundModule`에서 `RefundService` export. PG 요청의 사용자 ID는 이용권 소유자(`ticket.userId`)를 쓴다. 이용권 없음·환불 완료 검사는 동작 28에서 넣는다
 
 #### 동작 27. 시스템 자동 취소 사유를 기록한다
 
-- [ ] T089 [US2] 작성 + 실패 확인:
+- [x] T089 [US2] 작성 + 실패 확인:
   ① 작성: `src/refund/refund.service.spec.ts`에 `it('시스템 자동 취소 사유를 결제 취소 기록에 남긴다')`
   ② 실패 확인: 단위 단건. 기대 사유: `PaymentCancel` 생성 데이터에 `reason`이 없음
-- [ ] T090 [US2] 구현 + 통과 확인:
+  - 실제 실패(2026-10-22): `createPaymentCancel` 호출 인자 불일치(사유 인자 없음). 기대 사유와 같음
+- [x] T090 [US2] 구현 + 통과 확인:
   ① 구현: `createRefundWithLock`과 `src/refund/refund.repository.ts`의 `PaymentCancel` 생성에 `reason`을 전달한다(기존 `refund` 경로는 기존 값 유지)
   ② 통과 확인: 단위 단건 통과, 파일 전체 회귀 없음
+  - 결과(2026-10-22): `createPaymentCancel`에 마지막 선택 인자 `reason` 추가(기존 호출은 그대로), 단건 통과, `src/refund/` 2개 통과(회귀 없음)
 
 #### 동작 28. 이미 환불된 이용권의 자동 취소는 409
 
-- [ ] T091 [US2] 작성 + 실패 확인:
+- [x] T091 [US2] 작성 + 실패 확인:
   ① 작성: `src/refund/refund.service.spec.ts`에 `it('이미 환불된 이용권을 자동 취소하면 DomainConflictError다')`
   ② 실패 확인: 단위 단건. 기대 사유: 예외 없이 취소를 요청함
-- [ ] T092 [US2] 구현 + 통과 확인:
+  - 실제 실패(2026-10-22): `Received promise resolved instead of rejected`. 기대 사유와 같음
+- [x] T092 [US2] 구현 + 통과 확인:
   ① 구현: `refundBySystem`에서 이용권 없음 404, `REVOKED`이면 `DomainConflictError`(기존 `refund`의 검증 순서와 같게)
   ② 통과 확인: 단위 단건 통과, 파일 전체 회귀 없음
+  - 결과(2026-10-22): 단건 통과, 임시 non-null 단언 제거. 파일 회귀는 T093 테스트를 함께 둔 상태로 확인해 T093 외 3개 통과
 
 #### 동작 29. 사용 이력이 있는 이용권은 자동 취소하지 않는다
 
-- [ ] T093 [US2] 작성 + 실패 확인:
+- [x] T093 [US2] 작성 + 실패 확인:
   ① 작성: `src/refund/refund.service.spec.ts`에 `it('사용 이력이 있는 이용권을 자동 취소하면 승인 대기로 가지 않고 예외다')`
   ② 실패 확인: 단위 단건. 기대 사유: 예외 없이 취소를 요청함
-- [ ] T094 [US2] 구현 + 통과 확인:
+  - 실제 실패(2026-10-22): `Received promise resolved instead of rejected`. 기대 사유와 같음
+- [x] T094 [US2] 구현 + 통과 확인:
   ① 구현: `isUnusedTicket(ticket)`이 거짓이면 `DomainConflictError('시스템 자동 취소는 미사용 이용권만 가능합니다')`
   ② 통과 확인: 단위 단건 통과, 파일 전체 회귀 없음
+  - 결과(2026-10-22): 단건 통과, `src/refund/` 4개 통과(회귀 없음), `tsc` 오류 없음
 
 ### 결제
 
 #### 구조 정리: 결제 승인 처리를 Service가 트랜잭션으로 조율한다 (동작 변경 없음)
 
-- [ ] T095 [US2] 구조 정리 + 회귀 확인:
+- [x] T095 [US2] 구조 정리 + 회귀 확인:
   ① 구조 정리(헌법 원칙 I): `src/payment/payment.repository.ts`의 `successPayment`를 `tx`를 받는 결제 갱신·이용권 생성 쿼리 메서드로 나누고,
      `src/payment/payment.service.ts`의 `successPayment`가 `PrismaService.executeTransaction`으로 트랜잭션을 열어 순서를 조율한다.
      Repository는 다른 모듈의 Service를 부르지 않는다. 동작은 바꾸지 않는다
   ② 회귀 확인: `npm run test:e2e`(결제 콜백을 쓰는 기존 E2E 포함)가 구조 정리 전과 같은 결과인지 확인한다
+  - 결과(2026-10-22): Repository의 `successPayment`를 `approvePayment(paymentId, now, tx)`·`createTickets(paymentId, data, tx)`로 나누고,
+    `PaymentService.successPayment`가 `PrismaService.executeTransaction`으로 두 호출을 묶는다. `tsc` 오류 없음.
+    E2E 27개 중 26개 통과(기존 `app.e2e`만 실패, 구조 정리 전과 같음). **주의**: 기존 E2E 중 `/payments`를 호출하는 테스트가 없어
+    (계획의 "ticket-pause의 결제 준비 방식"은 실제로 없음) 이 회귀 확인은 결제 승인 경로를 검증하지 못한다
 
 #### 동작 30. 승인 성공 시 선점을 이용권에 확정한다 (QS-6 시작)
 
 QS-6은 동작 30~32를 모두 거쳐야 통과한다. 동작 30에서 E2E를 작성해 실패를 확인하고, 동작 32에서 통과를 확인한다.
 
-- [ ] T096 [US2] 작성 + 실패 확인:
+- [x] T096 [US2] 작성 + 실패 확인:
   ① E2E 작성: `it('고정석 상품 주문 후 결제가 성공하면 이용권에 고정석과 선택 좌석이 조회된다 (QS-6)')`. 준비 함수 `payOrder(orderId)`(결제 요청 + 성공 콜백) 추가
   ② E2E 실패 확인: E2E 단건(QS-6). 기대 사유: 이용권 조회에 `seatType`·`assignedSeat`가 없거나 `FREE`·`null`
   ③ 단위 작성: `src/payment/payment.service.spec.ts`(신규)에 `it('승인 성공 시 같은 트랜잭션에서 고정석 주문 항목의 선점을 확정한다')`.
      목: `PaymentRepository`, `OrderItemRepository`, `PrismaService.executeTransaction`, `SeatAssignmentService`, `RefundService`, `TransactionLoggerService`
   ④ 단위 실패 확인: 단위 단건. 기대 사유: `activateByOrderItem`이 호출되지 않음
-- [ ] T097 [US2] 구현 + 통과 확인:
+  - 실제 실패(2026-10-23): E2E(QS-6) 결제 요청·콜백(201)은 성공하고 이용권 조회의 `seatType`이 undefined / 단위 `activateByOrderItem` 호출 0회. 기대 사유와 같음.
+    결제 준비: `requestVan`의 30% 무작위 예외를 사용자가 무작위 지연(100ms)으로 바꿔(2026-10-23) 실제 `POST /payments` → `POST /payments/callback` 흐름을 쓴다.
+    준비 함수 `payOrder`, `sendPaymentCallback`, `findTicketIdByOrder` 추가
+- [x] T097 [US2] 구현 + 통과 확인:
   ① 구현: `successPayment` 트랜잭션에서 이용권 생성 후 고정석 주문 항목마다 `SeatAssignmentService.activateByOrderItem(orderItemId, ticketId, now, tx)`.
      `PaymentModule`에서 `SeatAssignmentModule` import
   ② 통과 확인: 단위 단건 통과, `src/payment/` 전체 회귀 없음(E2E QS-6은 동작 32에서 확인)
+  - 결과(2026-10-23): 단건 통과, `src/payment/` 1개 통과, `tsc` 오류 없음. `createMany`는 생성 ID를 돌려주지 않으므로 이용권 ID를 서비스에서
+    `randomUUID()`로 미리 만들어(`BasePaymentData.id`) 같은 ID로 `activateByOrderItem`을 호출한다.
+    참고: 이 구현 직후 E2E 실행 1회가 5분 넘게 끝나지 않아 중단했다. 재실행에서는 정상 종료되어 원인은 재현되지 않았다
 
 #### 동작 31. 이용권 좌석 타입은 주문 항목 스냅샷을 따른다 (QS-6 계속)
 
-- [ ] T098 [US2] 작성 + 실패 확인:
+- [x] T098 [US2] 작성 + 실패 확인:
   ① 작성: `src/payment/payment.service.spec.ts`에 `it('승인 성공 시 이용권 좌석 타입은 주문 항목 스냅샷을 따른다')`
   ② 실패 확인: 단위 단건. 기대 사유: 이용권 생성 데이터에 `seatType`이 없음
-- [ ] T099 [US2] 구현 + 통과 확인:
+  - 실제 실패(2026-10-23): `toEqual` 불일치, 이용권 데이터의 `seatType`이 undefined. 기대 사유와 같음
+- [x] T099 [US2] 구현 + 통과 확인:
   ① 구현: 이용권 생성 데이터(`TimePaymentData`, `PeriodPaymentData`)에 주문 항목의 `seatType`을 복사한다
   ② 통과 확인: 단위 단건 통과, 파일 전체 회귀 없음
+  - 결과(2026-10-23): `BasePaymentData.seatType` 추가, 단건 통과, `src/payment/` 2개 통과(회귀 없음), `tsc` 오류 없음
 
 #### 동작 32. 이용권 조회에 좌석 타입과 지정 좌석을 보여 준다 (QS-6 완료)
 
-- [ ] T100 [US2] 작성 + 실패 확인:
+- [x] T100 [US2] 작성 + 실패 확인:
   ① 작성: `src/ticket/ticket.service.spec.ts`(신규)에 `it('이용권 조회 결과에 좌석 타입과 지정 좌석을 포함한다')`(고정석은 `{ id, number, name }`, 자유석은 `null`)
   ② 실패 확인: 단위 단건. 기대 사유: 결과에 `seatType`·`assignedSeat`가 없음
-- [ ] T101 [US2] 구현 + 통과 확인:
+  - 실제 실패(2026-10-23): `toMatchObject` 불일치, 결과에 `seatType`·`assignedSeat` 없음. 기대 사유와 같음
+- [x] T101 [US2] 구현 + 통과 확인:
   ① 구현: `src/ticket/ticket.repository.ts` 조회에 `seatType`과 ACTIVE `seatAssignments`(좌석 `id·number·name`)를 포함하고,
      `src/ticket/ticket.service.ts`의 출력 변환과 `src/ticket/ticket.types.ts`·`src/ticket/get-ticket-out.dto.ts`에 `seatType`, `assignedSeat`를 추가한다 (FR-010)
   ② 단위 통과 확인: 단위 단건 통과, `src/ticket/` 전체 회귀 없음
   ③ E2E 통과 확인: E2E 단건(QS-6) 통과
+  - 결과(2026-10-23): `getTicketById`에 `seatType`과 ACTIVE 배정 좌석(`id·number·name`) 포함, 출력 타입(`TimeTicketOutData`·`PeriodTicketOutData`)에 `seatType`·`assignedSeat` 추가.
+    단위 통과, `src/ticket/` 1개 통과, `tsc` 오류 없음, E2E(QS-6) 통과. `get-ticket-out.dto.ts`의 `GetTicketOutDto`는 사용처 없는 빈 클래스라 고치지 않았다.
+    참고: 기존 `toTicketOutData`는 활성화 전(expiresAt 없음) 기간권 조회 시 예외를 던진다(이 기능 이전부터 있던 동작)
 
 #### 동작 33. 승인 후 좌석을 줄 수 없으면 자동으로 결제를 취소한다 (QS-31)
 
-- [ ] T102 [US2] 작성 + 실패 확인:
+- [x] T102 [US2] 작성 + 실패 확인:
   ① E2E 작성: `it('승인 전에 좌석을 다른 이용자가 확정하면 이용권 발급 후 자동 환불되고 환불 콜백 후 이용권이 소멸된다 (QS-31)')`.
      결제 요청 후 `heldUntil`을 과거로 바꾸고, 다른 이용자가 같은 좌석을 주문·결제한 뒤 첫 결제의 성공 콜백 → `PaymentCancel` 생성·사유 확인
      → `POST /refund/callback` 호출 → 이용권 `REVOKED`
@@ -676,89 +762,115 @@ QS-6은 동작 30~32를 모두 거쳐야 통과한다. 동작 30에서 E2E를 �
      트랜잭션 종료 후 호출되고 다른 항목은 정상 확정되는지 검증
   ④ 단위 실패 확인: 단위 단건. 기대 사유: `refundBySystem`이 호출되지 않음.
      `activateByOrderItem`이 확정 실패를 알리는 반환값이 없으면 멈추고 반환 형식을 사용자와 정한다(기반 단계 API 변경)
-- [ ] T103 [US2] 구현 + 통과 확인:
+  - 실제 실패(2026-10-23): E2E(QS-31) 첫 결제 콜백 후 `PaymentCancel`이 `null` / 단위 `refundBySystem` 호출 0회. 기대 사유와 같음.
+    `activateByOrderItem`은 기반 단계부터 확정 실패 시 `false`를 반환하므로 반환 형식 변경은 필요 없었다.
+    E2E에 두 번째 이용자(`otherUser`)와 준비 함수 `requestPayment`, `afterAll`의 `refundLock`·`paymentCancel` 정리를 추가했다
+- [x] T103 [US2] 구현 + 통과 확인:
   ① 구현: `successPayment`가 확정하지 못한 고정석 이용권 ID를 모아 커밋 후 `RefundService.refundBySystem`을 호출한다. `PaymentModule`에서 `RefundModule` import (contracts 4절)
   ② 단위 통과 확인: 단위 단건 통과, 파일 전체 회귀 없음
   ③ E2E 통과 확인: E2E 단건(QS-31) 통과
+  - 결과(2026-10-23): 트랜잭션이 확정 실패 이용권 ID를 반환하고 커밋 후 `refundBySystem` 호출. 단위 통과(커밋 후 호출 검증 포함), `src/payment/` 3개 통과, `tsc` 오류 없음, E2E(QS-31) 통과
 
 #### 동작 34. 자동 취소가 실패해도 결제 콜백은 성공으로 처리한다
 
-- [ ] T104 [US2] 작성 + 실패 확인:
+- [x] T104 [US2] 작성 + 실패 확인:
   ① 작성: `src/payment/payment.service.spec.ts`에 `it('자동 취소 요청이 예외를 던져도 콜백은 성공하고 거래 로그를 남긴다')`
   ② 실패 확인: 단위 단건. 기대 사유: `callbackPayment`가 reject됨
-- [ ] T105 [US2] 구현 + 통과 확인:
+  - 실제 실패(2026-10-23): `Received promise rejected instead of resolved`(`PG 장애`). 기대 사유와 같음
+- [x] T105 [US2] 구현 + 통과 확인:
   ① 구현: `refundBySystem` 예외를 잡아 `TransactionLoggerService`에 기록하고 콜백은 성공 처리. `PaymentModule`에서 `LoggerModule` import (R12-A)
   ② 통과 확인: 단위 단건 통과, 파일 전체 회귀 없음
+  - 결과(2026-10-23): `refundBySystem` 예외를 잡아 `logTransaction({ type: 'REFUND', status: 'SYSTEM_REFUND_REQUEST_FAILED', metadata: { ticketId, error } })`로 기록. 단건 통과, `src/payment/` 4개 통과, `tsc` 오류 없음
 
 #### 동작 35. 만료된 HELD도 다른 유효 지정이 없으면 확정한다
 
-- [ ] T106 [US2] 작성 + 실패 확인:
+- [x] T106 [US2] 작성 + 실패 확인:
   ① 작성: `src/seat-assignment/seat-assignment.service.spec.ts`에 `it('선점이 만료됐어도 같은 좌석에 다른 유효 지정이 없으면 결제 확정 시 ACTIVE로 만든다')`
   ② 실패 확인: 단위 단건. 기대 사유: 확정 실패를 반환함.
      기반 단계 구현으로 이미 통과하면 조건 깨뜨리기로 바꿔, `activateByOrderItem`의 "다른 유효 지정 없음" 확인을 잠시 지워(만료 HELD는 무조건 확정 실패)
      실패하는지 확인하고 원복한 뒤 그 결과를 기록한다
-- [ ] T107 [US2] 구현 + 통과 확인:
+  - 결과(2026-10-23): 기반 단계(T005)에 같은 내용의 테스트 「HELD가 만료됐어도 같은 좌석에 다른 유효 배정이 없으면 새 ACTIVE를 만들고 true를 반환한다」가 이미 있어
+    중복 테스트를 만들지 않고 그 테스트로 조건 깨뜨리기를 했다. ① 통과 → ② `if (valid && valid.id !== row.id) return false`를 "무조건 확정 실패"로 바꾸자
+    `Expected true, Received false`로 실패 → ③ 원복 후 통과, `seat-assignment` 35개 통과
+- [x] T107 [US2] 구현 + 통과 확인:
   ① 구현: (task 1에서 실패한 경우만) `activateByOrderItem`에서 만료된 HELD라도 같은 좌석에 다른 유효 지정이 없으면 ACTIVE로 만든다 (contracts 4절)
   ② 통과 확인: 단위 단건 통과, `seat-assignment` 전체 회귀 없음
+  - 결과(2026-10-23): task 1이 기반 단계 구현으로 이미 통과해 구현 없음
 
 #### 동작 36. 승인 실패 시 선점을 해제한다 (QS-9)
 
-- [ ] T108 [US2] 작성 + 실패 확인:
+- [x] T108 [US2] 작성 + 실패 확인:
   ① E2E 작성: `it('결제 실패 후 같은 좌석으로 새 주문이 성공한다 (QS-9)')`
   ② E2E 실패 확인: E2E 단건(QS-9). 기대 사유: 새 주문이 409(선점이 아직 유효)
   ③ 단위 작성: `src/payment/payment.service.spec.ts`에 `it('승인 실패 콜백이면 주문 항목의 선점을 PAYMENT_FAILED로 해제한다')`
   ④ 단위 실패 확인: 단위 단건. 기대 사유: `releaseByOrderItems`가 호출되지 않음
-- [ ] T109 [US2] 구현 + 통과 확인:
+  - 실제 실패(2026-10-23): E2E(QS-9) 새 주문이 `expected 201, got 409`(선점이 아직 유효) / 단위는 첫 단언 `failedPayment`가 `tx` 없이 호출됨에서 실패.
+    기대 문구(`releaseByOrderItems` 미호출)와 다른 단언에서 먼저 실패했지만, "결제 실패와 같은 트랜잭션에서 선점을 해제하지 않는다"는 노리는 사유와 같다
+- [x] T109 [US2] 구현 + 통과 확인:
   ① 구현: `callbackPayment`의 승인 실패 분기(`!payload.success`)에서 `failedPayment`와 같은 트랜잭션으로
      `releaseByOrderItems(주문 항목 ID, PAYMENT_FAILED, now, tx)`. 금액 불일치 분기는 동작 37에서 넣는다
   ② 단위 통과 확인: 단위 단건 통과, 파일 전체 회귀 없음
   ③ E2E 통과 확인: E2E 단건(QS-9) 통과
+  - 결과(2026-10-23): `failedPayment`에 선택 인자 `tx` 추가, 실패 분기를 `failPaymentAndReleaseHolds`로 분리해 한 트랜잭션에서 처리. 단위 통과, `src/payment/` 5개 통과, `tsc` 오류 없음, E2E(QS-9) 통과
 
 #### 동작 37. 금액 불일치 시 선점을 해제한다
 
-- [ ] T110 [US2] 작성 + 실패 확인:
+- [x] T110 [US2] 작성 + 실패 확인:
   ① 작성: `src/payment/payment.service.spec.ts`에 `it('승인 금액이 다르면 선점을 PAYMENT_FAILED로 해제한다')`
   ② 실패 확인: 단위 단건. 기대 사유: `PaymentAmountMismatchError`는 던지지만 `releaseByOrderItems`가 호출되지 않음
-- [ ] T111 [US2] 구현 + 통과 확인:
+  - 실제 실패(2026-10-23): `PaymentAmountMismatchError`는 던지지만 `releaseByOrderItems` 호출 0회. 기대 사유와 같음
+- [x] T111 [US2] 구현 + 통과 확인:
   ① 구현: 금액 불일치 분기에도 같은 해제를 넣는다(기존 예외는 유지)
   ② 통과 확인: 단위 단건 통과, 파일 전체 회귀 없음
+  - 결과(2026-10-23): 금액 불일치 분기도 `failPaymentAndReleaseHolds`를 거친 뒤 기존 예외를 던진다. 단건 통과, `src/payment/` 6개 통과, `tsc` 오류 없음
 
 #### 동작 38. 만료된 선점을 찾아 HOLD_EXPIRED로 해제한다 (QS-30 시작)
 
 QS-30은 동작 38·39를 거쳐야 통과한다. 동작 38에서 E2E를 작성해 실패를 확인하고, 동작 39에서 통과를 확인한다.
 
-- [ ] T112 [US2] 작성 + 실패 확인:
+- [x] T112 [US2] 작성 + 실패 확인:
   ① E2E 작성: `it('선점이 만료된 주문으로 결제를 요청하면 409이고 선점은 HOLD_EXPIRED로 해제된다 (QS-30)')`. 상태 코드와 `error.code = SeatHoldExpiredError`를 검증한다
   ② E2E 실패 확인: E2E 단건(QS-30). 기대 사유: 409가 아니라 결제 요청 성공
   ③ 단위 작성: `src/seat-assignment/seat-assignment.service.spec.ts`에
      `it('주문 항목의 선점 중 무효인 것을 HOLD_EXPIRED로 해제하고 그 주문 항목 ID를 반환한다')`(이미 해제됐거나 없는 선점도 반환 목록에 포함)
   ④ 단위 실패 확인: 단위 단건. `releaseInvalidHolds is not a function`이면 빈 메서드를 두고 다시 확인한다. 기대 사유: 빈 목록 반환, 해제 미호출
-- [ ] T113 [US2] 구현 + 통과 확인:
+  - 실제 실패(2026-10-23): E2E(QS-30) `expected 409, got 201` / 단위 1차 `releaseInvalidHolds is not a function` → 빈 메서드를 두고 2차 빈 목록 반환으로 `toEqual` 불일치. 기대 사유와 같음
+- [x] T113 [US2] 구현 + 통과 확인:
   ① 구현: `src/seat-assignment/seat-assignment.service.ts`에 `releaseInvalidHolds(orderItemIds, now, tx)`.
      판정은 `isValidAssignment`, 조회는 기존 `findHeldByOrderItems`·`findLatestByOrderItem` 사용
   ② 통과 확인: 단위 단건 통과, `seat-assignment` 전체 회귀 없음(E2E QS-30은 동작 39에서 확인)
+  - 결과(2026-10-23): 단건 통과, `seat-assignment` 36개 통과(회귀 없음), `tsc` 오류 없음. 고정석 주문 항목 ID만 넘기는 것을 호출 측 책임으로 JSDoc에 적었다
 
 #### 동작 39. 결제 요청 시 선점이 만료됐으면 409 (QS-30 완료)
 
-- [ ] T114 [US2] 작성 + 실패 확인:
+- [x] T114 [US2] 작성 + 실패 확인:
   ① 작성: `src/payment/payment.service.spec.ts`에 `it('결제 요청 시 무효 선점이 있으면 VAN 요청 전에 SeatHoldExpiredError다')`
   ② 실패 확인: 단위 단건. 에러 파일이 없어 `Cannot find module`이면 `src/seat-assignment/errors/seat-hold-expired.error.ts`에 빈 클래스(`DomainConflictError` 상속, `name = 'SeatHoldExpiredError'`)를 두고 다시 확인한다. 기대 사유: 예외 없이 결제 요청이 진행됨
-- [ ] T115 [US2] 구현 + 통과 확인:
+  - 실제 실패(2026-10-23): 에러 클래스를 먼저 두고 실행, `Received promise resolved instead of rejected`. 기대 사유와 같음. `SeatHoldExpiredError`는 `src/seat-assignment/errors/index.ts`에서 export
+- [x] T115 [US2] 구현 + 통과 확인:
   ① 구현: `src/payment/payment.service.ts`의 `requestPayment`에서 VAN 요청 전에 고정석 주문 항목으로 `releaseInvalidHolds`를 트랜잭션으로 실행하고,
      **커밋 후** 반환 목록이 비어 있지 않으면 `SeatHoldExpiredError`(안내 문구 '좌석 선점이 만료되었습니다. 좌석을 다시 선택하세요')(해제가 롤백되지 않도록 커밋 후 예외, R12-C)
   ② 단위 통과 확인: 단위 단건 통과, 파일 전체 회귀 없음
   ③ E2E 통과 확인: E2E 단건(QS-30) 통과
+  - 결과(2026-10-23): 확인 위치를 계획의 "VAN 요청 전"보다 앞인 **결제 생성 전**으로 두었다(거부된 요청이 PENDING 결제를 남기지 않도록).
+    고정석 주문 항목만 `releaseInvalidHolds`로 확인하고 커밋 후 `SeatHoldExpiredError`. 단위 `src/payment/` 7개 통과, `tsc` 오류 없음, E2E `seat-type` 20개 모두 통과(QS-30 포함)
 
 #### 동작 40. 자유석 상품은 좌석 없이 주문·결제된다 (QS-10) — 동작 31로 이미 통과
 
-- [ ] T116 [US2] 작성 + 조건 깨뜨리기:
+- [x] T116 [US2] 작성 + 조건 깨뜨리기:
   ① E2E 작성: `it('자유석 상품을 좌석 없이 주문·결제하면 이용권이 자유석이고 지정 좌석이 없다 (QS-10)')`
   ② 조건 깨뜨리기: E2E 단건(QS-10) 통과를 확인한 뒤 이용권 생성의 `seatType` 복사(동작 31)를 잠시 `FIXED` 고정으로 바꿔 실패하는지 확인한다
   ③ 원복 후 통과 확인: 원복하고 E2E 단건(QS-10) 통과. ②에서 실패하지 않으면 멈추고 사용자에게 알린다
+  - 결과(2026-10-23): ① QS-10 통과 → ② 이용권 생성의 `seatType` 복사를 `SeatType.FIXED`로 고정하자 `Expected "FREE", Received "FIXED"`로 실패 → ③ 원복 후 통과.
+    spec US2-3은 "자유석 기간권"이지만, 활성화 전 기간권은 기존 이용권 조회(`toTicketOutData`)가 `expiresAt` 필수 예외를 던져(이 기능 이전부터 있던 동작)
+    API로 확인할 수 없어 시간권으로 작성했다
 
 #### US2 마무리
 
-- [ ] T117 [US2] `npm run test -- --testPathPatterns="product|order|payment|refund|ticket|seat"`, `npm run test:e2e -- --testPathPatterns=seat-type`, `npx eslint src`, `npm run build`를 실행해 모두 통과하는지 확인한다. 기대값은 바꾸지 않는다
+- [x] T117 [US2] `npm run test -- --testPathPatterns="product|order|payment|refund|ticket|seat"`, `npm run test:e2e -- --testPathPatterns=seat-type`, `npx eslint src`, `npm run build`를 실행해 모두 통과하는지 확인한다. 기대값은 바꾸지 않는다
+  - 결과(2026-10-23): 단위 11개 파일 86개 통과, E2E `seat-type` 21개 통과, `npm run build` 성공.
+    `npx eslint src`는 오류가 남아 있으나 모두 이 기능 이전부터 있던 것이다(US1 커밋 `a158e73` 기준 72건 → 현재 66건, 새로 생긴 오류 0건).
+    US2 작업 중 새로 생긴 6건(`no-unnecessary-type-assertion` 5건, `no-base-to-string` 1건)은 동작 변경 없이 고쳤다. 기존 오류 정리는 T190에서 다룬다
 
 **체크포인트**: US1·US2가 각각 독립적으로 동작.
 

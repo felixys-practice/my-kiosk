@@ -75,6 +75,7 @@ export class RefundRepository {
     requestedAt: Date,
     idempotencyKey?: string,
     client: TransactionClient | PrismaService = this.prisma,
+    reason?: string, // 취소 사유(시스템 자동 취소 시 기록, 이용자 요청은 기존처럼 비움)
   ) {
     return await client.paymentCancel.create({
       data: {
@@ -83,6 +84,7 @@ export class RefundRepository {
         orderItemId,
         requestedAt,
         idempotencyKey,
+        reason,
         status: PaymentCancelStatus.REQUESTED,
       },
     });

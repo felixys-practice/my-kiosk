@@ -1,7 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { TicketType } from '@prisma/client';
+import { SeatType, TicketType } from '@prisma/client';
 import {
   IsBoolean,
+  IsEnum,
   IsIn,
   IsNotEmpty,
   IsNumber,
@@ -19,6 +20,13 @@ export class CreateProductDto {
   })
   @IsIn([TicketType.TIME, TicketType.PERIOD])
   type!: TicketType;
+
+  @ApiProperty({
+    enum: SeatType,
+    description: '좌석 타입 (FIXED: 고정석, FREE: 자유석)',
+  })
+  @IsEnum(SeatType, { message: '좌석 타입은 FIXED 또는 FREE여야 합니다' })
+  seatType!: SeatType;
 
   @ApiProperty({ description: '상품 이름' })
   @IsNotEmpty({ message: '상품 이름은 필수 입니다' })
@@ -51,7 +59,7 @@ export class CreateProductDto {
 
   @ApiProperty({ description: '기간권-구매기간(일)', required: false })
   @ValidateIf((dto: CreateProductDto) => dto.type === TicketType.PERIOD)
-  @IsNotEmpty({ message: '정기권은 purchasedDurationDays가 필수입니다' })
+  @IsNotEmpty({ message: '기간권은 purchasedDurationDays가 필수입니다' })
   @IsNumber()
   @Min(1)
   @Max(365)

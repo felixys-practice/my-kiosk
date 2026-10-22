@@ -94,6 +94,44 @@ export class RefundService {
     return this.processAutoRefund(ticket, payment, userId, idempotencyKey);
   }
 
+  /**
+   * 시스템이 이용권을 자동으로 환불한다(결제 승인 후 좌석을 줄 수 없을 때, research R12-A)
+   * - 이용자 요청이 아니므로 소유자 검사를 하지 않는다
+   * - 미사용 자동 환불 경로(락 획득 → PG 취소 요청)를 그대로 탄다
+   * @param ticketId 이용권 ID
+   * @param reason 자동 취소 사유
+   * @returns 없음
+   * @throws DomainNotFoundError 이용권이 없을 때
+   * @throws DomainConflictError 이미 환불됐거나 사용 이력이 있는 이용권일 때
+   */
+  async refundBySystem(ticketId: string, reason: string): Promise<void> {
+    // 이용권과 결제 정보 조회(기존 refund와 같은 순서로 검증한다)
+    const ticket = await this.refundRepository.getTicketById(ticketId);
+    if (!ticket) {
+      throw new DomainNotFoundError('티켓이 존재하지 않습니다');
+    }
+    if (ticket.status === TicketStatus.REVOKED) {
+      throw new DomainConflictError('이미 환불 처리된 티켓입니다');
+    }
+    const [payment] = ticket.orderItem.order.payments;
+
+    // 사용 이력이 있으면 점주 재량이 필요하므로 시스템이 자동 취소하지 않는다
+    if (!isUnusedTicket(ticket)) {
+      throw new DomainConflictError(
+        '시스템 자동 취소는 미사용 이용권만 가능합니다',
+      );
+    }
+
+    // 결제한 이용자 기준으로 미사용 자동 환불을 진행한다
+    await this.processAutoRefund(
+      ticket,
+      payment,
+      ticket.userId,
+      undefined,
+      reason,
+    );
+  }
+
   // 사용 이력이 있는 건 - 점주 승인 없이는 금액/락을 확정할 수 없으므로
   // 승인 대기 상태의 PaymentCancel만 만들고 멈춘다.
   private async processPendingApproval(
@@ -117,6 +155,7 @@ export class RefundService {
     payment: { id: string },
     userId: string,
     idempotencyKey?: string,
+    reason?: string,
   ): Promise<RefundResult> {
     // 2️⃣ 낡은 락(만료됐는데 아무도 후속 처리를 안 해서 방치된 락)이 있으면 정리한다.
     const staleLock = await this.acquireStaleLock(ticket.orderItem.id);
@@ -149,6 +188,7 @@ export class RefundService {
       ticket.orderItem.id,
       payment.id,
       idempotencyKey,
+      reason,
     );
 
     // 4️⃣ PG 요청 시도(+실패로깅) - 응답은 완료 콜백 함수에서 처리
@@ -185,6 +225,7 @@ export class RefundService {
     orderItemId: string,
     paymentId: string,
     idempotencyKey?: string,
+    reason?: string,
   ) {
     // 환불 가능 금액 계산 -> 환불 진행 락(트랜잭션으로)
     const { paymentCancel } = await this.refundRepository.runInTransaction(
@@ -219,6 +260,7 @@ export class RefundService {
           new Date(),
           idempotencyKey,
           tx,
+          reason,
         );
 
         await this.refundRepository.createRefundLock(

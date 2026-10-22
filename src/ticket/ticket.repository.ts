@@ -1,5 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { Ticket, TicketStatus, TicketType } from '@prisma/client';
+import {
+  Ticket,
+  TicketStatus,
+  TicketType,
+  SeatAssignmentStatus,
+} from '@prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 import {
   CreateTicketData,
@@ -70,6 +75,13 @@ export class TicketRepository {
         expiresAt: true,
         purchasedMinutes: true,
         purchasedDurationDays: true,
+        seatType: true,
+        // 확정(ACTIVE)된 지정 좌석(이용권당 최대 1개)
+        seatAssignments: {
+          where: { status: SeatAssignmentStatus.ACTIVE },
+          select: { seat: { select: { id: true, number: true, name: true } } },
+          take: 1,
+        },
         usageSessions: {
           where: { ticketId },
           select: {

@@ -4,6 +4,7 @@ import {
   Get,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   Query,
 } from '@nestjs/common';
@@ -23,6 +24,14 @@ export class OrderController {
       dto.userId,
       dto.orderedProducts,
     );
+  }
+
+  // 주문 취소(키오스크에서 뒤로 가기·취소 시 좌석 선점 해제, research R2)
+  @Patch(':orderId/cancel')
+  async cancelOrder(
+    @Param('orderId', ParseUUIDPipe) orderId: string,
+  ): Promise<void> {
+    await this.service.cancelOrder(orderId);
   }
 
   @Get()

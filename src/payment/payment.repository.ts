@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PaymentStatus, PaymentType, Prisma, VanType } from '@prisma/client';
-import { PrismaService } from 'src/prisma/prisma.service';
+import { PrismaService, TransactionClient } from 'src/prisma/prisma.service';
 import {
   DuplicatePaymentRequestError,
   PaymentRequesterMismatchError,
@@ -72,41 +72,72 @@ export class PaymentRepository {
     });
   }
 
-  async failedPayment(paymentId: string, reason: string) {
-    return await this.prisma.payment.update({
+  /**
+   * 결제를 실패(FAILED) 상태로 바꾼다
+   * @param paymentId 결제 ID
+   * @param reason 실패 사유
+   * @param tx 트랜잭션 클라이언트(없으면 기본 클라이언트)
+   * @returns 갱신한 결제
+   */
+  async failedPayment(
+    paymentId: string,
+    reason: string,
+    tx?: TransactionClient,
+  ) {
+    return await (tx ?? this.prisma).payment.update({
       where: { id: paymentId },
       data: { status: PaymentStatus.FAILED, reason },
     });
   }
 
-  async successPayment(
+  /**
+   * 승인 요청 중(REQUESTED)인 결제를 승인(SUCCESS) 상태로 바꾼다
+   * @param paymentId 결제 ID
+   * @param now 승인 시각
+   * @param tx 트랜잭션 클라이언트
+   * @returns 없음
+   * @throws PaymentUpdateError 승인 요청 중인 결제가 아닐 때
+   */
+  async approvePayment(
     paymentId: string,
-    ticketsData: (TimePaymentData | PeriodPaymentData)[],
     now: Date,
-  ) {
-    return this.prisma.executeTransaction(async (tx) => {
-      try {
-        await tx.payment.update({
-          where: { id: paymentId, status: PaymentStatus.REQUESTED },
-          data: { status: PaymentStatus.SUCCESS, approvedAt: now },
-        });
-      } catch (error) {
-        if (
-          error instanceof Prisma.PrismaClientKnownRequestError &&
-          error.code === 'P2025'
-        ) {
-          throw new PaymentUpdateError(paymentId);
-        }
-        throw error;
-      }
-
-      const createTickets = await tx.ticket.createMany({
-        data: ticketsData,
+    tx: TransactionClient,
+  ): Promise<void> {
+    try {
+      await tx.payment.update({
+        where: { id: paymentId, status: PaymentStatus.REQUESTED },
+        data: { status: PaymentStatus.SUCCESS, approvedAt: now },
       });
-      if (createTickets.count !== ticketsData.length) {
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2025'
+      ) {
         throw new PaymentUpdateError(paymentId);
       }
+      throw error;
+    }
+  }
+
+  /**
+   * 결제된 주문 항목마다 이용권을 만든다
+   * @param paymentId 결제 ID(오류 보고용)
+   * @param ticketsData 이용권 생성 데이터
+   * @param tx 트랜잭션 클라이언트
+   * @returns 없음
+   * @throws PaymentUpdateError 일부 이용권이 만들어지지 않았을 때
+   */
+  async createTickets(
+    paymentId: string,
+    ticketsData: (TimePaymentData | PeriodPaymentData)[],
+    tx: TransactionClient,
+  ): Promise<void> {
+    const createTickets = await tx.ticket.createMany({
+      data: ticketsData,
     });
+    if (createTickets.count !== ticketsData.length) {
+      throw new PaymentUpdateError(paymentId);
+    }
   }
 
   async updatePayment(

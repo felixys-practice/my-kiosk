@@ -30,6 +30,7 @@ npm run build
 | 1 | 점주가 `type` 없이 좌석 등록 | 400 | FR-002 |
 | 2 | 점주가 고정석 좌석 등록 후 목록 조회 | `type = FIXED`, `isAssignable = true` | FR-012, US1 |
 | 3 | 고정석 시간권 상품 등록(`seatType = FIXED`) | 목록에 `seatType = FIXED` | FR-005 |
+| 3a | 고정석 기간권 상품 등록(`seatType = FIXED`) | 목록에 `seatType = FIXED` | FR-005 |
 | 4 | 고정석 상품을 `seatId` 없이 주문 | 400 | FR-007 |
 | 5 | 고정석 상품을 자유석 좌석으로 주문 | 400 | US2-5 |
 | 6 | 고정석 상품 주문 → 결제 성공 콜백 → 이용권 조회 | `seatType = FIXED`, `assignedSeat` = 선택 좌석 | FR-010, US2-1 |

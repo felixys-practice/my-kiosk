@@ -1,4 +1,4 @@
-import { TicketType } from '@prisma/client';
+import { SeatType, TicketType } from '@prisma/client';
 
 export class GetProductOutDto {
   id!: string;
@@ -9,4 +9,5 @@ export class GetProductOutDto {
   purchasedDurationDays?: number | null;
   usableDays!: number;
   isActive!: boolean;
+  seatType!: SeatType; // 좌석 타입(고정석·자유석)
 }

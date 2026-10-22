@@ -23,6 +23,9 @@ import { JwtService } from '@nestjs/jwt';
  * 좌석 타입(고정석·자유석) 기능 E2E 테스트
  * - 테스트 이름 끝의 (QS-n)은 specs/001-seat-type/quickstart.md의 시나리오 번호
  */
+/** 주문·결제를 요청하는 이용자 */
+type Buyer = { userId: string; token: string };
+
 describe('좌석 타입 (E2E)', () => {
   let app: INestApplication;
   let server: App;
@@ -32,10 +35,13 @@ describe('좌석 타입 (E2E)', () => {
   // 테스트 엔티티 (정리용으로 ID 추적)
   let ownerUser: { id: string; email: string };
   let normalUser: { id: string; email: string };
+  let otherUser: { id: string; email: string };
   let shop: { id: string };
   let periodProduct: { id: string };
 
   let ownerToken: string;
+  let userToken: string;
+  let otherUserToken: string;
 
   // 좌석 번호 중복 방지용 카운터 (매장 내 좌석 번호는 유일)
   let nextSeatNumber = 100;
@@ -155,6 +161,138 @@ describe('좌석 타입 (E2E)', () => {
       .send(body);
   }
 
+  /**
+   * 점주 권한으로 상품을 API로 등록한다
+   * @param seatType 상품의 좌석 타입
+   * @param ticketType 이용권 종류(시간권·기간권)
+   * @returns 상품 ID
+   */
+  async function createProduct(
+    seatType: SeatType,
+    ticketType: TicketType,
+  ): Promise<string> {
+    const base = {
+      type: ticketType,
+      name: `E2E상품-${seatType}-${ticketType}-${Date.now()}`,
+      amount: 10000,
+      usableDays: 30,
+      isActive: true,
+      seatType,
+    };
+    const body =
+      ticketType === TicketType.TIME
+        ? { ...base, purchasedMinutes: 600 }
+        : { ...base, purchasedDurationDays: 30 };
+
+    const res = await request(server)
+      .post(`/shops/${shop.id}/products`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send(body)
+      .expect(201);
+    return res.body.data as string;
+  }
+
+  /**
+   * 일반 사용자로 주문을 만든다
+   * @param items 주문 항목 목록
+   * @param buyer 주문자(기본: 일반 사용자)
+   * @returns supertest 요청
+   */
+  function createOrder(
+    items: { productId: string; quantity: number; seatId?: string }[],
+    buyer: Buyer = { userId: normalUser.id, token: userToken },
+  ) {
+    return request(server)
+      .post('/orders')
+      .set('Authorization', `Bearer ${buyer.token}`)
+      .send({ shopId: shop.id, userId: buyer.userId, orderedProducts: items });
+  }
+
+  /**
+   * 좌석 목록 API로 좌석의 선택 가능 여부를 조회한다
+   * @param seatId 좌석 ID
+   * @returns 선택 가능 여부
+   */
+  async function isSeatAssignable(seatId: string): Promise<boolean> {
+    const { body } = await request(server)
+      .get(`/shops/${shop.id}/seats`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .expect(200);
+    const seats = body.data as { id: string; isAssignable: boolean }[];
+    return seats.find((seat) => seat.id === seatId)!.isAssignable;
+  }
+
+  /**
+   * 주문을 결제 요청하고 PG 결과 콜백을 보낸다
+   * @param orderId 주문 ID
+   * @param success 승인 성공 여부
+   * @param buyer 주문자(기본: 일반 사용자)
+   * @returns 결제 ID
+   */
+  async function payOrder(
+    orderId: string,
+    success = true,
+    buyer: Buyer = { userId: normalUser.id, token: userToken },
+  ): Promise<string> {
+    const paymentId = await requestPayment(orderId, buyer);
+    await sendPaymentCallback(paymentId, success);
+    return paymentId;
+  }
+
+  /**
+   * 주문의 결제를 요청한다(콜백은 보내지 않는다)
+   * @param orderId 주문 ID
+   * @param buyer 주문자(기본: 일반 사용자)
+   * @returns 결제 ID
+   */
+  async function requestPayment(
+    orderId: string,
+    buyer: Buyer = { userId: normalUser.id, token: userToken },
+  ): Promise<string> {
+    const { body } = await request(server)
+      .post('/payments')
+      .set('Authorization', `Bearer ${buyer.token}`)
+      .send({ orderId, userId: buyer.userId })
+      .expect(201);
+    return body.data.paymentId as string;
+  }
+
+  /**
+   * PG 결제 결과 콜백을 보낸다
+   * @param paymentId 결제 ID(테스트 VAN은 PG 거래 ID로 결제 ID를 쓴다)
+   * @param success 승인 성공 여부
+   */
+  async function sendPaymentCallback(
+    paymentId: string,
+    success: boolean,
+  ): Promise<void> {
+    const payment = await prisma.payment.findUniqueOrThrow({
+      where: { id: paymentId },
+    });
+    await request(server)
+      .post('/payments/callback')
+      .set('Authorization', `Bearer ${userToken}`)
+      .send({
+        success,
+        pgTransactionId: payment.pgTransactionId,
+        amount: payment.amount,
+        reason: success ? null : 'E2E 승인 실패',
+      })
+      .expect(201);
+  }
+
+  /**
+   * 주문의 첫 이용권을 조회한다
+   * @param orderId 주문 ID
+   * @returns 이용권 ID
+   */
+  async function findTicketIdByOrder(orderId: string): Promise<string> {
+    const ticket = await prisma.ticket.findFirstOrThrow({
+      where: { orderItem: { orderId } },
+    });
+    return ticket.id;
+  }
+
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
@@ -195,6 +333,17 @@ describe('좌석 타입 (E2E)', () => {
       },
     });
     ownerToken = signAccessToken(ownerUser, 'OWNER');
+    userToken = signAccessToken(normalUser, 'USER');
+
+    // 같은 좌석을 두고 경쟁하는 두 번째 이용자
+    otherUser = await prisma.user.create({
+      data: {
+        email: `e2e-seat-other-${Date.now()}@test.com`,
+        role: UserRole.USER,
+        password: 'hashed',
+      },
+    });
+    otherUserToken = signAccessToken(otherUser, 'USER');
 
     // 매장 생성 + 점주 연결 + 이용 중 세션 준비용 기간권 상품
     shop = await prisma.shop.create({
@@ -217,7 +366,13 @@ describe('좌석 타입 (E2E)', () => {
 
   afterAll(async () => {
     // 역순 정리 (FK 제약 충돌 방지)
-    const userIds = [ownerUser.id, normalUser.id];
+    const userIds = [ownerUser.id, normalUser.id, otherUser.id];
+    await prisma.refundLock.deleteMany({
+      where: { orderItem: { order: { userId: { in: userIds } } } },
+    });
+    await prisma.paymentCancel.deleteMany({
+      where: { payment: { order: { userId: { in: userIds } } } },
+    });
     await prisma.ticketSeatChange.deleteMany({
       where: { ticket: { userId: { in: userIds } } },
     });
@@ -238,6 +393,9 @@ describe('좌석 타입 (E2E)', () => {
       where: { order: { userId: { in: userIds } } },
     });
     await prisma.order.deleteMany({ where: { userId: { in: userIds } } });
+    await prisma.productHistory.deleteMany({
+      where: { product: { shopId: shop.id } },
+    });
     await prisma.product.deleteMany({ where: { shopId: shop.id } });
     await prisma.seat.deleteMany({ where: { shopId: shop.id } });
     await prisma.shopOwner.deleteMany({ where: { shopId: shop.id } });
@@ -339,6 +497,286 @@ describe('좌석 타입 (E2E)', () => {
         where: { id: seatId },
       });
       expect(seat.status).toBe(SeatStatus.UNAVAILABLE);
+    });
+  });
+
+  // ── 사용자 스토리 2: 이용자가 최초 구매 시 좌석 타입을 선택한다 ──
+
+  describe('사용자 스토리 2', () => {
+    it('고정석 시간권 상품을 등록하면 목록에 고정석으로 조회된다 (QS-3)', async () => {
+      const productId = await createProduct(SeatType.FIXED, TicketType.TIME);
+
+      const { body } = await request(server)
+        .get(`/shops/${shop.id}/products`)
+        .query({ page: 1, limit: 100, sortBy: 'createdAt', sortOrder: 'desc' })
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .expect(200);
+
+      const items = body.data.items as { id: string; seatType?: SeatType }[];
+      const product = items.find((item) => item.id === productId);
+      expect(product?.seatType).toBe(SeatType.FIXED);
+    });
+
+    it('고정석 기간권 상품을 등록하면 목록에 고정석으로 조회된다 (QS-3a)', async () => {
+      const productId = await createProduct(SeatType.FIXED, TicketType.PERIOD);
+
+      const { body } = await request(server)
+        .get(`/shops/${shop.id}/products`)
+        .query({ page: 1, limit: 100, sortBy: 'createdAt', sortOrder: 'desc' })
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .expect(200);
+
+      const items = body.data.items as { id: string; seatType?: SeatType }[];
+      const product = items.find((item) => item.id === productId);
+      expect(product?.seatType).toBe(SeatType.FIXED);
+    });
+
+    it('상품의 좌석 타입과 금액을 수정하면 반영되고 바뀐 필드마다 이력이 남는다 (QS-28)', async () => {
+      const productId = await createProduct(SeatType.FREE, TicketType.TIME);
+
+      await request(server)
+        .patch(`/shops/${shop.id}/products/${productId}`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({ seatType: SeatType.FIXED, amount: 12000 })
+        .expect(200);
+
+      const { body } = await request(server)
+        .get(`/shops/${shop.id}/products`)
+        .query({ page: 1, limit: 100, sortBy: 'createdAt', sortOrder: 'desc' })
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .expect(200);
+      const items = body.data.items as {
+        id: string;
+        seatType: SeatType;
+        amount: number;
+      }[];
+      expect(items.find((item) => item.id === productId)).toMatchObject({
+        seatType: SeatType.FIXED,
+        amount: 12000,
+      });
+
+      const histories = await prisma.productHistory.findMany({
+        where: { productId },
+      });
+      expect(histories).toHaveLength(2);
+      expect(new Set(histories.map((h) => h.changeGroupId)).size).toBe(1);
+      expect(histories.map((h) => h.changedField).sort()).toEqual([
+        'amount',
+        'seatType',
+      ]);
+    });
+
+    it('상품 수정에서 이용권 종류를 보내면 400 (QS-29)', async () => {
+      const productId = await createProduct(SeatType.FREE, TicketType.TIME);
+
+      await request(server)
+        .patch(`/shops/${shop.id}/products/${productId}`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({ type: TicketType.PERIOD })
+        .expect(400);
+    });
+
+    it('고정석 상품을 좌석 없이 주문하면 400 (QS-4)', async () => {
+      const productId = await createProduct(SeatType.FIXED, TicketType.TIME);
+
+      const { body } = await createOrder([{ productId, quantity: 1 }]).expect(
+        400,
+      );
+      expect(body.error.code).toBe('SeatSelectionRequiredError');
+    });
+
+    it('고정석 상품을 자유석 좌석으로 주문하면 400 (QS-5)', async () => {
+      const productId = await createProduct(SeatType.FIXED, TicketType.TIME);
+      const freeSeatId = await createSeat(SeatType.FREE);
+
+      const { body } = await createOrder([
+        { productId, quantity: 1, seatId: freeSeatId },
+      ]).expect(400);
+      expect(body.error.code).toBe('SeatTypeMismatchError');
+    });
+
+    it('이미 지정된 좌석으로 다른 이용자가 주문하면 409 (QS-7)', async () => {
+      const productId = await createProduct(SeatType.FIXED, TicketType.TIME);
+      const seatId = await createSeat(SeatType.FIXED);
+      await holdSeat(seatId);
+
+      const { body } = await createOrder([
+        { productId, quantity: 1, seatId },
+      ]).expect(409);
+      expect(body.error.code).toBe('SeatNotAssignableError');
+    });
+
+    it('같은 좌석으로 두 주문을 동시에 만들면 한 건만 성공한다 (QS-8)', async () => {
+      const productId = await createProduct(SeatType.FIXED, TicketType.TIME);
+      const seatId = await createSeat(SeatType.FIXED);
+
+      const responses = await Promise.all([
+        createOrder([{ productId, quantity: 1, seatId }]),
+        createOrder([{ productId, quantity: 1, seatId }]),
+      ]);
+
+      expect(responses.map((res) => res.status).sort()).toEqual([201, 409]);
+      const rejected = responses.find((res) => res.status === 409);
+      expect(rejected?.body.error.code).toBe('SeatNotAssignableError');
+    });
+
+    it('고정석 주문을 취소하면 그 좌석이 즉시 선택 가능해진다 (QS-24)', async () => {
+      const productId = await createProduct(SeatType.FIXED, TicketType.TIME);
+      const seatId = await createSeat(SeatType.FIXED);
+      const { body } = await createOrder([
+        { productId, quantity: 1, seatId },
+      ]).expect(201);
+      expect(await isSeatAssignable(seatId)).toBe(false);
+
+      await request(server)
+        .patch(`/orders/${body.data.id}/cancel`)
+        .set('Authorization', `Bearer ${userToken}`)
+        .expect(200);
+
+      expect(await isSeatAssignable(seatId)).toBe(true);
+    });
+
+    it('고정석 주문 후 방치되면 좌석이 선택 가능해지고 같은 좌석으로 새 주문이 성공한다 (QS-25)', async () => {
+      const productId = await createProduct(SeatType.FIXED, TicketType.TIME);
+      const seatId = await createSeat(SeatType.FIXED);
+      await createOrder([{ productId, quantity: 1, seatId }]).expect(201);
+
+      // 결제 없이 선점 유효시간이 지난 상황
+      await prisma.seatAssignment.updateMany({
+        where: { seatId, status: SeatAssignmentStatus.HELD },
+        data: { heldUntil: new Date(Date.now() - 60 * 1000) },
+      });
+
+      expect(await isSeatAssignable(seatId)).toBe(true);
+      await createOrder([{ productId, quantity: 1, seatId }]).expect(201);
+    });
+
+    it('고정석 상품 주문 후 결제가 성공하면 이용권에 고정석과 선택 좌석이 조회된다 (QS-6)', async () => {
+      const productId = await createProduct(SeatType.FIXED, TicketType.TIME);
+      const seatId = await createSeat(SeatType.FIXED);
+      const { body: order } = await createOrder([
+        { productId, quantity: 1, seatId },
+      ]).expect(201);
+
+      await payOrder(order.data.id);
+
+      const ticketId = await findTicketIdByOrder(order.data.id);
+      const { body } = await request(server)
+        .get(`/tickets/${ticketId}`)
+        .set('Authorization', `Bearer ${userToken}`)
+        .expect(200);
+      expect(body.data.seatType).toBe(SeatType.FIXED);
+      expect(body.data.assignedSeat?.id).toBe(seatId);
+    });
+
+    it('자유석 상품을 좌석 없이 주문·결제하면 이용권이 자유석이고 배정 좌석이 없다 (QS-10)', async () => {
+      // 활성화 전 기간권은 기존 이용권 조회가 expiresAt 필수 예외를 던지므로 시간권으로 확인한다
+      const productId = await createProduct(SeatType.FREE, TicketType.TIME);
+      const { body: order } = await createOrder([
+        { productId, quantity: 1 },
+      ]).expect(201);
+
+      await payOrder(order.data.id);
+
+      const ticketId = await findTicketIdByOrder(order.data.id);
+      const { body } = await request(server)
+        .get(`/tickets/${ticketId}`)
+        .set('Authorization', `Bearer ${userToken}`)
+        .expect(200);
+      expect(body.data.seatType).toBe(SeatType.FREE);
+      expect(body.data.assignedSeat).toBeNull();
+    });
+
+    it('승인 전에 좌석을 다른 이용자가 확정하면 이용권 발급 후 자동 환불되고 환불 콜백 후 이용권이 소멸된다 (QS-31)', async () => {
+      const productId = await createProduct(SeatType.FIXED, TicketType.TIME);
+      const seatId = await createSeat(SeatType.FIXED);
+      const other: Buyer = { userId: otherUser.id, token: otherUserToken };
+
+      // 첫 이용자: 주문·결제 요청 후 승인 콜백 전에 선점이 만료됨
+      const { body: firstOrder } = await createOrder([
+        { productId, quantity: 1, seatId },
+      ]).expect(201);
+      const firstPaymentId = await requestPayment(firstOrder.data.id);
+      await prisma.seatAssignment.updateMany({
+        where: { seatId, status: SeatAssignmentStatus.HELD },
+        data: { heldUntil: new Date(Date.now() - 60 * 1000) },
+      });
+
+      // 다른 이용자가 같은 좌석을 주문·결제해 배정을 확정함
+      const { body: otherOrder } = await createOrder(
+        [{ productId, quantity: 1, seatId }],
+        other,
+      ).expect(201);
+      await payOrder(otherOrder.data.id, true, other);
+
+      // 첫 결제의 승인 콜백 - 이용권은 발급되지만 좌석을 줄 수 없어 자동 환불 요청
+      await sendPaymentCallback(firstPaymentId, true);
+      const firstTicketId = await findTicketIdByOrder(firstOrder.data.id);
+      const firstTicket = await prisma.ticket.findUniqueOrThrow({
+        where: { id: firstTicketId },
+        include: { orderItem: true },
+      });
+      const cancel = await prisma.paymentCancel.findFirst({
+        where: { orderItemId: firstTicket.orderItemId },
+      });
+      expect(cancel).not.toBeNull();
+      expect(cancel!.reason).toContain('자동 결제 취소');
+
+      // PG 환불 성공 콜백 후 이용권 소멸
+      await request(server)
+        .post('/refund/callback')
+        .set('Authorization', `Bearer ${userToken}`)
+        .send({
+          success: true,
+          pgTransactionId: `refund-${cancel!.id}`,
+          orderItemId: firstTicket.orderItemId,
+          paymentCancelId: cancel!.id,
+          amount: cancel!.amount,
+        })
+        .expect(201);
+      const revoked = await prisma.ticket.findUniqueOrThrow({
+        where: { id: firstTicketId },
+      });
+      expect(revoked.status).toBe(TicketStatus.REVOKED);
+    });
+
+    it('결제 실패 후 같은 좌석으로 새 주문이 성공한다 (QS-9)', async () => {
+      const productId = await createProduct(SeatType.FIXED, TicketType.TIME);
+      const seatId = await createSeat(SeatType.FIXED);
+      const { body: order } = await createOrder([
+        { productId, quantity: 1, seatId },
+      ]).expect(201);
+
+      await payOrder(order.data.id, false);
+
+      await createOrder([{ productId, quantity: 1, seatId }]).expect(201);
+    });
+
+    it('선점이 만료된 주문으로 결제를 요청하면 409이고 선점은 HOLD_EXPIRED로 해제된다 (QS-30)', async () => {
+      const productId = await createProduct(SeatType.FIXED, TicketType.TIME);
+      const seatId = await createSeat(SeatType.FIXED);
+      const { body: order } = await createOrder([
+        { productId, quantity: 1, seatId },
+      ]).expect(201);
+      await prisma.seatAssignment.updateMany({
+        where: { seatId, status: SeatAssignmentStatus.HELD },
+        data: { heldUntil: new Date(Date.now() - 60 * 1000) },
+      });
+
+      const { body } = await request(server)
+        .post('/payments')
+        .set('Authorization', `Bearer ${userToken}`)
+        .send({ orderId: order.data.id, userId: normalUser.id })
+        .expect(409);
+      expect(body.error.code).toBe('SeatHoldExpiredError');
+
+      const assignment = await prisma.seatAssignment.findFirstOrThrow({
+        where: { seatId },
+      });
+      expect(assignment).toMatchObject({
+        status: SeatAssignmentStatus.RELEASED,
+        releaseReason: 'HOLD_EXPIRED',
+      });
     });
   });
 });

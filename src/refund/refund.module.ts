@@ -10,5 +10,6 @@ import { IdempotencyInterceptor } from 'src/common/interceptors/idempotency.inte
   imports: [LoggerModule, PgModule],
   providers: [RefundService, RefundRepository, IdempotencyInterceptor],
   controllers: [RefundController],
+  exports: [RefundService],
 })
 export class RefundModule {}

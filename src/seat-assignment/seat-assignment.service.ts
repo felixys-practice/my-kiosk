@@ -108,6 +108,55 @@ export class SeatAssignmentService {
   }
 
   /**
+   * 결제 요청 전에 주문 항목의 선점이 유효한지 확인하고, 만료된 선점은 HOLD_EXPIRED로 해제한다(research R12-C)
+   * - 고정석 주문 항목 ID만 넘긴다(자유석 주문 항목은 선점이 없어 무효로 판정된다)
+   * @param orderItemIds 고정석 주문 항목 ID 목록
+   * @param now 기준 시각
+   * @param tx 트랜잭션 클라이언트
+   * @returns 선점이 유효하지 않은(만료·해제·없음) 주문 항목 ID 목록
+   */
+  async releaseInvalidHolds(
+    orderItemIds: string[],
+    now: Date,
+    tx: TransactionClient,
+  ): Promise<string[]> {
+    const invalidOrderItemIds: string[] = [];
+    const expiredIds: string[] = [];
+
+    for (const orderItemId of orderItemIds) {
+      // 주문 항목의 최근 배정 조회
+      const row = await this.repository.findLatestByOrderItem(orderItemId, tx);
+
+      // 유효한 선점이면 그대로 둔다
+      if (
+        row?.status === SeatAssignmentStatus.HELD &&
+        isValidAssignment(row, null, now)
+      ) {
+        continue;
+      }
+
+      // 만료된 선점은 해제 대상으로 모은다(이미 해제됐거나 없으면 바꾸지 않는다)
+      if (row?.status === SeatAssignmentStatus.HELD) expiredIds.push(row.id);
+      invalidOrderItemIds.push(orderItemId);
+    }
+
+    // 만료된 선점 해제
+    if (expiredIds.length > 0) {
+      await this.repository.updateStatus(
+        expiredIds,
+        {
+          status: SeatAssignmentStatus.RELEASED,
+          releasedAt: now,
+          releaseReason: SeatReleaseReason.HOLD_EXPIRED,
+        },
+        tx,
+      );
+    }
+
+    return invalidOrderItemIds;
+  }
+
+  /**
    * 결제 성공 시 주문 항목의 선점을 이용권에 확정(ACTIVE)한다
    * @param orderItemId 주문 항목 ID
    * @param ticketId 발급된 이용권 ID
