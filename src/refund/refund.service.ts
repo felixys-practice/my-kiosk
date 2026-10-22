@@ -3,6 +3,7 @@ import {
   PaymentCancelFailureCode,
   PaymentCancelStatus as PrismaPaymentCancelStatus,
   RefundLock,
+  SeatReleaseReason,
   TicketStatus,
   TicketType,
 } from '@prisma/client';
@@ -19,6 +20,8 @@ import {
 } from 'src/common/errors';
 import { TransactionLoggerService } from '../logger/transaction-logger.service';
 import { PgService } from 'src/pg/pg.service';
+import { TransactionClient } from 'src/prisma/prisma.service';
+import { SeatAssignmentService } from 'src/seat-assignment/seat-assignment.service';
 import { PgCancelInquiryResult } from 'src/pg/pg.types';
 import { assertNever, UnhandledCaseError } from '@felix_ys/ts-utils';
 
@@ -42,6 +45,7 @@ export class RefundService {
     private readonly refundRepository: RefundRepository,
     private readonly transactionLoggerService: TransactionLoggerService,
     private readonly pgService: PgService,
+    private readonly seatAssignmentService: SeatAssignmentService,
   ) {}
 
   /**
@@ -129,6 +133,31 @@ export class RefundService {
       ticket.userId,
       undefined,
       reason,
+    );
+  }
+
+  /**
+   * 환불로 소멸된 이용권의 고정석 배정을 해제한다
+   * @param orderItemId 주문 항목 ID
+   * @param now 해제 시각
+   * @param tx 트랜잭션 클라이언트(환불 확정과 같은 트랜잭션)
+   * @returns 없음
+   */
+  private async releaseRevokedTicketSeat(
+    orderItemId: string,
+    now: Date,
+    tx: TransactionClient,
+  ): Promise<void> {
+    const ticketId = await this.refundRepository.findTicketIdByOrderItem(
+      orderItemId,
+      tx,
+    );
+    if (!ticketId) return;
+    await this.seatAssignmentService.releaseByTicket(
+      ticketId,
+      SeatReleaseReason.TICKET_REVOKED,
+      now,
+      tx,
     );
   }
 
@@ -411,12 +440,15 @@ export class RefundService {
         // paymentCancel의 상태가 아직 REQUESTED(callback 응답을 받기전)
         // - PG 상태 조회 결과로 업데이트
         if (inquiryResult === PgCancelInquiryResult.SUCCEEDED) {
+          const now = new Date();
           await this.refundRepository.confirmRefundSuccess(
             staleLock.paymentCancelId,
             orderItemId,
-            new Date(),
+            now,
             tx,
           );
+          // 환불로 소멸된 이용권의 고정석 배정을 같은 트랜잭션에서 해제한다(FR-017)
+          await this.releaseRevokedTicketSeat(orderItemId, now, tx);
           await this.refundRepository.deleteRefundLock(
             orderItemId,
             staleLock.paymentCancelId,
@@ -552,14 +584,18 @@ export class RefundService {
     if (success) {
       // 금액 비교 - PG가 실패로 응답한 경우 금액 비교는 의미가 없으므로 성공 시에만 검사한다
       if (refundedAmount === paymentCancel.amount) {
-        await this.refundRepository.runInTransaction((tx) =>
-          this.refundRepository.confirmRefundSuccess(
+        await this.refundRepository.runInTransaction(async (tx) => {
+          const now = new Date();
+          await this.refundRepository.confirmRefundSuccess(
             paymentCancelId,
             orderItemId,
-            new Date(),
+            now,
             tx,
-          ),
-        );
+          );
+
+          // 환불로 소멸된 이용권의 고정석 배정을 같은 트랜잭션에서 해제한다(FR-017)
+          await this.releaseRevokedTicketSeat(orderItemId, now, tx);
+        });
       } else {
         // 잘못된 환불 금액에 대한 처리 - 그대로 성공 처리하지 않고 실패로 확정한다
         // 🔥 관리자가 확인: 상황 자체가 **정상 흐름이 아니라 이상 상황(PG 연동 버그, PG 측 처리 오류)**이기 때문

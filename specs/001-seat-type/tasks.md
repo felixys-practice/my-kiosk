@@ -889,137 +889,172 @@ QS-30은 동작 38·39를 거쳐야 통과한다. 동작 38에서 E2E를 작성�
 
 #### 동작 1. 자유석 이용권으로 고정석에 입실하면 400 (QS-12)
 
-- [ ] T118 [US3] 작성 + 실패 확인:
+- [x] T118 [US3] 작성 + 실패 확인:
   ① E2E 작성: `test/seat-type.e2e-spec.ts`에 `describe('사용자 스토리 3')`를 만들고 `it('자유석 이용권은 자유석에 입실하고 고정석 입실은 400 (QS-12)')`를 작성한다. 400 응답의 `error.code = SeatTypeMismatchError`를 검증한다
   ② E2E 실패 확인: E2E 단건(QS-12). 기대 사유: 고정석 입실이 400이 아니라 201
   ③ 단위 작성: `src/usage-session/usage-session.service.spec.ts`(신규)에 `it('자유석 이용권으로 고정석에 입실하면 SeatTypeMismatchError다')`.
      목: `UsageSessionRepository`, `TicketRepository`, BullMQ 큐, `SeatAssignmentService`
   ④ 단위 실패 확인: 단위 단건. 기대 사유: 예외 없이 세션이 생성됨
-- [ ] T119 [US3] 구현 + 통과 확인:
+  - 실제 실패(2026-10-23): E2E(QS-12) 고정석 입실이 `expected 400, got 201` / 단위 `Received promise resolved instead of rejected`. 기대 사유와 같음. E2E 준비 함수 `issueTicket`, `enterSeat` 추가
+- [x] T119 [US3] 구현 + 통과 확인:
   ① 구현: `src/usage-session/usage-session.service.ts`의 `createSession`에서 세션 생성 트랜잭션 전에 좌석 `type`
      (필요 시 `usage-session.repository.ts`에 좌석 조회 쿼리 추가)과 이용권 `seatType`이 다르면 `SeatTypeMismatchError`.
      `UsageSessionModule`에서 `SeatAssignmentModule` import
   ② 단위 통과 확인: 단위 단건 통과, `src/usage-session/` 전체 회귀 없음
   ③ E2E 통과 확인: E2E 단건(QS-12) 통과
+  - 결과(2026-10-23): `UsageSessionRepository.findSeatType` 추가, 이용권 `seatType`은 T101에서 늘린 `getTicketById`로 조회. 단위 통과, `tsc` 오류 없음, E2E(QS-12) 통과
 
 #### 동작 2. 고정석 이용권으로 자유석에 입실하면 400 (QS-11a) — 동작 1 구현으로 함께 통과
 
-- [ ] T120 [US3] 작성 + 조건 깨뜨리기:
+- [x] T120 [US3] 작성 + 조건 깨뜨리기:
   ① 작성: E2E `it('고정석 이용권으로 자유석에 입실하면 400 (QS-11a)')`(상태 코드와 `error.code = SeatTypeMismatchError` 검증)와
      단위 `src/usage-session/usage-session.service.spec.ts`의 `it('고정석 이용권으로 자유석에 입실하면 SeatTypeMismatchError다')`
   ② 조건 깨뜨리기: 단위 단건과 E2E 단건(QS-11a) 통과를 확인한 뒤 타입 비교를 "자유석 이용권일 때만"으로 잠시 좁혀 둘 다 실패하는지 확인한다
   ③ 원복 후 통과 확인: 원복하고 단위 단건·E2E 단건(QS-11a) 통과. ②에서 실패하지 않으면 멈추고 사용자에게 알린다
+  - 결과(2026-10-23): ① 단위·E2E(QS-11a) 통과 → ② 1차 시도는 바꾼 조건이 쓰는 `SeatType` import가 빠져 `ReferenceError`(E2E 500)로 실패해 **노리는 사유가 아니었다** →
+    import를 넣고 2차 시도에서 단위 `Received promise resolved instead of rejected`, E2E `expected 400, got 201`로 실패(노리는 사유) → ③ 원복 후 단위 2개·QS-11a 통과
 
 #### 동작 3. 고정석 이용권은 지정 좌석이 아니면 입실할 수 없다 (QS-11)
 
-- [ ] T121 [US3] 작성 + 실패 확인:
+- [x] T121 [US3] 작성 + 실패 확인:
   ① E2E 작성: `it('고정석 이용권은 지정 좌석에 입실하고 다른 고정석 입실은 400 (QS-11)')`. 400 응답의 `error.code = NotAssignedSeatError`를 검증한다
   ② E2E 실패 확인: E2E 단건(QS-11). 기대 사유: 다른 고정석 입실이 400이 아니라 201
   ③ 단위 작성: `src/usage-session/usage-session.service.spec.ts`에 `it('고정석 이용권으로 지정되지 않은 고정석에 입실하면 NotAssignedSeatError다')`
   ④ 단위 실패 확인: 단위 단건. 에러 파일이 없어 `Cannot find module`이면 `src/seat-assignment/errors/not-assigned-seat.error.ts`에 빈 클래스(`DomainBadRequestError` 상속, `name = 'NotAssignedSeatError'`)를 두고 다시 확인한다. 기대 사유: 예외 없이 세션이 생성됨
-- [ ] T122 [US3] 구현 + 통과 확인:
+  - 실제 실패(2026-10-23): 에러 클래스를 먼저 두고 실행. E2E(QS-11) 다른 고정석 입실이 `expected 400, got 201` / 단위 `Received promise resolved instead of rejected`. 기대 사유와 같음
+- [x] T122 [US3] 구현 + 통과 확인:
   ① 구현: 고정석 이용권이면 `SeatAssignmentService.getActiveByTicket`의 좌석과 요청 좌석이 다를 때 `NotAssignedSeatError`(안내 문구 '지정 좌석만 이용할 수 있습니다')
   ② 단위 통과 확인: 단위 단건 통과, 파일 전체 회귀 없음
   ③ E2E 통과 확인: E2E 단건(QS-11) 통과(지정 좌석 입실 성공 포함)
+  - 결과(2026-10-23): 단위 3개 통과, `tsc` 오류 없음, E2E QS-11·11a·12 통과. `NotAssignedSeatError`는 `src/seat-assignment/errors/index.ts`에서 export. 배정이 없는 경우의 처리는 동작 5에서 넣는다
 
 #### 동작 4. 고정석 이용권은 지정 좌석에 입실한다 — 동작 3 구현으로 함께 통과
 
-- [ ] T123 [US3] 작성 + 조건 깨뜨리기:
+- [x] T123 [US3] 작성 + 조건 깨뜨리기:
   ① 작성: `src/usage-session/usage-session.service.spec.ts`에 `it('고정석 이용권으로 지정 좌석에 입실하면 세션을 만든다')`
   ② 조건 깨뜨리기: 단건 통과를 확인한 뒤 동작 3의 비교를 잠시 "항상 거부"로 바꿔 실패하는지 확인한다
   ③ 원복 후 통과 확인: 원복하고 파일 전체 통과. ②에서 실패하지 않으면 멈추고 사용자에게 알린다
+  - 결과(2026-10-23): ① 통과 → ② 배정 좌석 비교를 "항상 거부"로 바꾸자 `NotAssignedSeatError`로 실패 → ③ 원복 후 `src/usage-session/` 4개 통과.
+    세션 생성까지 가는 테스트라 기존 외부 API 스텁(`mockExternalApi`, 1초 대기·30% 실패)이 실행되므로 이 테스트에서만 `Math.random`을 0.99로 고정하고 제한 시간을 10초로 두었다
 
 #### 동작 5. 지정 좌석이 없는 고정석 이용권은 입실할 수 없다 (QS-11b)
 
-- [ ] T124 [US3] 작성 + 실패 확인:
+- [x] T124 [US3] 작성 + 실패 확인:
   ① E2E 작성: `it('지정 좌석이 없는 고정석 이용권으로 입실하면 400 (QS-11b)')`(자동 취소 대기 중 상황: 고정석 이용권만 만들고 지정은 만들지 않는다). 상태 코드와 `error.code = TicketSeatUnassignedError`를 검증한다
   ② E2E 실패 확인: E2E 단건(QS-11b). 기대 사유: 400이 아니라 500(`null` 접근) 또는 201
   ③ 단위 작성: `src/usage-session/usage-session.service.spec.ts`에 `it('지정 좌석이 없는 고정석 이용권으로 입실하면 TicketSeatUnassignedError다')`
   ④ 단위 실패 확인: 단위 단건. 에러 파일이 없어 `Cannot find module`이면 `src/seat-assignment/errors/ticket-seat-unassigned.error.ts`에 빈 클래스(`DomainBadRequestError` 상속, `name = 'TicketSeatUnassignedError'`)를 두고 다시 확인한다. 기대 사유: `TypeError` 또는 세션 생성
-- [ ] T125 [US3] 구현 + 통과 확인:
+  - 실제 실패(2026-10-23): 에러 클래스를 먼저 두고 실행. E2E(QS-11b) `expected 400, got 500`(`null` 접근) / 단위 `Received constructor: TypeError`. 기대 사유와 같음. 배정 없는 고정석 이용권은 E2E에서 DB로 직접 만든다
+- [x] T125 [US3] 구현 + 통과 확인:
   ① 구현: `getActiveByTicket` 결과가 없으면 `TicketSeatUnassignedError`(안내 문구 '지정 좌석이 없는 고정석 이용권입니다') (R12)
   ② 단위 통과 확인: 단위 단건 통과, 파일 전체 회귀 없음
   ③ E2E 통과 확인: E2E 단건(QS-11b) 통과
+  - 결과(2026-10-23): 단위 5개 통과, `tsc` 오류 없음, E2E(QS-11b) 통과. `TicketSeatUnassignedError`는 `src/seat-assignment/errors/index.ts`에서 export
 
 #### 동작 6. 검증과 세션 생성 사이에 지정이 바뀌면 입실하지 않는다
 
-- [ ] T126 [US3] 작성 + 실패 확인:
+- [x] T126 [US3] 작성 + 실패 확인:
   ① 작성: `src/usage-session/usage-session.service.spec.ts`에 `it('세션 생성 트랜잭션에서 다시 조회한 지정 좌석이 다르면 NotAssignedSeatError다')`
      (트랜잭션 전 조회는 요청 좌석, 트랜잭션 안 재조회는 다른 좌석)
   ② 실패 확인: 단위 단건. 기대 사유: 예외 없이 세션이 생성됨
-- [ ] T127 [US3] 구현 + 통과 확인:
+  - 실제 실패(2026-10-23): `Received promise resolved instead of rejected`. 기대 사유와 같음. 테스트 이름은 "배정" 용어로 작성
+- [x] T127 [US3] 구현 + 통과 확인:
   ① 구현: 고정석이면 세션 생성과 같은 트랜잭션에서 지정 행을 `FOR UPDATE`로 다시 조회해(`usage-session.repository.ts`에 쿼리 추가) 요청 좌석과 다르면 `NotAssignedSeatError`로 롤백한다
   ② 통과 확인: 단위 단건 통과, 파일 전체 회귀 없음
+  - 결과(2026-10-23): 비교 로직을 Repository에 두지 않도록(헌법 I) `UsageSessionRepository.createSession`에 트랜잭션 시작 직후 실행할 확인 함수 `beforeCreate`를 선택 인자로 추가하고,
+    서비스가 그 안에서 `findAssignedSeatIdForUpdate`(배정 행 `FOR UPDATE`)로 다시 조회해 다르면 `NotAssignedSeatError`로 롤백한다.
+    단위 6개 통과, `tsc` 오류 없음, E2E QS-11·11a·11b·12 통과(QS-11의 배정 좌석 입실로 재조회 SQL 실행 확인)
 
 #### 동작 7. 자유석 이용권은 자유석에 입실한다 — 구현 전부터 통과
 
-- [ ] T128 [US3] 작성 + 조건 깨뜨리기:
+- [x] T128 [US3] 작성 + 조건 깨뜨리기:
   ① 작성: `src/usage-session/usage-session.service.spec.ts`에 `it('자유석 이용권으로 자유석에 입실하면 세션을 만든다')`
   ② 조건 깨뜨리기: 기존 입실 동작으로 통과하는 테스트다. 단건 통과를 확인한 뒤 동작 1의 타입 비교를 잠시 "항상 거부"로 바꿔 실패하는지 확인한다
   ③ 원복 후 통과 확인: 원복하고 파일 전체 통과. ②에서 실패하지 않으면 멈추고 사용자에게 알린다
+  - 결과(2026-10-23): ① 통과 → ② 타입 비교를 "항상 거부"로 바꾸자 `SeatTypeMismatchError`로 실패 → ③ 원복 후 `src/usage-session/` 7개 통과. 외부 API 스텁 때문에 `Math.random`을 고정했다
 
 ### 이용권 종료 시 지정 해제 (FR-017)
 
 #### 동작 8. 시간권이 소진되면 지정을 해제한다 (QS-20)
 
-- [ ] T129 [US3] 작성 + 실패 확인:
+- [x] T129 [US3] 작성 + 실패 확인:
   ① E2E 작성: `it('고정석 시간권을 이용 중 잔여시간이 소진되면 지정이 해제된다 (QS-20)')`. 잔여시간을 1분으로 만든 뒤 세션 종료 API를 호출하고 좌석 `isAssignable = true` 확인
   ② E2E 실패 확인: E2E 단건(QS-20). 기대 사유: 소진 후에도 `isAssignable = false`(ACTIVE 지정 남음)
   ③ 단위 작성: `src/session-lifecycle/session-lifecycle.service.spec.ts`(신규)에 `it('시간권이 소진되면 같은 트랜잭션에서 TICKET_EXHAUSTED로 지정을 해제한다')`.
      목: `PrismaService`(트랜잭션 클라이언트의 `$queryRaw`), `SeatAssignmentService`
   ④ 단위 실패 확인: 단위 단건. 기대 사유: `releaseByTicket`이 호출되지 않음
-- [ ] T130 [US3] 구현 + 통과 확인:
+  - 실제 실패(2026-10-23): E2E(QS-20) 소진 후 배정 행이 `ACTIVE`로 남음 / 단위 `releaseByTicket` 호출 0회. 기대 사유와 같음.
+    E2E 검증 대상 변경: 좌석 목록의 `isAssignable`은 조회 시점 판정(R3)이라 이용권이 `EXHAUSTED`면 배정을 해제하지 않아도 이미 `true`가 된다.
+    그래서 "즉시 해제"는 배정 행의 `RELEASED(TICKET_EXHAUSTED)`로 확인하고 `isAssignable = true`는 함께 확인만 한다
+- [x] T130 [US3] 구현 + 통과 확인:
   ① 구현: `src/session-lifecycle/session-lifecycle.service.ts`의 시간권 차감 SQL에 `RETURNING status`를 붙여 `EXHAUSTED` 전이를 판별하고,
      전이됐으면 같은 `tx`로 `releaseByTicket(ticketId, TICKET_EXHAUSTED, now, tx)`. `SessionLifecycleModule`에서 `SeatAssignmentModule` import
   ② 단위 통과 확인: 단위 단건 통과, 파일 전체 회귀 없음
   ③ E2E 통과 확인: E2E 단건(QS-20) 통과
+  - 결과(2026-10-23): 차감 SQL을 `$queryRaw ... RETURNING status`로 바꿔 `EXHAUSTED` 전이 시 같은 `tx`로 `releaseByTicket(TICKET_EXHAUSTED)`. 단위 통과(session-lifecycle·ticket-pause·usage-session 8개), `tsc` 오류 없음, E2E(QS-20) 통과
 
 #### 동작 9. 시간권이 소진되지 않으면 지정을 유지한다 — 동작 8 구현으로 함께 통과
 
-- [ ] T131 [US3] 작성 + 조건 깨뜨리기:
+- [x] T131 [US3] 작성 + 조건 깨뜨리기:
   ① 작성: `src/session-lifecycle/session-lifecycle.service.spec.ts`에 `it('시간권이 소진되지 않으면 지정을 해제하지 않는다')`
   ② 조건 깨뜨리기: 단건 통과를 확인한 뒤 `EXHAUSTED` 판별 조건을 잠시 지워(항상 해제) 실패하는지 확인한다
   ③ 원복 후 통과 확인: 원복하고 파일 전체 통과. ②에서 실패하지 않으면 멈추고 사용자에게 알린다
+  - 결과(2026-10-23): ① 통과 → ② `EXHAUSTED` 판별을 지워(항상 해제) `releaseByTicket` 호출 1회로 실패 → ③ 원복 후 2개 통과
 
 #### 동작 10. 환불이 확정되면 지정을 해제한다 (QS-21)
 
-- [ ] T132 [US3] 작성 + 실패 확인:
+- [x] T132 [US3] 작성 + 실패 확인:
   ① E2E 작성: `it('고정석 이용권의 환불이 확정되면 지정이 해제된다 (QS-21)')`. 환불 요청 후 `POST /refund/callback`으로 확정
   ② E2E 실패 확인: E2E 단건(QS-21). 기대 사유: 확정 후에도 `isAssignable = false`
   ③ 단위 작성: `src/refund/refund.service.spec.ts`에 `it('환불 콜백으로 확정되면 같은 트랜잭션에서 TICKET_REVOKED로 지정을 해제한다')`
   ④ 단위 실패 확인: 단위 단건. 기대 사유: `releaseByTicket`이 호출되지 않음
-- [ ] T133 [US3] 구현 + 통과 확인:
+  - 실제 실패(2026-10-23): E2E(QS-21) 환불 확정 후 배정 행이 `ACTIVE` / 단위 `releaseByTicket` 호출 0회. 기대 사유와 같음. QS-20과 같은 이유로 `isAssignable` 대신 배정 행 `RELEASED(TICKET_REVOKED)`를 확인한다
+- [x] T133 [US3] 구현 + 통과 확인:
   ① 구현: `src/refund/refund.service.ts`의 `callback()`에서 `confirmRefundSuccess`를 호출하는 트랜잭션에 같은 `tx`로
      `SeatAssignmentService.releaseByTicket(TICKET_REVOKED)`. Repository(`refund.repository.ts`)는 바꾸지 않는다(헌법 원칙 I). `RefundModule`에서 `SeatAssignmentModule` import
   ② 단위 통과 확인: 단위 단건 통과, 파일 전체 회귀 없음
   ③ E2E 통과 확인: E2E 단건(QS-21) 통과
+  - 결과(2026-10-23): `callback()`의 확정 트랜잭션에서 이용권 ID를 조회해 같은 `tx`로 `releaseByTicket(TICKET_REVOKED)`. 단위 5개 통과, `tsc` 오류 없음, E2E(QS-21) 통과.
+    계획 차이: 콜백은 `orderItemId`만 받아 이용권 ID 조회가 필요해서, `refund.repository.ts`에 읽기 전용 조회 `findTicketIdByOrderItem`을 추가했다
+    (계획의 "Repository는 바꾸지 않는다"는 업무 로직을 넣지 않는다는 취지이고, 조회 쿼리 추가는 헌법 I에 맞다)
 
 #### 동작 11. 낡은 락 정리에서 환불 성공이 확인되면 지정을 해제한다
 
-- [ ] T134 [US3] 작성 + 실패 확인:
+- [x] T134 [US3] 작성 + 실패 확인:
   ① 작성: `src/refund/refund.service.spec.ts`에 `it('낡은 락 정리에서 PG 취소 성공이 확인되면 TICKET_REVOKED로 지정을 해제한다')`
   ② 실패 확인: 단위 단건. 기대 사유: `releaseByTicket`이 호출되지 않음
-- [ ] T135 [US3] 구현 + 통과 확인:
+  - 실제 실패(2026-10-23): `releaseByTicket` 호출 0회. 기대 사유와 같음. 같은 요청(멱등 키 일치)이 남긴 만료 락을 PG 조회 "성공"으로 확정하는 경로를 `refund()`로 검증
+- [x] T135 [US3] 구현 + 통과 확인:
   ① 구현: `clearStaleLock()`의 SUCCEEDED 분기 트랜잭션에도 같은 해제를 넣는다
   ② 통과 확인: 단위 단건 통과, 파일 전체 회귀 없음
+  - 결과(2026-10-23): SUCCEEDED 분기에 해제 추가, 콜백 경로와 같은 로직을 `releaseRevokedTicketSeat`로 묶었다. 단위 6개 통과, `tsc` 오류 없음, E2E(QS-21) 통과
 
 #### 동작 12. 환불이 실패하면 지정을 유지한다 — 동작 10·11 구현으로 함께 통과
 
-- [ ] T136 [US3] 작성 + 조건 깨뜨리기:
+- [x] T136 [US3] 작성 + 조건 깨뜨리기:
   ① 작성: `src/refund/refund.service.spec.ts`에 `it('환불이 실패로 끝나면 지정을 해제하지 않는다')`
   ② 조건 깨뜨리기: 단건 통과를 확인한 뒤 해제 호출을 FAILED 분기에도 잠시 넣어 실패하는지 확인한다
   ③ 원복 후 통과 확인: 원복하고 파일 전체 통과. ②에서 실패하지 않으면 멈추고 사용자에게 알린다
+  - 결과(2026-10-23): 처음 실행에서 테스트 준비 코드의 Repository 목에 `failPaymentCancel`이 없어 `TypeError`로 실패했다(기대값 문제 아님) → 목을 추가.
+    ① 통과 → ② 실패 분기에도 해제를 넣자 `releaseByTicket` 호출 1회로 실패 → ③ 원복 후 `src/refund/` 7개 통과
 
 #### 동작 13. 기간이 만료된 이용권의 좌석은 새 주문으로 차지할 수 있다 (QS-22) — 기반 단계의 지연 해제로 이미 통과
 
-- [ ] T137 [US3] 작성 + 조건 깨뜨리기:
+- [x] T137 [US3] 작성 + 조건 깨뜨리기:
   ① E2E 작성: `it('기간이 만료된 고정석 이용권의 좌석으로 새 주문이 성공하고 기존 지정은 TICKET_EXPIRED로 해제된다 (QS-22)')`. 기간권 `expiresAt`을 DB에서 과거로 바꾼다
   ② 조건 깨뜨리기: E2E 단건(QS-22) 통과를 확인한 뒤 `seat-assignment.policy.ts`의 기간권 기한 비교를 잠시 지워(항상 유효) 409로 실패하는지 확인한다 (research R3)
   ③ 원복 후 통과 확인: 원복하고 E2E 단건(QS-22), `seat-assignment` 단위 전체 통과. ②에서 실패하지 않으면 멈추고 사용자에게 알린다
+  - 결과(2026-10-23): ① QS-22 통과 → ② `getTicketDeadline`의 기간권 기한을 무한 미래로 바꾸자 새 주문이 `expected 201, got 409`로 실패 → ③ 원복 후 QS-22, `seat-assignment` 36개 통과.
+    준비: 고정석 기간권을 주문·결제로 발급한 뒤 DB에서 `ACTIVE`·만료일 과거로 바꾼다
 
 #### US3 마무리
 
-- [ ] T138 [US3] `npm run test -- --testPathPatterns="usage-session|session-lifecycle|refund|seat"`, `npm run test:e2e -- --testPathPatterns=seat-type`, `npx eslint src`, `npm run build`를 실행해 모두 통과하는지 확인한다
+- [x] T138 [US3] `npm run test -- --testPathPatterns="usage-session|session-lifecycle|refund|seat"`, `npm run test:e2e -- --testPathPatterns=seat-type`, `npx eslint src`, `npm run build`를 실행해 모두 통과하는지 확인한다
+  - 결과(2026-10-23): 지정 단위 7개 파일 71개 통과, `npm run build` 성공. `npx eslint src`는 새로 생긴 오류 0건(US2 커밋 `3dfe540` 기준 66건 그대로, US3에서 생긴 1건은 고쳤다).
+    E2E: `seat-type` 28개 통과. 처음 전체 E2E를 **병렬**로 돌렸을 때 `ticket-pause` 9건과 `seat-type` QS-20이 실패했다(순차 `--runInBand`에서는 통과).
+    정리 코드는 각 파일이 만든 데이터만 지워 원인이 아니었고, 입실 API의 외부 API 스텁 재시도 간격을 500ms → 100ms로 줄인 뒤(사용자 변경, 2026-10-23)
+    병렬 실행 3회 모두 기존 `app.e2e` 1건 외 38개가 통과했다. 부하에 따른 시간 초과로 추정하지만 실패 당시 메시지를 받아 두지 못해 확정하지 않았다.
+    전체 단위 실행의 `src/user` 2건 실패(`ConfigService` 주입 누락)는 이 기능 이전부터 있던 문제다
 
 **체크포인트**: US1~US3이 각각 독립적으로 동작.
 

@@ -1,3 +1,4 @@
+import { SeatType } from '@prisma/client';
 import { Injectable } from '@nestjs/common';
 import { UsageSessionRepository } from './usage-session.repository';
 import { TicketRepository } from 'src/ticket/ticket.repository';
@@ -6,6 +7,10 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { SortOrder } from './usage-session.types';
 import { withRetry, assertDefined } from '@felix_ys/ts-utils';
+import { NotAssignedSeatError } from 'src/seat-assignment/errors/not-assigned-seat.error';
+import { SeatTypeMismatchError } from 'src/seat-assignment/errors/seat-type-mismatch.error';
+import { TicketSeatUnassignedError } from 'src/seat-assignment/errors/ticket-seat-unassigned.error';
+import { SeatAssignmentService } from 'src/seat-assignment/seat-assignment.service';
 
 const mockExternalApi = async (waitMs: number = 1000) => {
   await new Promise((resolve) => setTimeout(resolve, waitMs));
@@ -22,6 +27,7 @@ export class UsageSessionService {
     private readonly ticketRepository: TicketRepository,
     @InjectQueue('usage-session')
     private readonly jobQueue: Queue<{ sessionId: string }>,
+    private readonly seatAssignmentService: SeatAssignmentService,
   ) {}
 
   private async addJob(sessionId: string, plannedEndAt: Date): Promise<string> {
@@ -55,6 +61,27 @@ export class UsageSessionService {
     userId: string,
   ): Promise<void> {
     const ticket = await this.ticketRepository.getTicketById(ticketId);
+
+    // 이용권과 좌석의 타입이 같아야 입실할 수 있다(FR-011)
+    const seatType = await this.repository.findSeatType(seatId);
+    if (seatType && seatType !== ticket.seatType) {
+      throw new SeatTypeMismatchError(
+        '이용권의 좌석 타입과 맞지 않는 좌석입니다',
+      );
+    }
+
+    // 고정석 이용권은 배정 좌석에만 입실할 수 있다
+    if (ticket.seatType === SeatType.FIXED) {
+      const assignment =
+        await this.seatAssignmentService.getActiveByTicket(ticketId);
+
+      // 배정 좌석이 없으면(자동 결제 취소 대기 등) 입실할 수 없다(R12)
+      if (!assignment) throw new TicketSeatUnassignedError();
+
+      if (assignment.seatId !== seatId) {
+        throw new NotAssignedSeatError();
+      }
+    }
 
     if (ticket.status === 'UNUSED' && ticket.type === 'PERIOD') {
       const now = new Date();
@@ -102,6 +129,14 @@ export class UsageSessionService {
       plannedEndAt,
       new Date(),
       updateTicketData,
+      ticket.seatType === SeatType.FIXED
+        ? async (tx) => {
+            // 검증 이후 배정이 바뀌었으면(좌석 이동·해제) 입실하지 않고 롤백한다
+            const assignedSeatId =
+              await this.repository.findAssignedSeatIdForUpdate(ticketId, tx);
+            if (assignedSeatId !== seatId) throw new NotAssignedSeatError();
+          }
+        : undefined,
     );
 
     let bullmqJobId: string;
@@ -134,7 +169,7 @@ export class UsageSessionService {
       // Step 4. 외부 api 호출(문열림 등) - 실패 시 최대 3회 재시도
       await withRetry(() => mockExternalApi(), {
         maxRetries: 3,
-        delayMs: 500,
+        delayMs: 100,
         isSuccess: (success) => success,
       });
     } catch (error) {

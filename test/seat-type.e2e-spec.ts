@@ -293,6 +293,39 @@ describe('좌석 타입 (E2E)', () => {
     return ticket.id;
   }
 
+  /**
+   * 상품을 주문·결제해 이용권을 발급받는다
+   * @param seatType 상품 좌석 타입
+   * @param ticketType 이용권 종류
+   * @param seatId 고정석 상품이면 배정할 좌석 ID
+   * @returns 이용권 ID
+   */
+  async function issueTicket(
+    seatType: SeatType,
+    ticketType: TicketType,
+    seatId?: string,
+  ): Promise<string> {
+    const productId = await createProduct(seatType, ticketType);
+    const { body: order } = await createOrder([
+      { productId, quantity: 1, ...(seatId ? { seatId } : {}) },
+    ]).expect(201);
+    await payOrder(order.data.id);
+    return findTicketIdByOrder(order.data.id);
+  }
+
+  /**
+   * 이용권으로 좌석에 입실한다
+   * @param ticketId 이용권 ID
+   * @param seatId 좌석 ID
+   * @returns supertest 요청
+   */
+  function enterSeat(ticketId: string, seatId: string) {
+    return request(server)
+      .post('/usage-sessions')
+      .set('Authorization', `Bearer ${userToken}`)
+      .send({ ticketId, shopId: shop.id, seatId, userId: normalUser.id });
+  }
+
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
@@ -776,6 +809,200 @@ describe('좌석 타입 (E2E)', () => {
       expect(assignment).toMatchObject({
         status: SeatAssignmentStatus.RELEASED,
         releaseReason: 'HOLD_EXPIRED',
+      });
+    });
+  });
+
+  // ── 사용자 스토리 3: 이용권의 좌석 타입에 맞는 좌석을 이용한다 ──
+
+  describe('사용자 스토리 3', () => {
+    it('자유석 이용권은 자유석에 입실하고 고정석 입실은 400 (QS-12)', async () => {
+      const ticketId = await issueTicket(SeatType.FREE, TicketType.TIME);
+      const fixedSeatId = await createSeat(SeatType.FIXED);
+      const freeSeatId = await createSeat(SeatType.FREE);
+
+      const { body } = await enterSeat(ticketId, fixedSeatId).expect(400);
+      expect(body.error.code).toBe('SeatTypeMismatchError');
+
+      await enterSeat(ticketId, freeSeatId).expect(201);
+    });
+
+    it('고정석 이용권으로 자유석에 입실하면 400 (QS-11a)', async () => {
+      const assignedSeatId = await createSeat(SeatType.FIXED);
+      const ticketId = await issueTicket(
+        SeatType.FIXED,
+        TicketType.TIME,
+        assignedSeatId,
+      );
+      const freeSeatId = await createSeat(SeatType.FREE);
+
+      const { body } = await enterSeat(ticketId, freeSeatId).expect(400);
+      expect(body.error.code).toBe('SeatTypeMismatchError');
+    });
+
+    it('고정석 이용권은 배정 좌석에 입실하고 다른 고정석 입실은 400 (QS-11)', async () => {
+      const assignedSeatId = await createSeat(SeatType.FIXED);
+      const ticketId = await issueTicket(
+        SeatType.FIXED,
+        TicketType.TIME,
+        assignedSeatId,
+      );
+      const otherFixedSeatId = await createSeat(SeatType.FIXED);
+
+      const { body } = await enterSeat(ticketId, otherFixedSeatId).expect(400);
+      expect(body.error.code).toBe('NotAssignedSeatError');
+
+      await enterSeat(ticketId, assignedSeatId).expect(201);
+    });
+
+    it('배정 좌석이 없는 고정석 이용권으로 입실하면 400 (QS-11b)', async () => {
+      // 자동 취소 대기 중 상황: 고정석 이용권만 있고 배정은 없다
+      const order = await prisma.order.create({
+        data: {
+          shopId: shop.id,
+          userId: normalUser.id,
+          originalAmount: 10000,
+          discountAmount: 0,
+          totalAmount: 10000,
+        },
+      });
+      const orderItem = await prisma.orderItem.create({
+        data: {
+          orderId: order.id,
+          productId: periodProduct.id,
+          ticketType: TicketType.TIME,
+          seatType: SeatType.FIXED,
+          originalAmount: 10000,
+          discountAmount: 0,
+          amount: 10000,
+          purchasedMinutes: 600,
+          usableDays: 30,
+        },
+      });
+      const ticket = await prisma.ticket.create({
+        data: {
+          userId: normalUser.id,
+          type: TicketType.TIME,
+          status: TicketStatus.UNUSED,
+          seatType: SeatType.FIXED,
+          orderItemId: orderItem.id,
+          purchasedMinutes: 600,
+          remainingMinutes: 600,
+          minuteExpireDeadline: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        },
+      });
+      const fixedSeatId = await createSeat(SeatType.FIXED);
+
+      const { body } = await enterSeat(ticket.id, fixedSeatId).expect(400);
+      expect(body.error.code).toBe('TicketSeatUnassignedError');
+    });
+
+    it('고정석 시간권을 이용 중 잔여시간이 소진되면 배정이 해제된다 (QS-20)', async () => {
+      const seatId = await createSeat(SeatType.FIXED);
+      const ticketId = await issueTicket(
+        SeatType.FIXED,
+        TicketType.TIME,
+        seatId,
+      );
+      await enterSeat(ticketId, seatId).expect(201);
+
+      // 잔여시간 1분, 이용 시작 2분 전 → 종료 시 소진
+      await prisma.ticket.update({
+        where: { id: ticketId },
+        data: { remainingMinutes: 1 },
+      });
+      const session = await prisma.usageSession.findFirstOrThrow({
+        where: { ticketId, status: UsageSessionStatus.ACTIVE },
+      });
+      await prisma.usageSession.update({
+        where: { id: session.id },
+        data: { startedAt: new Date(Date.now() - 2 * 60 * 1000) },
+      });
+
+      await request(server)
+        .patch(`/usage-sessions/${session.id}/end`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .expect(200);
+
+      // 조회 시점 판정(isAssignable)과 별개로 배정 행이 즉시 해제됐는지 확인한다
+      const assignment = await prisma.seatAssignment.findFirstOrThrow({
+        where: { ticketId },
+      });
+      expect(assignment).toMatchObject({
+        status: SeatAssignmentStatus.RELEASED,
+        releaseReason: 'TICKET_EXHAUSTED',
+      });
+      expect(await isSeatAssignable(seatId)).toBe(true);
+    });
+
+    it('고정석 이용권의 환불이 확정되면 배정이 해제된다 (QS-21)', async () => {
+      const seatId = await createSeat(SeatType.FIXED);
+      const ticketId = await issueTicket(
+        SeatType.FIXED,
+        TicketType.TIME,
+        seatId,
+      );
+
+      await request(server)
+        .post('/refund')
+        .set('Authorization', `Bearer ${userToken}`)
+        .send({ ticketId })
+        .expect(201);
+      const ticket = await prisma.ticket.findUniqueOrThrow({
+        where: { id: ticketId },
+      });
+      const cancel = await prisma.paymentCancel.findFirstOrThrow({
+        where: { orderItemId: ticket.orderItemId },
+      });
+      await request(server)
+        .post('/refund/callback')
+        .set('Authorization', `Bearer ${userToken}`)
+        .send({
+          success: true,
+          pgTransactionId: `refund-${cancel.id}`,
+          orderItemId: ticket.orderItemId,
+          paymentCancelId: cancel.id,
+          amount: cancel.amount,
+        })
+        .expect(201);
+
+      // 조회 시점 판정(isAssignable)과 별개로 배정 행이 즉시 해제됐는지 확인한다
+      const assignment = await prisma.seatAssignment.findFirstOrThrow({
+        where: { ticketId },
+      });
+      expect(assignment).toMatchObject({
+        status: SeatAssignmentStatus.RELEASED,
+        releaseReason: 'TICKET_REVOKED',
+      });
+      expect(await isSeatAssignable(seatId)).toBe(true);
+    });
+
+    it('기간이 만료된 고정석 이용권의 좌석으로 새 주문이 성공하고 기존 배정은 TICKET_EXPIRED로 해제된다 (QS-22)', async () => {
+      const seatId = await createSeat(SeatType.FIXED);
+      const ticketId = await issueTicket(
+        SeatType.FIXED,
+        TicketType.PERIOD,
+        seatId,
+      );
+      // 활성화된 기간권의 만료일이 지난 상황
+      await prisma.ticket.update({
+        where: { id: ticketId },
+        data: {
+          status: TicketStatus.ACTIVE,
+          activatedAt: new Date(Date.now() - 31 * 24 * 60 * 60 * 1000),
+          expiresAt: new Date(Date.now() - 60 * 1000),
+        },
+      });
+
+      const productId = await createProduct(SeatType.FIXED, TicketType.TIME);
+      await createOrder([{ productId, quantity: 1, seatId }]).expect(201);
+
+      const oldAssignment = await prisma.seatAssignment.findFirstOrThrow({
+        where: { ticketId },
+      });
+      expect(oldAssignment).toMatchObject({
+        status: SeatAssignmentStatus.RELEASED,
+        releaseReason: 'TICKET_EXPIRED',
       });
     });
   });

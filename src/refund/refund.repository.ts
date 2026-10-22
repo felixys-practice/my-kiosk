@@ -235,6 +235,23 @@ export class RefundRepository {
     });
   }
 
+  /**
+   * 주문 항목으로 발급된 이용권 ID를 조회한다
+   * @param orderItemId 주문 항목 ID
+   * @param tx 트랜잭션 클라이언트
+   * @returns 이용권 ID, 없으면 null
+   */
+  async findTicketIdByOrderItem(
+    orderItemId: string,
+    tx: TransactionClient,
+  ): Promise<string | null> {
+    const ticket = await tx.ticket.findUnique({
+      where: { orderItemId },
+      select: { id: true },
+    });
+    return ticket?.id ?? null;
+  }
+
   async getPaymentCancelById(
     id: string,
     client: TransactionClient | PrismaService = this.prisma,
