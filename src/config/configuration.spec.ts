@@ -75,6 +75,20 @@ describe('configuration', () => {
     });
   });
 
+  describe('seat 섹션', () => {
+    it('SEAT_HOLD_MINUTES 미설정 시 10을 기본값으로 반환한다', () => {
+      delete process.env.SEAT_HOLD_MINUTES;
+      expect(configuration().seat.holdMinutes).toBe(10);
+    });
+
+    it('SEAT_HOLD_MINUTES가 설정된 경우 숫자로 변환하여 반환한다', () => {
+      process.env.SEAT_HOLD_MINUTES = '15';
+      const config = configuration();
+      expect(config.seat.holdMinutes).toBe(15);
+      expect(typeof config.seat.holdMinutes).toBe('number');
+    });
+  });
+
   describe('네임스페이스 구조', () => {
     it('app 네임스페이스 키가 모두 존재한다', () => {
       const config = configuration();

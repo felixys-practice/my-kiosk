@@ -30,9 +30,9 @@ description: "좌석 타입(고정석·자유석) 추가 기능의 구현 작업
 
 **목적**: 기능에 필요한 설정값과 E2E 테스트 골격을 준비한다.
 
-- [ ] T001 `src/config/validation.schema.spec.ts`, `src/config/configuration.spec.ts`에 `SEAT_HOLD_MINUTES` 기본값 10과 1 미만 거부 테스트를 **먼저** 작성하고, `npm run test -- --testPathPattern=config`로 실패를 확인한다
-- [ ] T002 `src/config/validation.schema.ts`에 `SEAT_HOLD_MINUTES`(Joi `number().integer().min(1).default(10)`)를 추가하고, `src/config/configuration.ts`에 타입 안전한 접근 경로(예: `seat.holdMinutes`)를 추가한다. `.env.example`에 `SEAT_HOLD_MINUTES=10`과 한글 주석(고정석 선점 유효시간, 분)을 추가한다. T001 테스트 통과 확인 (research R2)
-- [ ] T003 [P] `test/seat-type.e2e-spec.ts` 골격을 만든다. `test/ticket-pause.e2e-spec.ts`의 부트스트랩 방식(AppModule, ValidationPipe, TransformInterceptor, HttpExceptionFilter, JwtService로 OWNER·일반 사용자 토큰 발급, 생성 데이터 추적 후 `afterAll` 정리)을 따른다. 시나리오는 아직 넣지 않는다
+- [x] T001 `src/config/validation.schema.spec.ts`, `src/config/configuration.spec.ts`에 `SEAT_HOLD_MINUTES` 기본값 10과 1 미만 거부 테스트를 **먼저** 작성하고, `npm run test -- --testPathPatterns=config`로 실패를 확인한다
+- [x] T002 `src/config/validation.schema.ts`에 `SEAT_HOLD_MINUTES`(Joi `number().integer().min(1).default(10)`)를 추가하고, `src/config/configuration.ts`에 타입 안전한 접근 경로(예: `seat.holdMinutes`)를 추가한다. `.env.example`에 `SEAT_HOLD_MINUTES=10`과 한글 주석(고정석 선점 유효시간, 분)을 추가한다. T001 테스트 통과 확인 (research R2)
+- [x] T003 [P] `test/seat-type.e2e-spec.ts` 골격을 만든다. `test/ticket-pause.e2e-spec.ts`의 부트스트랩 방식(AppModule, ValidationPipe, TransformInterceptor, HttpExceptionFilter, JwtService로 OWNER·일반 사용자 토큰 발급, 생성 데이터 추적 후 `afterAll` 정리)을 따른다. 시나리오는 아직 넣지 않는다
 
 ---
 
@@ -42,20 +42,20 @@ description: "좌석 타입(고정석·자유석) 추가 기능의 구현 작업
 
 ### 기반 테스트 (먼저 작성) ⚠️
 
-- [ ] T004 [P] `src/seat-assignment/seat-assignment.policy.spec.ts`에 "유효한 지정 판정" 단위 테스트를 작성한다(판정은 업무 규칙이므로 Repository가 아닌 Service 계층의 순수 함수 `src/seat-assignment/seat-assignment.policy.ts`에 둔다, 헌법 원칙 I)(data-model.md "유효한 지정 판정"). 케이스: `HELD`이고 `heldUntil > now` → 유효 / `HELD`이고 `heldUntil <= now` → 무효 / `ACTIVE`이고 이용권 `UNUSED`·`ACTIVE`이며 기간권 `expiresAt`(활성화 전이면 `activationDeadline`)·시간권 `minuteExpireDeadline`이 `now` 이후 → 유효 / 기한이 지났거나 이용권 상태가 `EXPIRED`·`EXHAUSTED`·`REVOKED` → 무효. 판정 함수는 순수 함수로 분리해 DB 없이 테스트한다
-- [ ] T005 [P] `src/seat-assignment/seat-assignment.service.spec.ts`에 단위 테스트를 작성한다: `hold`는 대상 좌석의 무효 지정을 `RELEASED`(사유 `HOLD_EXPIRED` 또는 `TICKET_EXPIRED`)로 바꾼 뒤 새 `HELD`를 만든다 / 유효 지정이 있으면 `DomainConflictError` / `findValidBySeat`는 무효 행을 같은 `tx`에서 `RELEASED`로 바꾸고 유효 행만 반환 / `activateByOrderItem`은 `HELD` → `ACTIVE` + `ticketId`·`assignedAt` 설정 / `assign`은 `orderItemId` 없이 `ACTIVE`를 바로 생성 / `releaseByTicket`·`releaseByOrderItems`는 `RELEASED` + `releasedAt`·`releaseReason` 설정 / `getAssignableMap`은 자유석 false, 유효 지정 없는 고정석 true / 부분 유일 인덱스 위반(Prisma `P2002`)은 `DomainConflictError`로 변환
-- [ ] T006 `npm run test -- --testPathPattern=seat-assignment`를 실행해 T004·T005가 **실패하는 것을 확인**하고 실패 사유(모듈 없음·함수 없음)를 기록한다
+- [x] T004 [P] `src/seat-assignment/seat-assignment.policy.spec.ts`에 "유효한 지정 판정" 단위 테스트를 작성한다(판정은 업무 규칙이므로 Repository가 아닌 Service 계층의 순수 함수 `src/seat-assignment/seat-assignment.policy.ts`에 둔다, 헌법 원칙 I)(data-model.md "유효한 지정 판정"). 케이스: `HELD`이고 `heldUntil > now` → 유효 / `HELD`이고 `heldUntil <= now` → 무효 / `ACTIVE`이고 이용권 `UNUSED`·`ACTIVE`이며 기간권 `expiresAt`(활성화 전이면 `activationDeadline`)·시간권 `minuteExpireDeadline`이 `now` 이후 → 유효 / 기한이 지났거나 이용권 상태가 `EXPIRED`·`EXHAUSTED`·`REVOKED` → 무효. 판정 함수는 순수 함수로 분리해 DB 없이 테스트한다
+- [x] T005 [P] `src/seat-assignment/seat-assignment.service.spec.ts`에 단위 테스트를 작성한다: `hold`는 대상 좌석의 무효 지정을 `RELEASED`(사유 `HOLD_EXPIRED` 또는 `TICKET_EXPIRED`)로 바꾼 뒤 새 `HELD`를 만든다 / 유효 지정이 있으면 `DomainConflictError` / `findValidBySeat`는 무효 행을 같은 `tx`에서 `RELEASED`로 바꾸고 유효 행만 반환 / `activateByOrderItem`은 `HELD` → `ACTIVE` + `ticketId`·`assignedAt` 설정 / `assign`은 `orderItemId` 없이 `ACTIVE`를 바로 생성 / `releaseByTicket`·`releaseByOrderItems`는 `RELEASED` + `releasedAt`·`releaseReason` 설정 / `getAssignableMap`은 자유석 false, 유효 지정 없는 고정석 true / 이미 RELEASED인 행은 다시 바꾸지 않고 새 행을 만든다(quickstart 경우의 수 표 3 마지막 줄) / 부분 유일 인덱스 위반(Prisma `P2002`)은 `DomainConflictError`로 변환
+- [ ] T006 `npm run test -- --testPathPatterns=seat-assignment`를 실행해 T004·T005가 **실패하는 것을 확인**하고 실패 사유(모듈 없음·함수 없음)를 기록한다
 
 ### 기반 구현
 
-- [ ] T007 `prisma/schema.prisma`에 enum을 추가한다: `SeatType { FIXED FREE }`, `SeatAssignmentStatus { HELD ACTIVE RELEASED }`, `SeatReleaseReason { ORDER_CANCELLED PAYMENT_FAILED HOLD_EXPIRED TICKET_EXPIRED TICKET_EXHAUSTED TICKET_REVOKED TICKET_PAUSED SEAT_TYPE_CHANGED SEAT_MOVED }`, `TicketSeatChangeType { TYPE_CHANGE SEAT_MOVE }`. 각 값에 한글 주석
-- [ ] T008 `prisma/schema.prisma`의 기존 모델에 필드를 추가한다: `Seat.type SeatType @default(FREE) @map("type")`, `Product.seatType SeatType @default(FREE) @map("seat_type")`, `OrderItem.seatType SeatType @default(FREE) @map("seat_type")`(구매 시점 스냅샷), `Ticket.seatType SeatType @default(FREE) @map("seat_type")`. 관계 필드(`Seat.seatAssignments`, `Ticket.seatAssignments`, `Ticket.seatChanges`, `OrderItem.seatAssignments`, `User` 역관계) 추가 (data-model.md "기존 모델 변경", FR-016)
-- [ ] T009 `prisma/schema.prisma`에 `SeatAssignment` 모델을 추가한다(`seatId`, `orderItemId?`, `ticketId?`, `status @default(HELD)`, `heldUntil?`, `assignedAt?`, `releasedAt?`, `releaseReason?`, `createdAt`, `updatedAt`, `@@index([ticketId, status])`, `@@index([orderItemId])`, `@@map("seat_assignments")`)와 `TicketSeatChange` 모델(`ticketId`, `changeType`, `fromSeatType`, `toSeatType`, `fromSeatId?`, `toSeatId?`, `reason`, `changedBy`, `endedSessionId?`, `changedAt @default(now())`, `@@index([ticketId, changedAt])`, `@@map("ticket_seat_changes")`)을 추가한다. 부분 유일 인덱스는 스키마에 NOTE 주석으로 남긴다(기존 `UsageSession` 주석 형식)
-- [ ] T010 `npx prisma migrate dev --create-only --name add_seat_type`로 마이그레이션을 만들고, 생성된 `prisma/migrations/<timestamp>_add_seat_type/migration.sql` 끝에 raw SQL을 추가한다: `CREATE UNIQUE INDEX "seat_assignments_seat_id_valid_key" ON "seat_assignments"("seat_id") WHERE "status" IN ('HELD','ACTIVE');`, `CREATE UNIQUE INDEX "seat_assignments_ticket_id_active_key" ON "seat_assignments"("ticket_id") WHERE "status" = 'ACTIVE';`. 그 뒤 `npx prisma migrate dev`, `npx prisma generate` 실행. 기존 행이 모두 `FREE`인지 SQL로 확인한다 (research R1, R11, FR-016)
-- [ ] T011 [P] `src/seat-assignment/errors/`에 도메인 에러를 추가한다: `SeatNotAssignableError`(409, 유효 지정 있음), `SeatTypeMismatchError`(400), `SeatSelectionRequiredError`(400). 기존 `src/common/errors`의 `DomainConflictError`·`DomainBadRequestError`를 상속한다
-- [ ] T012 `src/seat-assignment/seat-assignment.policy.ts`(유효 판정 순수 함수 `isValidAssignment(assignment, ticket, now)`)와 `src/seat-assignment/seat-assignment.repository.ts`를 구현한다. **Repository는 데이터 접근만 담당한다(헌법 원칙 I)**: `lockSeat(seatId, tx)`(`SELECT ... FOR UPDATE`), `findOpenBySeat(seatId, tx)`(HELD·ACTIVE 행 + 연결 이용권 기한 필드), `findOpenBySeatIds(seatIds)`, `findActiveByTicket(ticketId, tx)`, `findHeldByOrderItems(orderItemIds, tx)`, `create(data, tx)`, `updateStatus(ids, data, tx)`. 판정·해제 결정·순서 조율은 넣지 않는다. 모든 메서드는 `TransactionClient`를 선택 인자로 받는다 (data-model.md, research R3)
-- [ ] T013 `src/seat-assignment/seat-assignment.service.ts`에 업무 로직을 구현한다: `findValidBySeat(seatId, now, tx)`(무효 행은 같은 `tx`에서 `RELEASED` 처리 후 유효 행만 반환), `hold`, `activateByOrderItem`, `assign`(점주 변경·재개용 ACTIVE 직접 생성), `releaseByTicket(ticketId, reason, now, tx)`, `releaseByOrderItems`, `getActiveByTicket`, `getAssignableMap(seatIds, now)`(좌석 목록의 `isAssignable` 계산용). 고정석 여부·매장 일치 검증과 `P2002` → `SeatNotAssignableError` 변환을 포함한다. 다른 모듈은 Repository가 아니라 이 Service를 쓴다. `src/seat-assignment/seat-assignment.module.ts`에서 Service만 export한다(`@Global()` 사용 금지)
-- [ ] T014 `npm run test -- --testPathPattern=seat-assignment`로 T004·T005가 통과하는지 확인한다. 기대값은 바꾸지 않는다
+- [x] T007 `prisma/schema.prisma`에 enum을 추가한다: `SeatType { FIXED FREE }`, `SeatAssignmentStatus { HELD ACTIVE RELEASED }`, `SeatReleaseReason { ORDER_CANCELLED PAYMENT_FAILED HOLD_EXPIRED TICKET_EXPIRED TICKET_EXHAUSTED TICKET_REVOKED TICKET_PAUSED SEAT_TYPE_CHANGED SEAT_MOVED }`, `TicketSeatChangeType { TYPE_CHANGE SEAT_MOVE }`. 각 값에 한글 주석
+- [x] T008 `prisma/schema.prisma`의 기존 모델에 필드를 추가한다: `Seat.type SeatType @default(FREE) @map("type")`, `Product.seatType SeatType @default(FREE) @map("seat_type")`, `OrderItem.seatType SeatType @default(FREE) @map("seat_type")`(구매 시점 스냅샷), `Ticket.seatType SeatType @default(FREE) @map("seat_type")`. 관계 필드(`Seat.seatAssignments`, `Ticket.seatAssignments`, `Ticket.seatChanges`, `OrderItem.seatAssignments`, `User` 역관계) 추가 (data-model.md "기존 모델 변경", FR-016)
+- [x] T009 `prisma/schema.prisma`에 `SeatAssignment` 모델을 추가한다(`seatId`, `orderItemId?`, `ticketId?`, `status @default(HELD)`, `heldUntil?`, `assignedAt?`, `releasedAt?`, `releaseReason?`, `createdAt`, `updatedAt`, `@@index([ticketId, status])`, `@@index([orderItemId])`, `@@map("seat_assignments")`)와 `TicketSeatChange` 모델(`ticketId`, `changeType`, `fromSeatType`, `toSeatType`, `fromSeatId?`, `toSeatId?`, `reason`, `changedBy`, `endedSessionId?`, `changedAt @default(now())`, `@@index([ticketId, changedAt])`, `@@map("ticket_seat_changes")`)을 추가한다. 부분 유일 인덱스는 스키마에 NOTE 주석으로 남긴다(기존 `UsageSession` 주석 형식)
+- [x] T010 `npx prisma migrate dev --create-only --name add_seat_type`로 마이그레이션을 만들고, 생성된 `prisma/migrations/<timestamp>_add_seat_type/migration.sql` 끝에 raw SQL을 추가한다: `CREATE UNIQUE INDEX "seat_assignments_seat_id_valid_key" ON "seat_assignments"("seat_id") WHERE "status" IN ('HELD','ACTIVE');`, `CREATE UNIQUE INDEX "seat_assignments_ticket_id_active_key" ON "seat_assignments"("ticket_id") WHERE "status" = 'ACTIVE';`. 그 뒤 `npx prisma migrate dev`, `npx prisma generate` 실행. 기존 행이 모두 `FREE`인지 SQL로 확인한다 (research R1, R11, FR-016)
+- [x] T011 [P] `src/seat-assignment/errors/`에 도메인 에러를 추가한다: `SeatNotAssignableError`(409, 유효 지정 있음), `SeatTypeMismatchError`(400), `SeatSelectionRequiredError`(400). 기존 `src/common/errors`의 `DomainConflictError`·`DomainBadRequestError`를 상속한다
+- [x] T012 `src/seat-assignment/seat-assignment.policy.ts`(유효 판정 순수 함수 `isValidAssignment(assignment, ticket, now)`)와 `src/seat-assignment/seat-assignment.repository.ts`를 구현한다. **Repository는 데이터 접근만 담당한다(헌법 원칙 I)**: `lockSeat(seatId, tx)`(`SELECT ... FOR UPDATE`), `findOpenBySeat(seatId, tx)`(HELD·ACTIVE 행 + 연결 이용권 기한 필드), `findOpenBySeatIds(seatIds)`, `findActiveByTicket(ticketId, tx)`, `findHeldByOrderItems(orderItemIds, tx)`, `findLatestByOrderItem(orderItemId, tx)`(상태 무관 최근 지정, T005 작성 중 추가), `create(data, tx)`, `updateStatus(ids, data, tx)`. 판정·해제 결정·순서 조율은 넣지 않는다. 모든 메서드는 `TransactionClient`를 선택 인자로 받는다 (data-model.md, research R3)
+- [x] T013 `src/seat-assignment/seat-assignment.service.ts`에 업무 로직을 구현한다: `findValidBySeat(seatId, now, tx)`(무효 행은 같은 `tx`에서 `RELEASED` 처리 후 유효 행만 반환), `hold`, `activateByOrderItem`, `assign`(점주 변경·재개용 ACTIVE 직접 생성), `releaseByTicket(ticketId, reason, now, tx)`, `releaseByOrderItems`, `getActiveByTicket`, `getAssignableMap(seatIds, now)`(좌석 목록의 `isAssignable` 계산용). 고정석 여부·매장 일치 검증과 `P2002` → `SeatNotAssignableError` 변환을 포함한다. 다른 모듈은 Repository가 아니라 이 Service를 쓴다. `src/seat-assignment/seat-assignment.module.ts`에서 Service만 export한다(`@Global()` 사용 금지)
+- [x] T014 `npm run test -- --testPathPatterns=seat-assignment`로 T004·T005가 통과하는지 확인한다. 기대값은 바꾸지 않는다
 
 **체크포인트**: 스키마·마이그레이션·좌석 지정 모듈 준비 완료. 이제 사용자 스토리를 시작할 수 있다.
 
@@ -69,15 +69,15 @@ description: "좌석 타입(고정석·자유석) 추가 기능의 구현 작업
 
 ### US1 테스트 (먼저 작성) ⚠️
 
-- [ ] T015 [P] [US1] `src/seat/seat.service.spec.ts`에 단위 테스트를 작성한다: 타입 지정 등록 / 이용 중(활성 세션 있음) 좌석의 `type`·`status` 변경 시 `DomainConflictError`(FR-003, research R8·R9) / 유효 지정 있는 고정석의 `FREE` 변경 시 409 / 유효 지정 있는 고정석의 `UNAVAILABLE` 변경 시 409(FR-022) / 조회 결과에 `type`, `isAssignable`(자유석은 항상 false) 포함
-- [ ] T016 [P] [US1] `src/seat/dto/create-seat.dto.spec.ts`(신규)에 class-validator 검증 테스트를 작성한다: `type` 누락 시 오류, `FIXED`·`FREE` 외 값 오류(FR-002, FR-004), `UpdateSeatDto`의 `status`는 `AVAILABLE`·`UNAVAILABLE`만 허용
-- [ ] T017 [US1] `test/seat-type.e2e-spec.ts`에 US1 E2E를 작성한다: QS-1(`type` 없이 등록 → 400), QS-2(고정석 등록 후 목록 → `type = FIXED`, `isAssignable = true`), QS-23(유효 지정 있는 고정석을 자유석으로 수정 → 409), QS-26(이용 중 좌석 타입 변경 → 409, 점주 퇴실 처리 후 → 성공), QS-27(유효 지정 있는 고정석을 `UNAVAILABLE` → 409), QS-27a(이용 중 자유석 `UNAVAILABLE` → 409, 점주 퇴실 처리 후 → 성공). 지정 데이터는 `prisma.seatAssignment.create`로 직접 준비한다
-- [ ] T018 [US1] `npm run test -- --testPathPattern=seat`와 `npm run test:e2e -- --testPathPattern=seat-type`를 실행해 T015~T017이 **실패하는 것을 확인**하고 실패 사유를 기록한다
+- [x] T015 [P] [US1] `src/seat/seat.service.spec.ts`에 단위 테스트를 작성한다: 타입 지정 등록 / 이용 중(활성 세션 있음) 좌석의 `type`·`status` 변경 시 `DomainConflictError`(FR-003, research R8·R9) / 유효 지정 있는 고정석의 `FREE` 변경 시 409 / 유효 지정 있는 고정석의 `UNAVAILABLE` 변경 시 409(FR-022) / 조회 결과에 `type`, `isAssignable`(자유석은 항상 false) 포함
+- [x] T016 [P] [US1] `src/seat/dto/create-seat.dto.spec.ts`(신규)에 class-validator 검증 테스트를 작성한다: `type` 누락 시 오류, `FIXED`·`FREE` 외 값 오류(FR-002, FR-004), `UpdateSeatDto`의 `status`는 `AVAILABLE`·`UNAVAILABLE`만 허용
+- [x] T017 [US1] `test/seat-type.e2e-spec.ts`에 US1 E2E를 작성한다: QS-1(`type` 없이 등록 → 400), QS-2(고정석 등록 후 목록 → `type = FIXED`, `isAssignable = true`), QS-23(유효 지정 있는 고정석을 자유석으로 수정 → 409), QS-26(이용 중 좌석 타입 변경 → 409, 점주 퇴실 처리 후 → 성공), QS-27(유효 지정 있는 고정석을 `UNAVAILABLE` → 409), QS-27a(이용 중 자유석 `UNAVAILABLE` → 409, 점주 퇴실 처리 후 → 성공). 지정 데이터는 `prisma.seatAssignment.create`로 직접 준비한다
+- [x] T018 [US1] `npm run test -- --testPathPatterns=seat`와 `npm run test:e2e -- --testPathPatterns=seat-type`를 실행해 T015~T017이 **실패하는 것을 확인**하고 실패 사유를 기록한다
 
 ### US1 구현
 
-- [ ] T019 [P] [US1] `src/seat/dto/create-seat.dto.ts`에 `type!: SeatType`(`@IsEnum(SeatType)`, Swagger `enum` 설명 한글)을 추가한다. `src/seat/shop-seat.controller.ts`의 `@ApiBody({ required: false })`와 선택 본문(`createSeatDto?`)을 필수로 바꾼다
-- [ ] T020 [P] [US1] `src/seat/dto/update-seat.dto.ts`에 `type?: SeatType`(`@IsOptional() @IsEnum(SeatType)`), `status?: SeatStatus`(`@IsOptional() @IsEnum(SeatStatus)`)를 추가한다. 사용하지 않는 `IsUUID` import를 정리한다
+- [x] T019 [P] [US1] `src/seat/dto/create-seat.dto.ts`에 `type!: SeatType`(`@IsEnum(SeatType)`, Swagger `enum` 설명 한글)을 추가한다. `src/seat/shop-seat.controller.ts`의 `@ApiBody({ required: false })`와 선택 본문(`createSeatDto?`)을 필수로 바꾼다
+- [x] T020 [P] [US1] `src/seat/dto/update-seat.dto.ts`에 `type?: SeatType`(`@IsOptional() @IsEnum(SeatType)`), `status?: SeatStatus`(`@IsOptional() @IsEnum(SeatStatus)`)를 추가한다. 사용하지 않는 `IsUUID` import를 정리한다
 - [ ] T021 [US1] `src/seat/seat.repository.ts`에 `hasActiveSession(seatId, tx)`를 추가하고, `updateSeat`가 `type`·`status`를 받도록 한다
 - [ ] T022 [US1] `src/seat/seat.service.ts`의 `createSeat`에 `type`을 전달하고, `updateSeat`에 가드를 구현한다: `type` 또는 `status` 변경 시 하나의 트랜잭션에서 좌석 행 잠금 → 활성 세션 있으면 409 → 고정석이고 `SeatAssignmentService.findValidBySeat`가 유효 지정을 반환하면 `FREE`·`UNAVAILABLE` 변경 409. `SeatModule`에서 `SeatAssignmentModule`을 import한다
 - [ ] T023 [US1] `src/seat/dto/get-seat-out.dto.ts`에 `type`, `isAssignable`를 추가하고 `SeatService.getSeat`에서 `SeatAssignmentService.getAssignableMap`으로 계산한다(조회 시점 판정, research R3)
@@ -102,7 +102,7 @@ description: "좌석 타입(고정석·자유석) 추가 기능의 구현 작업
 - [ ] T029 [P] [US2] `src/refund/refund.service.spec.ts`(신규)에 `refundBySystem` 단위 테스트를 작성한다: 소유자 검사 없이 기존 미사용 자동 환불 경로(`createRefundWithLock` → `pgService.requestPaymentCancel`)를 탄다 / `PaymentCancel.reason`에 사유 저장 / 이미 `REVOKED`면 409 / 사용 이력이 있는 이용권이면 승인 대기로 가지 않고 예외(시스템 자동 취소는 미사용 이용권 전용) (research R12-A)
 - [ ] T030 [P] [US2] `src/ticket/ticket.service.spec.ts`(신규)에 단위 테스트를 작성한다: 조회 결과에 `seatType`, `assignedSeat`(`{ id, number, name } | null`) 포함 (FR-010)
 - [ ] T031 [US2] `test/seat-type.e2e-spec.ts`에 US2 E2E를 작성한다: QS-3, QS-4, QS-5, QS-6, QS-7, QS-8(같은 좌석으로 주문 2건을 `Promise.all`로 동시 요청 → 1건 성공·1건 409), QS-9, QS-10, QS-24(주문 취소 → 즉시 `isAssignable = true`), QS-25(`heldUntil`을 DB에서 과거로 바꿔 방치 상황을 만든 뒤 목록·새 주문), QS-28, QS-29, QS-30(만료된 선점으로 결제 요청 → 409), QS-31(승인 후 좌석 충돌 → 자동 환불 요청 생성, 환불 콜백 `POST /refund/callback` 호출 후 이용권 `REVOKED`). 결제 콜백은 `POST /payments/callback`을 직접 호출한다
-- [ ] T032 [US2] `npm run test -- --testPathPattern="product|order|payment|refund.service|ticket.service"`와 `npm run test:e2e -- --testPathPattern=seat-type`를 실행해 T025~T031이 **실패하는 것을 확인**하고 실패 사유를 기록한다
+- [ ] T032 [US2] `npm run test -- --testPathPatterns="product|order|payment|refund.service|ticket.service"`와 `npm run test:e2e -- --testPathPatterns=seat-type`를 실행해 T025~T031이 **실패하는 것을 확인**하고 실패 사유를 기록한다
 
 ### US2 구현
 
@@ -131,8 +131,8 @@ description: "좌석 타입(고정석·자유석) 추가 기능의 구현 작업
 - [ ] T042 [P] [US3] `src/usage-session/usage-session.service.spec.ts`(신규)에 단위 테스트를 작성한다: 고정석 이용권 + 지정 좌석 → 세션 생성 / 고정석 이용권 + 다른 좌석 → `SeatTypeMismatchError`(400) / 자유석 이용권 + 자유석 → 생성 / 자유석 이용권 + 고정석 → 400 (FR-011)
 - [ ] T043 [P] [US3] `src/session-lifecycle/session-lifecycle.service.spec.ts`(신규)에 단위 테스트를 작성한다: 시간권 소진(EXHAUSTED 전이) 시 같은 트랜잭션에서 `releaseByTicket(TICKET_EXHAUSTED)` 호출 / 소진되지 않으면 호출하지 않음 (FR-017)
 - [ ] T044 [P] [US3] `src/refund/refund.service.spec.ts`에 단위 테스트를 추가한다: 환불 확정(`callback()`, `clearStaleLock()`의 SUCCEEDED 분기)에서 `refundRepository.confirmRefundSuccess`와 같은 트랜잭션으로 `SeatAssignmentService.releaseByTicket(TICKET_REVOKED)` 호출 / FAILED 분기에서는 호출하지 않음 (FR-017)
-- [ ] T045 [US3] `test/seat-type.e2e-spec.ts`에 US3 E2E를 작성한다: QS-11, QS-12, QS-20(시간권 잔여시간을 1분으로 만든 뒤 세션 종료 API 호출로 소진 → 좌석 `isAssignable = true`), QS-21(환불 확정 경로 호출 → 지정 해제), QS-22(기간권 `expiresAt`을 과거로 바꾼 뒤 같은 좌석으로 새 주문 → 성공, 기존 지정은 `RELEASED(TICKET_EXPIRED)`)
-- [ ] T046 [US3] `npm run test -- --testPathPattern="usage-session|session-lifecycle|refund"`와 E2E를 실행해 T042~T045가 **실패하는 것을 확인**하고 실패 사유를 기록한다
+- [ ] T045 [US3] `test/seat-type.e2e-spec.ts`에 US3 E2E를 작성한다: QS-11, QS-11a, QS-11b, QS-12, QS-20(시간권 잔여시간을 1분으로 만든 뒤 세션 종료 API 호출로 소진 → 좌석 `isAssignable = true`), QS-21(환불 확정 경로 호출 → 지정 해제), QS-22(기간권 `expiresAt`을 과거로 바꾼 뒤 같은 좌석으로 새 주문 → 성공, 기존 지정은 `RELEASED(TICKET_EXPIRED)`)
+- [ ] T046 [US3] `npm run test -- --testPathPatterns="usage-session|session-lifecycle|refund"`와 E2E를 실행해 T042~T045가 **실패하는 것을 확인**하고 실패 사유를 기록한다
 
 ### US3 구현
 
@@ -156,8 +156,8 @@ description: "좌석 타입(고정석·자유석) 추가 기능의 구현 작업
 - [ ] T051 [P] [US4] `src/ticket/ticket-seat/ticket-seat.service.spec.ts`(신규)에 단위 테스트를 작성한다: FREE→FIXED(새 ACTIVE, 이용 중이면 `endSession` 호출·자동 입실 없음) / FIXED→FREE(`SEAT_TYPE_CHANGED` 해제, 이용 중이면 `endSession`) / FIXED→FIXED(`SEAT_MOVED` 해제 + 새 ACTIVE, 이용 중이면 세션 `seatId`만 변경·`endSession` 미호출, 대상 좌석에 다른 활성 세션 있으면 409) / 모든 경우 `TicketSeatChange` 1행(`endedSessionId` 포함) / 사유 없음·FIXED인데 `seatId` 없음·자유석 좌석 지정·같은 타입 같은 좌석 → 400 / 종료 상태·일시정지 중 이용권 → 400 / 대상 좌석 유효 지정 있음 → 409 (FR-013~015b, FR-019~021, research R5·R6)
 - [ ] T052 [P] [US4] `src/ticket/ticket-seat/dto/change-ticket-seat.dto.spec.ts`(신규)에 검증 테스트를 작성한다: `seatType` 필수(`IsEnum`), `seatType = FIXED`이면 `seatId` 필수(`ValidateIf` + `IsUUID('4')`), `reason` 필수(`IsNotEmpty`, `IsString`, `MaxLength(500)`) (FR-020)
 - [ ] T053 [P] [US4] `src/ticket/ticket-pause/ticket-pause.service.spec.ts`(신규)에 단위 테스트를 작성한다: 고정석 이용권 정지 시 같은 트랜잭션에서 `releaseByTicket(TICKET_PAUSED)` / 고정석 재개 시 `seatId` 없으면 400 / 지정 불가 좌석이면 409이고 정지 상태 유지(재개 롤백) / 자유석 재개는 기존과 같음. 테스트 이용권은 활성화된 기간권으로 준비한다(시간권은 현재 일시정지 불가, research R10) (FR-018)
-- [ ] T054 [US4] `test/seat-type.e2e-spec.ts`에 US4 E2E를 작성한다: QS-13, QS-14, QS-15(세션 ID 동일·좌석만 변경 확인), QS-16, QS-17(`GET /tickets/:ticketId/seat-changes`), QS-18, QS-19(QS-18·19는 활성화된 기간권으로 준비, research R10)
-- [ ] T055 [US4] `npm run test -- --testPathPattern="ticket-seat|ticket-pause"`와 E2E를 실행해 T051~T054가 **실패하는 것을 확인**하고 실패 사유를 기록한다
+- [ ] T054 [US4] `test/seat-type.e2e-spec.ts`에 US4 E2E를 작성한다: QS-13, QS-13a, QS-14, QS-14a, QS-15(세션 ID 동일·좌석만 변경 확인), QS-15a, QS-15b, QS-16, QS-16a, QS-17(`GET /tickets/:ticketId/seat-changes`), QS-18, QS-19(QS-18·19는 활성화된 기간권으로 준비, research R10)
+- [ ] T055 [US4] `npm run test -- --testPathPatterns="ticket-seat|ticket-pause"`와 E2E를 실행해 T051~T054가 **실패하는 것을 확인**하고 실패 사유를 기록한다
 
 ### US4 구현
 
@@ -178,7 +178,7 @@ description: "좌석 타입(고정석·자유석) 추가 기능의 구현 작업
 - [ ] T063 [P] 변경·신규 Swagger 데코레이터(`@ApiProperty`, `@ApiOperation`)의 설명을 한글로 채운다(`src/seat/`, `src/product/`, `src/order/`, `src/ticket/ticket-seat/`)
 - [ ] T064 [P] 변경한 모든 함수에 한글 JSDoc(`@param`, `@returns`, `@throws`)과 논리 단계별 한글 인라인 주석이 있는지 점검한다
 - [ ] T065 `npx eslint .`, `npm run build`, `npm run test`, `npm run test:e2e`를 실행해 모두 통과를 확인한다
-- [ ] T066 [quickstart.md](./quickstart.md)의 QS-1~QS-31(27a 포함)이 모두 E2E 테스트에 있는지 대조표로 확인한다
+- [ ] T066 [quickstart.md](./quickstart.md)의 QS-1~QS-31(27a·11a 등 알파벳 붙은 번호 포함)이 모두 E2E 테스트에 있는지, 그리고 "경우의 수 표" 1~3의 모든 칸에 QS 번호나 단위 테스트가 있는지 대조표로 확인한다. E2E 테스트 이름 끝에는 `(QS-n)`을 붙이고, 단위 테스트 이름에는 번호를 붙이지 않는다
 
 ---
 

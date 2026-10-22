@@ -59,4 +59,10 @@ export default () => ({
       10,
     ),
   },
+
+  // 좌석 설정
+  seat: {
+    // 고정석 선점(HELD) 유효시간(분) - 결제 없이 방치된 선점이 풀리기까지의 시간
+    holdMinutes: parseInt(process.env.SEAT_HOLD_MINUTES || '10', 10),
+  },
 });

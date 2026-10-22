@@ -25,16 +25,16 @@ export class ShopSeatController {
     description: '매장 아이디',
     example: 'c7578f77-e52b-4e7e-9b9d-5b02f9696878',
   })
-  @ApiBody({ type: CreateSeatDto, required: false })
+  @ApiBody({ type: CreateSeatDto })
   @Post()
   async createSeat(
     @Param('shopId') shopId: string,
-    @Body() createSeatDto?: CreateSeatDto,
+    @Body() createSeatDto: CreateSeatDto,
   ): Promise<void> {
     await this.service.createSeat(
       shopId,
-      createSeatDto?.name,
-      createSeatDto?.number,
+      createSeatDto.name,
+      createSeatDto.number,
     );
   }
 

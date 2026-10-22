@@ -15,6 +15,7 @@ Table user {
   orders orders [not null]
   usageSessions usage_sessions [not null]
   ProductHistories product_histories [not null]
+  ticketSeatChanges ticket_seat_changes [not null]
   createdAt DateTime [default: `now()`, not null]
   updatedAt DateTime [not null]
 }
@@ -93,8 +94,11 @@ Table tickets {
   type TicketType [not null]
   status TicketStatus [not null, default: 'UNUSED']
   orderItemId String [unique, not null]
+  seatType SeatType [not null, default: 'FREE']
   usageSessions usage_sessions [not null]
   ticketPauses ticket_pauses [not null]
+  seatAssignments seat_assignments [not null]
+  seatChanges ticket_seat_changes [not null]
   purchasedMinutes Int
   minuteExpireDeadline DateTime
   remainingMinutes Int
@@ -127,6 +131,7 @@ Table products {
   id String [pk]
   name String [not null]
   ticketType TicketType [not null]
+  seatType SeatType [not null, default: 'FREE']
   amount Int [not null]
   shopId String [not null]
   usableDays Int [not null]
@@ -160,6 +165,7 @@ Table orders {
 Table order_items {
   id String [pk]
   ticketType TicketType [not null]
+  seatType SeatType [not null, default: 'FREE']
   originalAmount Int [not null]
   discountAmount Int [not null]
   amount Int [not null]
@@ -173,6 +179,7 @@ Table order_items {
   order orders [not null]
   paymentCancels payment_cancels [not null]
   refundLock refund_locks
+  seatAssignments seat_assignments [not null]
   createdAt DateTime [default: `now()`, not null]
   updatedAt DateTime [not null]
 }
@@ -303,14 +310,53 @@ Table seats {
   name String [not null, default: '']
   shopId String [not null]
   status SeatStatus [not null, default: 'AVAILABLE']
+  type SeatType [not null, default: 'FREE']
   shop shops [not null]
   usageSession usage_sessions [not null]
+  seatAssignments seat_assignments [not null]
+  changesFromSeat ticket_seat_changes [not null]
+  changesToSeat ticket_seat_changes [not null]
   createdAt DateTime [default: `now()`, not null]
   updatedAt DateTime [not null]
 
   indexes {
     (shopId, number) [unique]
   }
+}
+
+Table seat_assignments {
+  id String [pk]
+  seatId String [not null]
+  orderItemId String
+  ticketId String
+  status SeatAssignmentStatus [not null, default: 'HELD']
+  heldUntil DateTime
+  assignedAt DateTime
+  releasedAt DateTime
+  releaseReason SeatReleaseReason
+  seat seats [not null]
+  orderItem order_items
+  ticket tickets
+  createdAt DateTime [default: `now()`, not null]
+  updatedAt DateTime [not null]
+}
+
+Table ticket_seat_changes {
+  id String [pk]
+  ticketId String [not null]
+  changeType TicketSeatChangeType [not null]
+  fromSeatType SeatType [not null]
+  toSeatType SeatType [not null]
+  fromSeatId String
+  toSeatId String
+  reason String [not null]
+  changedBy String [not null]
+  endedSessionId String
+  ticket tickets [not null]
+  fromSeat seats
+  toSeat seats
+  user user [not null]
+  changedAt DateTime [default: `now()`, not null]
 }
 
 Enum UserRole {
@@ -354,6 +400,34 @@ Enum TicketStatus {
   EXPIRED
   EXHAUSTED
   REVOKED
+}
+
+Enum SeatType {
+  FIXED
+  FREE
+}
+
+Enum SeatAssignmentStatus {
+  HELD
+  ACTIVE
+  RELEASED
+}
+
+Enum SeatReleaseReason {
+  ORDER_CANCELLED
+  PAYMENT_FAILED
+  HOLD_EXPIRED
+  TICKET_EXPIRED
+  TICKET_EXHAUSTED
+  TICKET_REVOKED
+  TICKET_PAUSED
+  SEAT_TYPE_CHANGED
+  SEAT_MOVED
+}
+
+Enum TicketSeatChangeType {
+  TYPE_CHANGE
+  SEAT_MOVE
 }
 
 Enum PaymentType {
@@ -461,3 +535,17 @@ Ref: shop_owners.shopId > shops.id
 Ref: shop_owners.userId > user.id
 
 Ref: seats.shopId > shops.id
+
+Ref: seat_assignments.seatId > seats.id
+
+Ref: seat_assignments.orderItemId > order_items.id
+
+Ref: seat_assignments.ticketId > tickets.id
+
+Ref: ticket_seat_changes.ticketId > tickets.id
+
+Ref: ticket_seat_changes.fromSeatId > seats.id
+
+Ref: ticket_seat_changes.toSeatId > seats.id
+
+Ref: ticket_seat_changes.changedBy > user.id
