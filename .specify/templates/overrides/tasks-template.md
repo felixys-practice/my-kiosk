@@ -45,6 +45,9 @@ npm run test:e2e -- --testPathPatterns=<E2E 파일> -t "\(QS-n\)"
 - **조건 깨뜨리기 (task 1개)**: 자기 사이클 전에 이미 통과하는 테스트(구현 전부터 통과하거나, 다른 동작의 구현으로 함께
   통과한 테스트)는 task에 적힌 조건을 잠시 지워 실패하는지 확인하고, 원복한 뒤 다시 통과를 확인한다.
   실패하지 않으면 테스트를 고치지 말고 멈춘 뒤 사용자에게 알린다
+- **거부 동작 (헌법 VI)**: 요청 거부를 검증하는 E2E는 상태 코드와 함께 `error.code`를 검증하고,
+  단위 테스트는 해당 도메인 에러 클래스를 검증한다. 기대 코드는 contracts의 오류 코드 대응표를 따른다.
+  안내 문구(`error.message`)는 검증하지 않는다. DTO 형식 검증(`ValidationPipe`) 실패는 제외한다
 - **구조 정리 (task 1개)**: 동작을 바꾸지 않고 구조만 바꾸는 task는 동작의 사이클과 섞지 않는다. 새 테스트를 쓰지 않으며,
   회귀 확인까지 한 task로 하고 다음 동작으로 간다
 
@@ -108,7 +111,7 @@ npm run test:e2e -- --testPathPatterns=<E2E 파일> -t "\(QS-n\)"
 #### 동작 1. 만료일 없이 쿠폰을 발행하면 400 (QS-1)
 
 - [ ] T005 [US1] 작성 + 실패 확인:
-  ① E2E 작성: `test/coupon.e2e-spec.ts`에 `it('만료일 없이 쿠폰을 발행하면 400 (QS-1)')`
+  ① E2E 작성: `test/coupon.e2e-spec.ts`에 `it('만료일 없이 쿠폰을 발행하면 400 (QS-1)')`(DTO 형식 검증이므로 `error.code`는 검증하지 않는다, 헌법 VI)
   ② E2E 실패 확인: E2E 단건(QS-1). 기대 사유: 400이 아니라 201
   ③ 단위 작성: `src/coupon/dto/create-coupon.dto.spec.ts`(신규)에 `it('만료일이 없으면 isDate 오류다')`
   ④ 단위 실패 확인: 단위 단건. 파일이 없으면 빈 클래스를 두고 다시 확인한다. 기대 사유: `expiresAt` 오류에 `isDate`가 없음
@@ -120,11 +123,12 @@ npm run test:e2e -- --testPathPatterns=<E2E 파일> -t "\(QS-n\)"
 #### 동작 2. 같은 코드의 쿠폰을 다시 발행하면 409
 
 - [ ] T007 [US1] 작성 + 실패 확인:
-  ① 작성: `src/coupon/coupon.service.spec.ts`(신규)에 `it('같은 코드의 쿠폰이 있으면 DomainConflictError다')`.
+  ① 작성: `src/coupon/coupon.service.spec.ts`(신규)에 `it('같은 코드의 쿠폰이 있으면 CouponCodeDuplicatedError다')`.
      목: `CouponRepository`(`findByCode`, `create`)
   ② 실패 확인: 단위 단건. 기대 사유: 예외 없이 `create`가 호출됨
 - [ ] T008 [US1] 구현 + 통과 확인:
-  ① 구현: `src/coupon/coupon.service.ts`의 `issue`에서 `findByCode` 결과가 있으면 `DomainConflictError('이미 발행된 쿠폰 코드입니다')`
+  ① 구현: `src/coupon/errors/coupon-code-duplicated.error.ts`(`DomainConflictError` 상속, `name = 'CouponCodeDuplicatedError'`)를 만들고,
+     `src/coupon/coupon.service.ts`의 `issue`에서 `findByCode` 결과가 있으면 이 에러를 던진다
   ② 통과 확인: 단위 단건 통과, 파일 전체 회귀 없음
 
 #### 동작 3. 발행한 쿠폰이 목록에 나온다 (QS-2) — 이미 통과하는 테스트
