@@ -42,9 +42,10 @@
 |---|---|---|---|
 | I. 계층 구조 | 새 로직(좌석 지정, 이용권 좌석 변경)은 Controller → Service → Repository를 따른다. Prisma 쿼리는 Repository에만 둔다. | 통과 | 통과: `seat-assignment` 모듈과 `ticket-seat` 하위 모듈을 3계층으로 설계 |
 | II. 입력 검증 | 새·변경 DTO는 class-validator로 검증한다(`IsEnum`, `IsUUID`, `ValidateIf`, `IsNotEmpty`). | 통과 | 통과: [contracts/rest-api.md](./contracts/rest-api.md)에 DTO별 검증 규칙 명시 |
-| III. 테스트 (v1.1.0) | 단위·E2E 테스트를 함께 작성하고, 구현보다 먼저 작성해 실패를 확인하며, 구현 후 기대값을 임의로 바꾸지 않는다. | 통과 | 통과: [quickstart.md](./quickstart.md)의 시나리오를 E2E로, 서비스 규칙을 단위 테스트로 작성한다. 작성 순서(테스트 → 실패 확인 → 구현)는 `/speckit-tasks`에서 사용자 스토리마다 테스트 작업을 구현 작업 앞에 두어 보장한다 |
+| III. 테스트 (v1.3.0) | 단위·E2E 테스트를 함께 작성한다. TDD 사이클은 동작 하나(테스트 하나) 단위로 돌고, 테스트가 노리는 이유로 실패하는지 확인한 뒤 구현한다. 일괄 작성·일괄 실패 확인은 하지 않으며, 구현 후 기대값을 바꾸지 않는다. | 통과 | 통과: [quickstart.md](./quickstart.md)의 시나리오를 E2E로, 서비스 규칙을 단위 테스트로 작성한다. tasks.md는 동작마다 [작성 + 실패 확인] → [구현 + 통과 확인] task 2개로 구성한다(`.specify/templates/overrides/tasks-template.md`). v1.2.0 개정 이전에 완료된 task는 헌법 경과 규정에 따라 다시 수행하지 않으며, 적용 대상은 tasks.md에 표시한다 |
 | IV. 운영 수준 코드 | 축약·생략이 있으면 사용자 확인을 받는다. | **확인 필요** | 통과: [research.md](./research.md)의 R2·R3·R4·R8·R9 모두 2026-10-21 사용자 확인 완료 |
 | V. 단순성 | 요청 범위만 구현한다. | 통과 | 통과: 상품 수정 API·좌석 상태 변경 API는 사용자 요청으로 포함(R8). 이용권 만료 배치는 만들지 않는다(R3) |
+| VI. 오류 응답 (v1.4.0) | 클라이언트 대응이 다른 거부 사유마다 서로 다른 `error.code`를 쓰고, contracts에 거부 상황·상태 코드·오류 코드 대응을 명시하며, 거부 테스트는 오류 코드를 검증한다. DTO 형식 검증 실패는 제외 | 해당 없음(v1.4.0 개정 이후 추가) | 통과: [contracts/rest-api.md](./contracts/rest-api.md) 오류 표에 `error.code` 명시, tasks.md 거부 테스트에 코드 검증 반영 |
 | 기술 제약 | NestJS, Prisma, PostgreSQL, Redis 외 도입 없음 | 통과 | 통과 |
 | 개발 흐름 | 기능 브랜치, 한글 커밋 | 통과 | 통과 |
 
