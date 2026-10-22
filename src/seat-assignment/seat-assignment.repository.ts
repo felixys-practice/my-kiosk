@@ -66,7 +66,7 @@ const openAssignmentSelect = {
 
 /**
  * 좌석 배정 데이터 접근
- * - 쿼리만 담당한다. 유효 판정·해제 결정·순서 조율은 SeatAssignmentService가 한다(헌법 원칙 I)
+ * - 쿼리만 담당한다. 점유 판정·해제 결정·순서 조율은 SeatAssignmentService가 한다(헌법 원칙 I)
  */
 @Injectable()
 export class SeatAssignmentRepository {

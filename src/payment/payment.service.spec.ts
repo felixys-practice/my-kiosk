@@ -104,7 +104,7 @@ describe('PaymentService', () => {
     seatAssignmentService = {
       activateByOrderItem: jest.fn().mockResolvedValue(true),
       releaseByOrderItems: jest.fn(),
-      releaseInvalidHolds: jest.fn().mockResolvedValue([]),
+      releaseEndedHolds: jest.fn().mockResolvedValue([]),
     } as unknown as jest.Mocked<SeatAssignmentService>;
     refundService = {
       refundBySystem: jest.fn(),
@@ -230,17 +230,15 @@ describe('PaymentService', () => {
   });
 
   describe('requestPayment', () => {
-    it('결제 요청 시 무효 선점이 있으면 VAN 요청 전에 SeatHoldExpiredError다', async () => {
-      seatAssignmentService.releaseInvalidHolds.mockResolvedValue([
-        'item-fixed',
-      ]);
+    it('결제 요청 시 점유가 끝난 선점이 있으면 VAN 요청 전에 SeatHoldExpiredError다', async () => {
+      seatAssignmentService.releaseEndedHolds.mockResolvedValue(['item-fixed']);
 
       await expect(
         service.requestPayment('order-1', 'user-1'),
       ).rejects.toBeInstanceOf(SeatHoldExpiredError);
 
       // 고정석 주문 항목만 확인하고, 결제는 만들지 않는다
-      expect(seatAssignmentService.releaseInvalidHolds).toHaveBeenCalledWith(
+      expect(seatAssignmentService.releaseEndedHolds).toHaveBeenCalledWith(
         ['item-fixed'],
         expect.any(Date),
         tx,

@@ -13,8 +13,8 @@ import {
   SeatAssignmentRepository,
 } from './seat-assignment.repository';
 import {
-  getInvalidReleaseReason,
-  isValidAssignment,
+  getExpiredReleaseReason,
+  isOccupyingAssignment,
 } from './seat-assignment.policy';
 import { SeatNotAssignableError, SeatTypeMismatchError } from './errors';
 
@@ -28,35 +28,32 @@ export class SeatAssignmentService {
   constructor(private readonly repository: SeatAssignmentRepository) {}
 
   /**
-   * 좌석의 유효한 배정을 찾는다. 기한이 지난 배정은 같은 트랜잭션에서 해제한다(지연 해제)
+   * 좌석의 점유 중인 배정을 찾는다. 기한이 지난 배정은 같은 트랜잭션에서 해제한다(지연 해제)
    * @param seatId 좌석 ID
    * @param now 판정 기준 시각
    * @param tx 트랜잭션 클라이언트
-   * @returns 유효한 배정(없으면 null)
+   * @returns 점유 중인 배정(없으면 null)
    */
-  async findValidBySeat(
+  async findOccupyingBySeat(
     seatId: string,
     now: Date,
     tx: TransactionClient,
   ): Promise<OpenSeatAssignment | null> {
-    // 열린 배정을 유효/무효로 나눈다
+    // 열린 배정을 점유 중인 것과 점유가 끝난 것으로 나눈다
     const rows = await this.repository.findOpenBySeat(seatId, tx);
-    let valid: OpenSeatAssignment | null = null;
-    const invalidByReason = new Map<SeatReleaseReason, string[]>();
+    let occupying: OpenSeatAssignment | null = null;
+    const endedByReason = new Map<SeatReleaseReason, string[]>();
     for (const row of rows) {
-      if (isValidAssignment(row, row.ticket, now)) {
-        valid = row;
+      if (isOccupyingAssignment(row, row.ticket, now)) {
+        occupying = row;
         continue;
       }
-      const reason = getInvalidReleaseReason(row);
-      invalidByReason.set(reason, [
-        ...(invalidByReason.get(reason) ?? []),
-        row.id,
-      ]);
+      const reason = getExpiredReleaseReason(row);
+      endedByReason.set(reason, [...(endedByReason.get(reason) ?? []), row.id]);
     }
 
-    // 무효 배정은 사유별로 해제
-    for (const [reason, ids] of invalidByReason) {
+    // 점유가 끝난 배정은 사유별로 해제
+    for (const [reason, ids] of endedByReason) {
       await this.repository.updateStatus(
         ids,
         {
@@ -68,7 +65,7 @@ export class SeatAssignmentService {
       );
     }
 
-    return valid;
+    return occupying;
   }
 
   /**
@@ -79,7 +76,7 @@ export class SeatAssignmentService {
    * @throws DomainNotFoundError 좌석이 없음
    * @throws SeatTypeMismatchError 고정석이 아님
    * @throws DomainBadRequestError 다른 매장의 좌석
-   * @throws SeatNotAssignableError 이미 유효한 배정이 있음
+   * @throws SeatNotAssignableError 이미 점유 중인 배정이 있음
    */
   async hold(
     input: {
@@ -91,7 +88,7 @@ export class SeatAssignmentService {
     now: Date,
     tx: TransactionClient,
   ): Promise<void> {
-    // 좌석 잠금 + 고정석·매장 검증 + 유효 배정 확인
+    // 좌석 잠금 + 고정석·매장 검증 + 점유 중인 배정 확인
     await this.lockAssignableFixedSeat(input.seatId, input.shopId, now, tx);
 
     // 선점 생성 (동시 요청은 부분 유일 인덱스가 최종 방어)
@@ -108,36 +105,36 @@ export class SeatAssignmentService {
   }
 
   /**
-   * 결제 요청 전에 주문 항목의 선점이 유효한지 확인하고, 만료된 선점은 HOLD_EXPIRED로 해제한다(research R12-C)
-   * - 고정석 주문 항목 ID만 넘긴다(자유석 주문 항목은 선점이 없어 무효로 판정된다)
+   * 결제 요청 전에 주문 항목의 선점이 점유 중인지 확인하고, 만료된 선점은 HOLD_EXPIRED로 해제한다(research R12-C)
+   * - 고정석 주문 항목 ID만 넘긴다(자유석 주문 항목은 선점이 없어 점유 중이 아닌 것으로 판정된다)
    * @param orderItemIds 고정석 주문 항목 ID 목록
    * @param now 기준 시각
    * @param tx 트랜잭션 클라이언트
-   * @returns 선점이 유효하지 않은(만료·해제·없음) 주문 항목 ID 목록
+   * @returns 점유가 끝난(만료·해제·없음) 선점의 주문 항목 ID 목록
    */
-  async releaseInvalidHolds(
+  async releaseEndedHolds(
     orderItemIds: string[],
     now: Date,
     tx: TransactionClient,
   ): Promise<string[]> {
-    const invalidOrderItemIds: string[] = [];
+    const endedOrderItemIds: string[] = [];
     const expiredIds: string[] = [];
 
     for (const orderItemId of orderItemIds) {
       // 주문 항목의 최근 배정 조회
       const row = await this.repository.findLatestByOrderItem(orderItemId, tx);
 
-      // 유효한 선점이면 그대로 둔다
+      // 점유 중인 선점이면 그대로 둔다
       if (
         row?.status === SeatAssignmentStatus.HELD &&
-        isValidAssignment(row, null, now)
+        isOccupyingAssignment(row, null, now)
       ) {
         continue;
       }
 
       // 만료된 선점은 해제 대상으로 모은다(이미 해제됐거나 없으면 바꾸지 않는다)
       if (row?.status === SeatAssignmentStatus.HELD) expiredIds.push(row.id);
-      invalidOrderItemIds.push(orderItemId);
+      endedOrderItemIds.push(orderItemId);
     }
 
     // 만료된 선점 해제
@@ -153,7 +150,7 @@ export class SeatAssignmentService {
       );
     }
 
-    return invalidOrderItemIds;
+    return endedOrderItemIds;
   }
 
   /**
@@ -179,10 +176,10 @@ export class SeatAssignmentService {
       );
     }
 
-    // 선점이 유효하면 그대로 확정
+    // 선점이 점유 중이면 그대로 확정
     if (
       row.status === SeatAssignmentStatus.HELD &&
-      isValidAssignment(row, null, now)
+      isOccupyingAssignment(row, null, now)
     ) {
       await this.repository.updateStatus(
         [row.id],
@@ -194,8 +191,8 @@ export class SeatAssignmentService {
 
     // 선점이 만료·해제됐으면 좌석이 아직 비어 있을 때만 새로 확정
     await this.repository.lockSeat(row.seatId, tx);
-    const valid = await this.findValidBySeat(row.seatId, now, tx);
-    if (valid && valid.id !== row.id) return false;
+    const occupying = await this.findOccupyingBySeat(row.seatId, now, tx);
+    if (occupying && occupying.id !== row.id) return false;
 
     try {
       await this.repository.create(
@@ -224,14 +221,14 @@ export class SeatAssignmentService {
    * @throws DomainNotFoundError 좌석이 없음
    * @throws SeatTypeMismatchError 고정석이 아님
    * @throws DomainBadRequestError 다른 매장의 좌석
-   * @throws SeatNotAssignableError 이미 유효한 배정이 있음
+   * @throws SeatNotAssignableError 이미 점유 중인 배정이 있음
    */
   async assign(
     input: { seatId: string; shopId: string; ticketId: string },
     now: Date,
     tx: TransactionClient,
   ): Promise<void> {
-    // 좌석 잠금 + 고정석·매장 검증 + 유효 배정 확인
+    // 좌석 잠금 + 고정석·매장 검증 + 점유 중인 배정 확인
     await this.lockAssignableFixedSeat(input.seatId, input.shopId, now, tx);
 
     // 확정 생성
@@ -339,10 +336,10 @@ export class SeatAssignmentService {
         ? await this.repository.findOpenBySeatIds(fixedIds)
         : [];
 
-    // 유효 배정이 있는 좌석 집합
+    // 점유 중인 배정이 있는 좌석 집합
     const taken = new Set(
       rows
-        .filter((row) => isValidAssignment(row, row.ticket, now))
+        .filter((row) => isOccupyingAssignment(row, row.ticket, now))
         .map((row) => row.seatId),
     );
 
@@ -355,7 +352,7 @@ export class SeatAssignmentService {
   }
 
   /**
-   * 좌석을 잠그고, 같은 매장의 고정석이며 유효 배정이 없는지 확인한다
+   * 좌석을 잠그고, 같은 매장의 고정석이며 점유 중인 배정이 없는지 확인한다
    * @param seatId 좌석 ID
    * @param shopId 매장 ID
    * @param now 기준 시각
@@ -364,7 +361,7 @@ export class SeatAssignmentService {
    * @throws DomainNotFoundError 좌석이 없음
    * @throws SeatTypeMismatchError 고정석이 아님
    * @throws DomainBadRequestError 다른 매장의 좌석
-   * @throws SeatNotAssignableError 이미 유효한 배정이 있음
+   * @throws SeatNotAssignableError 이미 점유 중인 배정이 있음
    */
   private async lockAssignableFixedSeat(
     seatId: string,
@@ -384,8 +381,8 @@ export class SeatAssignmentService {
       throw new DomainBadRequestError(`다른 매장의 좌석입니다: ${seatId}`);
     }
 
-    // 유효 배정 확인(만료된 배정은 이 안에서 해제됨)
-    if (await this.findValidBySeat(seatId, now, tx)) {
+    // 점유 중인 배정 확인(만료된 배정은 이 안에서 해제됨)
+    if (await this.findOccupyingBySeat(seatId, now, tx)) {
       throw new SeatNotAssignableError(seatId);
     }
     return seat;

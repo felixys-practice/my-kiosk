@@ -85,8 +85,8 @@ describe('SeatAssignmentService', () => {
     repository.findOpenBySeat.mockResolvedValue([]);
   });
 
-  describe('findValidBySeat', () => {
-    it('무효 행은 같은 트랜잭션에서 사유와 함께 RELEASED로 바꾸고 유효 행만 반환한다', async () => {
+  describe('findOccupyingBySeat', () => {
+    it('점유가 끝난 행은 같은 트랜잭션에서 사유와 함께 RELEASED로 바꾸고 점유 중인 행만 반환한다', async () => {
       const expiredHold = openRow({ id: 'a-expired', heldUntil: past });
       const expiredTicket = openRow({
         id: 'a-ticket-expired',
@@ -95,16 +95,16 @@ describe('SeatAssignmentService', () => {
         ticketId: 't-1',
         ticket: { ...validTicket, expiresAt: past },
       });
-      const valid = openRow({ id: 'a-valid' });
+      const occupying = openRow({ id: 'a-occupying' });
       repository.findOpenBySeat.mockResolvedValue([
         expiredHold,
         expiredTicket,
-        valid,
+        occupying,
       ]);
 
-      const result = await service.findValidBySeat(seatId, now, tx);
+      const result = await service.findOccupyingBySeat(seatId, now, tx);
 
-      expect(result).toEqual(valid);
+      expect(result).toEqual(occupying);
       expect(repository.updateStatus).toHaveBeenCalledWith(
         ['a-expired'],
         {
@@ -125,9 +125,9 @@ describe('SeatAssignmentService', () => {
       );
     });
 
-    it('유효 행이 없으면 null을 반환한다', async () => {
+    it('점유 중인 행이 없으면 null을 반환한다', async () => {
       await expect(
-        service.findValidBySeat(seatId, now, tx),
+        service.findOccupyingBySeat(seatId, now, tx),
       ).resolves.toBeNull();
     });
   });
@@ -140,7 +140,7 @@ describe('SeatAssignmentService', () => {
       heldUntil: future,
     };
 
-    it('대상 좌석을 잠그고 무효 배정을 해제한 뒤 새 HELD를 만든다', async () => {
+    it('대상 좌석을 잠그고 점유가 끝난 배정을 해제한 뒤 새 HELD를 만든다', async () => {
       repository.findOpenBySeat.mockResolvedValue([
         openRow({ id: 'a-expired', heldUntil: past }),
       ]);
@@ -166,7 +166,7 @@ describe('SeatAssignmentService', () => {
       );
     });
 
-    it('유효 배정이 있으면 SeatNotAssignableError(409)를 던진다', async () => {
+    it('점유 중인 배정이 있으면 SeatNotAssignableError(409)를 던진다', async () => {
       repository.findOpenBySeat.mockResolvedValue([openRow()]);
 
       await expect(service.hold(input, now, tx)).rejects.toBeInstanceOf(
@@ -242,7 +242,7 @@ describe('SeatAssignmentService', () => {
       );
     });
 
-    it('유효한 HELD는 ACTIVE로 바꾸고 ticketId·assignedAt을 설정한다', async () => {
+    it('점유 중인 HELD는 ACTIVE로 바꾸고 ticketId·assignedAt을 설정한다', async () => {
       repository.findLatestByOrderItem.mockResolvedValue(openRow());
 
       await expect(
@@ -259,7 +259,7 @@ describe('SeatAssignmentService', () => {
       );
     });
 
-    it('HELD가 만료됐어도 같은 좌석에 다른 유효 배정이 없으면 새 ACTIVE를 만들고 true를 반환한다', async () => {
+    it('HELD가 만료됐어도 같은 좌석에 다른 점유 중인 배정이 없으면 새 ACTIVE를 만들고 true를 반환한다', async () => {
       repository.findLatestByOrderItem.mockResolvedValue(
         openRow({ heldUntil: past }),
       );
@@ -282,7 +282,7 @@ describe('SeatAssignmentService', () => {
       );
     });
 
-    it('HELD가 만료되고 같은 좌석에 다른 유효 배정이 있으면 false를 반환하고 만들지 않는다', async () => {
+    it('HELD가 만료되고 같은 좌석에 다른 점유 중인 배정이 있으면 false를 반환하고 만들지 않는다', async () => {
       repository.findLatestByOrderItem.mockResolvedValue(
         openRow({ heldUntil: past }),
       );
@@ -334,7 +334,7 @@ describe('SeatAssignmentService', () => {
       );
     });
 
-    it('유효 배정이 있으면 SeatNotAssignableError를 던진다', async () => {
+    it('점유 중인 배정이 있으면 SeatNotAssignableError를 던진다', async () => {
       repository.findOpenBySeat.mockResolvedValue([openRow()]);
 
       await expect(service.assign(input, now, tx)).rejects.toBeInstanceOf(
@@ -445,7 +445,7 @@ describe('SeatAssignmentService', () => {
   });
 
   describe('getAssignableMap', () => {
-    it('자유석은 false, 유효 배정 없는 고정석은 true, 유효 배정 있는 고정석은 false다', async () => {
+    it('자유석은 false, 점유 중인 배정 없는 고정석은 true, 점유 중인 배정 있는 고정석은 false다', async () => {
       repository.findOpenBySeatIds.mockResolvedValue([
         openRow({ seatId: 'fixed-taken' }),
         openRow({ id: 'expired', seatId: 'fixed-expired', heldUntil: past }),
@@ -468,8 +468,8 @@ describe('SeatAssignmentService', () => {
     });
   });
 
-  describe('releaseInvalidHolds', () => {
-    it('주문 항목의 선점 중 무효인 것을 HOLD_EXPIRED로 해제하고 그 주문 항목 ID를 반환한다', async () => {
+  describe('releaseEndedHolds', () => {
+    it('주문 항목의 선점 중 점유가 끝난 것을 HOLD_EXPIRED로 해제하고 그 주문 항목 ID를 반환한다', async () => {
       repository.findLatestByOrderItem.mockImplementation((orderItemId) => {
         const rows: Record<string, OpenSeatAssignment | null> = {
           'item-expired': openRow({
@@ -477,7 +477,10 @@ describe('SeatAssignmentService', () => {
             orderItemId: 'item-expired',
             heldUntil: past,
           }),
-          'item-valid': openRow({ id: 'a-valid', orderItemId: 'item-valid' }),
+          'item-occupying': openRow({
+            id: 'a-occupying',
+            orderItemId: 'item-occupying',
+          }),
           'item-released': openRow({
             id: 'a-released',
             orderItemId: 'item-released',
@@ -488,13 +491,13 @@ describe('SeatAssignmentService', () => {
         return Promise.resolve(rows[orderItemId]);
       });
 
-      const invalid = await service.releaseInvalidHolds(
-        ['item-expired', 'item-valid', 'item-released', 'item-none'],
+      const ended = await service.releaseEndedHolds(
+        ['item-expired', 'item-occupying', 'item-released', 'item-none'],
         now,
         tx,
       );
 
-      expect(invalid).toEqual(['item-expired', 'item-released', 'item-none']);
+      expect(ended).toEqual(['item-expired', 'item-released', 'item-none']);
       expect(repository.updateStatus).toHaveBeenCalledTimes(1);
       expect(repository.updateStatus).toHaveBeenCalledWith(
         ['a-expired'],

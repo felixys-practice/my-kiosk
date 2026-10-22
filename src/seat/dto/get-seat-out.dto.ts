@@ -20,7 +20,7 @@ export class GetSeatOutDto {
 
   @ApiProperty({
     description:
-      '고정석 선택 가능 여부(유효한 배정이 없으면 true). 자유석은 항상 false',
+      '고정석 선택 가능 여부(점유 중인 배정이 없으면 true). 자유석은 항상 false',
   })
   isAssignable!: boolean;
 

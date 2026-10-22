@@ -43,8 +43,8 @@ export class PaymentService {
 
   // 결재 요청
   async requestPayment(orderId: string, requesterId: string) {
-    // step 0. 고정석 선점이 유효한지 확인한다(research R12-C)
-    await this.assertSeatHoldsValid(orderId);
+    // step 0. 고정석 선점이 점유 중인지 확인한다(research R12-C)
+    await this.assertSeatHoldsOccupying(orderId);
 
     // step 1. payment 생성
     const payment = await this.paymentRepository.createPayment(
@@ -125,13 +125,13 @@ export class PaymentService {
   }
 
   /**
-   * 결제 요청 전에 주문의 고정석 선점이 모두 유효한지 확인한다
+   * 결제 요청 전에 주문의 고정석 선점이 모두 점유 중인지 확인한다
    * - 만료된 선점은 HOLD_EXPIRED로 해제하고, 해제가 롤백되지 않도록 커밋한 뒤 예외를 던진다
    * @param orderId 주문 ID
    * @returns 없음
    * @throws SeatHoldExpiredError 만료·해제된 선점이 있을 때
    */
-  private async assertSeatHoldsValid(orderId: string): Promise<void> {
+  private async assertSeatHoldsOccupying(orderId: string): Promise<void> {
     // 고정석 주문 항목만 확인 대상
     const orderItems = await this.orderItemRepository.getOrderItem(orderId);
     const fixedItemIds = orderItems
@@ -140,8 +140,8 @@ export class PaymentService {
     if (fixedItemIds.length === 0) return;
 
     // 만료된 선점 해제(커밋)
-    const invalidItemIds = await this.prisma.executeTransaction((tx) =>
-      this.seatAssignmentService.releaseInvalidHolds(
+    const endedHoldItemIds = await this.prisma.executeTransaction((tx) =>
+      this.seatAssignmentService.releaseEndedHolds(
         fixedItemIds,
         new Date(),
         tx,
@@ -149,7 +149,7 @@ export class PaymentService {
     );
 
     // 커밋 후 거부
-    if (invalidItemIds.length > 0) throw new SeatHoldExpiredError();
+    if (endedHoldItemIds.length > 0) throw new SeatHoldExpiredError();
   }
 
   /**
