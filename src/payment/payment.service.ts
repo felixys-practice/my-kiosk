@@ -41,7 +41,14 @@ export class PaymentService {
     return await this.paymentRepository.getPaymentById(id);
   }
 
-  // 결재 요청
+  /**
+   * 결제를 요청한다(VAN 승인 요청)
+   * - 결재 요청
+   * @param orderId 주문 ID
+   * @param requesterId 결제를 요청한 사용자 ID(주문자와 같아야 한다)
+   * @returns 생성한 결제 ID
+   * @throws SeatHoldExpiredError 고정석 선점이 만료·해제됐을 때
+   */
   async requestPayment(orderId: string, requesterId: string) {
     // step 0. 고정석 선점이 점유 중인지 확인한다(research R12-C)
     await this.assertSeatHoldsOccupying(orderId);
@@ -75,6 +82,16 @@ export class PaymentService {
     }
   }
 
+  /**
+   * PG 결제 결과 콜백을 처리한다
+   * - 승인 실패·금액 불일치면 결제를 실패로 바꾸고 고정석 선점을 해제한다
+   * - 승인 성공이면 이용권을 발급하고 고정석 배정을 확정한다
+   * @param payload PG 콜백 내용
+   * @returns 없음
+   * @throws PaymentNotFoundError 결제가 없을 때
+   * @throws PaymentAlreadyClosedError 종결된 결제에 승인 성공이 왔을 때
+   * @throws PaymentAmountMismatchError 승인 금액이 결제 금액과 다를 때
+   */
   async callbackPayment(payload: PgPayload): Promise<void> {
     const payment = await this.paymentRepository.getPaymentByPgTransactionId(
       payload.pgTransactionId,
@@ -181,7 +198,15 @@ export class PaymentService {
     });
   }
 
-  // 결재 승인 처리
+  /**
+   * 결제 승인을 확정하고 이용권을 발급한다
+   * - 결재 승인 처리
+   * - 같은 트랜잭션에서 고정석 배정을 확정하고, 확정하지 못한 이용권은 커밋 후 자동 환불한다(research R12-A)
+   * @param paymentId 결제 ID
+   * @param orderId 주문 ID
+   * @param userId 이용권 소유자(주문자) ID
+   * @returns 없음
+   */
   private async successPayment(
     paymentId: string,
     orderId: string,

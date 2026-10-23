@@ -53,7 +53,19 @@ export class UsageSessionService {
     return true;
   }
 
-  // 세션 생성
+  /**
+   * 입실한다(이용 세션 생성)
+   * - 세션 생성
+   * - 이용권과 좌석의 타입이 같아야 하고, 고정석 이용권은 배정 좌석에만 입실한다(FR-011)
+   * @param ticketId 이용권 ID
+   * @param shopId 매장 ID
+   * @param seatId 좌석 ID
+   * @param userId 이용자 ID
+   * @returns 없음
+   * @throws SeatTypeMismatchError 이용권과 좌석의 타입이 다를 때
+   * @throws TicketSeatUnassignedError 고정석 이용권에 배정 좌석이 없을 때
+   * @throws NotAssignedSeatError 고정석 이용권의 배정 좌석이 아닐 때
+   */
   async createSession(
     ticketId: string,
     shopId: string,

@@ -28,6 +28,12 @@ import { PaginationUtil } from 'src/common/pagination/pagination.util';
 export class ProductController {
   constructor(private readonly service: ProductService) {}
 
+  /**
+   * 상품을 등록한다(이용권 종류별로 시간권·기간권 등록 경로를 탄다)
+   * @param paramDto 매장 ID
+   * @param dto 상품 정보(좌석 타입 포함)
+   * @returns 생성한 상품 ID
+   */
   @ApiOperation({ summary: '상품 생성' })
   @Post()
   async createProduct(
@@ -57,6 +63,14 @@ export class ProductController {
     });
   }
 
+  /**
+   * 상품을 수정한다(이용권 종류는 바꿀 수 없다)
+   * @param shopId 매장 ID
+   * @param productId 상품 ID
+   * @param dto 바꿀 필드
+   * @param userId 수정한 사용자 ID
+   * @returns 없음
+   */
   @ApiOperation({ summary: '상품 수정(이용권 종류 제외)' })
   @Roles(Role.OWNER, Role.MANAGER)
   @Patch(':productId')
@@ -69,6 +83,7 @@ export class ProductController {
     await this.service.updateProduct(shopId, productId, dto, userId);
   }
 
+  @ApiOperation({ summary: '상품 목록 조회(좌석 타입 포함)' })
   @Get()
   async getProducts(
     @Param() paramDto: ProductParamDto,

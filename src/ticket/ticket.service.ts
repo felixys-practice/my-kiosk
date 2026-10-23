@@ -85,6 +85,12 @@ export class TicketService {
     };
   }
 
+  /**
+   * 이용권 조회 결과를 응답 형태로 바꾼다(좌석 타입·배정 좌석 포함)
+   * @param ticket 이용권 조회 결과
+   * @returns 시간권 또는 기간권 응답
+   * @throws Error 시간권에 잔여시간, 기간권에 만료일이 없을 때
+   */
   private toTicketOutData(
     ticket: TicketWithRelations,
   ): TimeTicketOutData | PeriodTicketOutData {

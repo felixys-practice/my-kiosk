@@ -309,8 +309,8 @@ describe('좌석 타입 (E2E)', () => {
     const { body: order } = await createOrder([
       { productId, quantity: 1, ...(seatId ? { seatId } : {}) },
     ]).expect(201);
-    await payOrder(order.data.id);
-    return findTicketIdByOrder(order.data.id);
+    await payOrder(order.data.id as string);
+    return findTicketIdByOrder(order.data.id as string);
   }
 
   /**
@@ -475,9 +475,8 @@ describe('좌석 타입 (E2E)', () => {
         .set('Authorization', `Bearer ${ownerToken}`)
         .expect(200);
 
-      const seat = body.data.find(
-        (item: { number: number }) => item.number === 1,
-      );
+      const seats = body.data as { number: number }[];
+      const seat = seats.find((item) => item.number === 1);
       expect(seat).toMatchObject({ type: SeatType.FIXED, isAssignable: true });
     });
   });
@@ -704,9 +703,9 @@ describe('좌석 타입 (E2E)', () => {
         { productId, quantity: 1, seatId },
       ]).expect(201);
 
-      await payOrder(order.data.id);
+      await payOrder(order.data.id as string);
 
-      const ticketId = await findTicketIdByOrder(order.data.id);
+      const ticketId = await findTicketIdByOrder(order.data.id as string);
       const { body } = await request(server)
         .get(`/tickets/${ticketId}`)
         .set('Authorization', `Bearer ${userToken}`)
@@ -722,9 +721,9 @@ describe('좌석 타입 (E2E)', () => {
         { productId, quantity: 1 },
       ]).expect(201);
 
-      await payOrder(order.data.id);
+      await payOrder(order.data.id as string);
 
-      const ticketId = await findTicketIdByOrder(order.data.id);
+      const ticketId = await findTicketIdByOrder(order.data.id as string);
       const { body } = await request(server)
         .get(`/tickets/${ticketId}`)
         .set('Authorization', `Bearer ${userToken}`)
@@ -742,7 +741,7 @@ describe('좌석 타입 (E2E)', () => {
       const { body: firstOrder } = await createOrder([
         { productId, quantity: 1, seatId },
       ]).expect(201);
-      const firstPaymentId = await requestPayment(firstOrder.data.id);
+      const firstPaymentId = await requestPayment(firstOrder.data.id as string);
       await prisma.seatAssignment.updateMany({
         where: { seatId, status: SeatAssignmentStatus.HELD },
         data: { heldUntil: new Date(Date.now() - 60 * 1000) },
@@ -753,11 +752,13 @@ describe('좌석 타입 (E2E)', () => {
         [{ productId, quantity: 1, seatId }],
         other,
       ).expect(201);
-      await payOrder(otherOrder.data.id, true, other);
+      await payOrder(otherOrder.data.id as string, true, other);
 
       // 첫 결제의 승인 콜백 - 이용권은 발급되지만 좌석을 줄 수 없어 자동 환불 요청
       await sendPaymentCallback(firstPaymentId, true);
-      const firstTicketId = await findTicketIdByOrder(firstOrder.data.id);
+      const firstTicketId = await findTicketIdByOrder(
+        firstOrder.data.id as string,
+      );
       const firstTicket = await prisma.ticket.findUniqueOrThrow({
         where: { id: firstTicketId },
         include: { orderItem: true },
@@ -793,7 +794,7 @@ describe('좌석 타입 (E2E)', () => {
         { productId, quantity: 1, seatId },
       ]).expect(201);
 
-      await payOrder(order.data.id, false);
+      await payOrder(order.data.id as string, false);
 
       await createOrder([{ productId, quantity: 1, seatId }]).expect(201);
     });
@@ -812,7 +813,7 @@ describe('좌석 타입 (E2E)', () => {
       const { body } = await request(server)
         .post('/payments')
         .set('Authorization', `Bearer ${userToken}`)
-        .send({ orderId: order.data.id, userId: normalUser.id })
+        .send({ orderId: order.data.id as string, userId: normalUser.id })
         .expect(409);
       expect(body.error.code).toBe('SeatHoldExpiredError');
 
@@ -1360,7 +1361,7 @@ describe('좌석 타입 (E2E)', () => {
         [{ productId, quantity: 1, seatId }],
         other,
       ).expect(201);
-      await payOrder(order.data.id, true, other);
+      await payOrder(order.data.id as string, true, other);
 
       const { body } = await request(server)
         .patch(`/tickets/${ticketId}/resume`)

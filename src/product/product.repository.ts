@@ -19,6 +19,12 @@ import {
 export class ProductRepository {
   constructor(private readonly prisma: PrismaService) {}
 
+  /**
+   * 상품을 저장한다
+   * @param shopId 매장 ID
+   * @param data 상품 데이터(좌석 타입 포함)
+   * @returns 생성한 상품 ID
+   */
   async createProduct(
     shopId: string,
     data: CreatePeriodProductData | CreateTimeProductData,
@@ -90,6 +96,12 @@ export class ProductRepository {
     });
   }
 
+  /**
+   * 매장의 상품 목록을 페이지 단위로 조회한다
+   * @param shopId 매장 ID
+   * @param options 이용권 종류 필터와 페이지 옵션
+   * @returns 상품 목록과 페이지 정보
+   */
   async getProduct(
     shopId: string,
     options: {

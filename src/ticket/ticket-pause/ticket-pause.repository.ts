@@ -30,7 +30,14 @@ export class TicketPauseRepository {
     return this.prisma.executeTransaction(work);
   }
 
-  // 티켓 조회 (FOR UPDATE 락) — 동시 정지/재개 요청 직렬화
+  /**
+   * 이용권을 잠그고(FOR UPDATE) 정지·재개에 필요한 값을 조회한다
+   * - 티켓 조회 (FOR UPDATE 락) — 동시 정지/재개 요청 직렬화
+   * @param ticketId 이용권 ID
+   * @param tx 트랜잭션 클라이언트
+   * @returns 이용권 스냅샷(좌석 타입·구매 매장 포함)
+   * @throws DomainNotFoundError 이용권이 없을 때
+   */
   async getTicketForUpdate(
     ticketId: string,
     tx: TransactionClient,

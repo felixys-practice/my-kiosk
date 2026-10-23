@@ -67,7 +67,18 @@ export class RefundRepository {
     });
   }
 
-  // 자동 처리(REQUESTED) 전용 - 승인 대기 생성은 createPendingApprovalPaymentCancel 참고
+  /**
+   * 결제 취소(환불) 요청 기록을 만든다
+   * - 자동 처리(REQUESTED) 전용 - 승인 대기 생성은 createPendingApprovalPaymentCancel 참고
+   * @param amount 취소 금액
+   * @param paymentId 결제 ID
+   * @param orderItemId 주문 항목 ID
+   * @param requestedAt 요청 시각
+   * @param idempotencyKey 멱등 키(선택)
+   * @param client 트랜잭션 클라이언트(없으면 기본 클라이언트)
+   * @param reason 취소 사유(시스템 자동 취소 시 기록)
+   * @returns 생성한 결제 취소 기록
+   */
   async createPaymentCancel(
     amount: number,
     paymentId: string,

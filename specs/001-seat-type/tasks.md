@@ -1414,11 +1414,23 @@ QS-16a는 동작 15·16을 거쳐야 통과한다. 동작 15에서 E2E를 작성
 
 **목적**: 여러 스토리에 걸친 점검
 
-- [ ] T187 [P] `test/ticket-pause.e2e-spec.ts`, `test/app.e2e-spec.ts` 회귀를 실행한다. 좌석 등록 본문 필수화(T019)·상품 `seatType` 필수(US2 동작 1)로 깨지는 기존 테스트 준비 코드가 있으면, **기대값이 아니라 준비 데이터만** 고친다. 기대값 변경이 필요해 보이면 멈추고 사용자에게 확인한다. `test/app.e2e-spec.ts:20`의 기존 타입 오류는 이 기능과 무관하므로 건드리지 않는다
-- [ ] T188 [P] 변경·신규 Swagger 데코레이터(`@ApiProperty`, `@ApiOperation`)의 설명을 한글로 채운다(`src/seat/`, `src/product/`, `src/order/`, `src/ticket/ticket-seat/`, `src/ticket/ticket-pause/`)
-- [ ] T189 [P] 변경한 모든 함수에 한글 JSDoc(`@param`, `@returns`, `@throws`)과 논리 단계별 한글 인라인 주석이 있는지 점검한다
-- [ ] T190 `npx eslint .`, `npm run build`, `npm run test`, `npm run test:e2e`를 실행해 모두 통과를 확인한다
-- [ ] T191 [quickstart.md](./quickstart.md)의 QS-1~QS-31(27a·11a 등 알파벳 붙은 번호 포함)이 모두 E2E 테스트에 있는지, 그리고 "경우의 수 표" 1~3의 모든 칸에 QS 번호나 단위 테스트가 있는지 대조표로 확인한다. E2E 테스트 이름 끝에는 `(QS-n)`을 붙이고, 단위 테스트 이름에는 번호를 붙이지 않는다
+- [x] T187 [P] `test/ticket-pause.e2e-spec.ts`, `test/app.e2e-spec.ts` 회귀를 실행한다. 좌석 등록 본문 필수화(T019)·상품 `seatType` 필수(US2 동작 1)로 깨지는 기존 테스트 준비 코드가 있으면, **기대값이 아니라 준비 데이터만** 고친다. 기대값 변경이 필요해 보이면 멈추고 사용자에게 확인한다. `test/app.e2e-spec.ts:20`의 기존 타입 오류는 이 기능과 무관하므로 건드리지 않는다
+  - 결과(2026-10-23): E2E 전체 실행에서 `ticket-pause` 10개 모두 통과(준비 데이터 수정 불필요). `app.e2e`는 지시대로 건드리지 않았고 기존 `request is not a function`으로만 실패
+- [x] T188 [P] 변경·신규 Swagger 데코레이터(`@ApiProperty`, `@ApiOperation`)의 설명을 한글로 채운다(`src/seat/`, `src/product/`, `src/order/`, `src/ticket/ticket-seat/`, `src/ticket/ticket-pause/`)
+  - 결과(2026-10-23): Swagger CLI 플러그인이 없어(`nest-cli.json`) 데코레이터가 없는 라우트·필드는 문서에서 빠진다. 바뀐 라우트(주문 생성·취소·조회, 상품 목록, 이용권 정지·재개)에 한글 `@ApiOperation`,
+    주문·이용권 정지 컨트롤러에 `@ApiTags`, 바뀐 DTO(`GetProductOutDto` 전 필드, `ResumeTicketDto`)에 한글 `@ApiProperty`를 넣었다. 새로 만든 데코레이터는 모두 한글 설명이다
+- [x] T189 [P] 변경한 모든 함수에 한글 JSDoc(`@param`, `@returns`, `@throws`)과 논리 단계별 한글 인라인 주석이 있는지 점검한다
+  - 결과(2026-10-23): 이번 기능에서 바꾼 함수 중 JSDoc이 없던 20개에 한글 JSDoc(`@param`·`@returns`·`@throws`)을 넣었다. 바로 위 한 줄 `//` 설명은 JSDoc 설명 줄로 옮기고,
+    `RefundService.callback()` 위의 설계 설명 문단은 원래 `//` 형식 그대로 두고 JSDoc을 그 아래에 두었다. 바로 옆에 코드를 추가해 후보로 잡힌, 실제로 바꾸지 않은 함수는 제외했다
+- [x] T190 `npx eslint .`, `npm run build`, `npm run test`, `npm run test:e2e`를 실행해 모두 통과를 확인한다
+  - 결과(2026-10-23): `npm run build` 성공. `npx eslint .`는 133건 → 이번 기능의 E2E 파일 12건(타입 표기)을 고쳐 기능 작업 전 커밋 `22376e7`(145건)보다 적은 121건(오류 106·경고 15)으로 줄었으나,
+    남은 오류는 모두 이 기능 이전부터 있던 것이다(`.remember/tmp/last-ndc.ts` 1건은 세션 기록 도구가 만든 파일). `npm run test`는 `src/user` 2건(기존 `ConfigService` 주입 누락),
+    `npm run test:e2e`는 `app.e2e` 1건(기존 `request is not a function`)이 실패한다.
+    사용자 결정(2026-10-23, A안): 이 기능 이전부터 있던 문제는 범위 밖(헌법 V)이므로 제외하고, 이 기능에서 생긴 문제가 없음을 기준으로 완료 처리한다
+- [x] T191 [quickstart.md](./quickstart.md)의 QS-1~QS-31(27a·11a 등 알파벳 붙은 번호 포함)이 모두 E2E 테스트에 있는지, 그리고 "경우의 수 표" 1~3의 모든 칸에 QS 번호나 단위 테스트가 있는지 대조표로 확인한다. E2E 테스트 이름 끝에는 `(QS-n)`을 붙이고, 단위 테스트 이름에는 번호를 붙이지 않는다
+  - 결과(2026-10-23): quickstart QS 40개(알파벳 번호 포함)가 E2E에 이름 끝 `(QS-n)`으로 정확히 하나씩 있고, 번호 없는 E2E·중복은 없다. 경우의 수 표 1·2의 모든 칸은 해당 QS로 검증된다.
+    표 3의 "없음 → 일시정지 재개 → ACTIVE" 칸은 QS "18·19"로 적혀 있지만 QS-18은 일시정지, QS-19는 재개 실패라서, 재개 성공 후 재배정은
+    단위 테스트(`ticket-pause.service.spec.ts` 「고정석 이용권을 재개하면 요청한 좌석으로 다시 배정한다」)로만 검증된다(표 규칙은 충족, 표 표기는 부정확)
 
 ---
 

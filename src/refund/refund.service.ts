@@ -178,7 +178,17 @@ export class RefundService {
     return { status: 'PENDING_APPROVAL', paymentCancelId: pending.id };
   }
 
-  // 미사용 건 - 재량이 필요 없으므로 이 요청 안에서 락 획득부터 PG 요청까지 처리한다.
+  /**
+   * 미사용 이용권을 자동 환불한다(락 획득 → PG 취소 요청)
+   * - 미사용 건 - 재량이 필요 없으므로 이 요청 안에서 락 획득부터 PG 요청까지 처리한다.
+   * @param ticket 이용권 스냅샷
+   * @param payment 결제
+   * @param userId 환불을 요청한 사용자 ID(시스템 자동 취소는 이용권 소유자)
+   * @param idempotencyKey 멱등 키(선택)
+   * @param reason 취소 사유(시스템 자동 취소 시 기록)
+   * @returns 처리 결과
+   * @throws DomainConflictError 환불 진행 중이거나 이미 환불된 상품일 때
+   */
   private async processAutoRefund(
     ticket: RefundTicketSnapshot,
     payment: { id: string },
@@ -248,8 +258,17 @@ export class RefundService {
     return { status: 'PROCESSED' };
   }
 
-  // 환불 가능 금액을 계산하고 새 깃발(락)과 함께 환불을 생성한다.
-  // 미사용 자동 처리 경로 전용 - 금액은 클라이언트 입력 없이 원가 전액으로 서버가 계산한다.
+  /**
+   * 환불 가능 금액을 계산해 결제 취소 기록과 환불 락을 함께 만든다
+   * - 환불 가능 금액을 계산하고 새 깃발(락)과 함께 환불을 생성한다.
+   * - 미사용 자동 처리 경로 전용 - 금액은 클라이언트 입력 없이 원가 전액으로 서버가 계산한다.
+   * @param orderItemId 주문 항목 ID
+   * @param paymentId 결제 ID
+   * @param idempotencyKey 멱등 키(선택)
+   * @param reason 취소 사유(선택)
+   * @returns 생성한 결제 취소 기록
+   * @throws DomainConflictError 환불 진행 중이거나 이미 환불된 상품일 때
+   */
   private async createRefundWithLock(
     orderItemId: string,
     paymentId: string,
@@ -563,6 +582,16 @@ export class RefundService {
   //   clearStaleLock 쪽에서 PG 재조회 결과보다 이미 확정된 상태를 우선 신뢰하는
   //   방식으로 흡수한다(refund.service.ts의 clearStaleLock, PrismaPaymentCancelStatus
   //   !== REQUESTED 분기 참고).
+  /**
+   * PG 환불 결과 콜백을 처리한다
+   * - 성공이면 결제 취소를 확정하고 이용권을 소멸시키며, 같은 트랜잭션에서 고정석 배정을 해제한다(FR-017)
+   * @param success PG 처리 성공 여부
+   * @param paymentCancelId 결제 취소 ID
+   * @param orderItemId 주문 항목 ID
+   * @param refundedAmount PG가 환불한 금액
+   * @param reason 실패 사유(선택)
+   * @returns 없음
+   */
   async callback(
     success: boolean,
     paymentCancelId: string,

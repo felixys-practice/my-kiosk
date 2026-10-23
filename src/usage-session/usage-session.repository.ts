@@ -18,6 +18,19 @@ export class UsageSessionRepository {
     private readonly sessionLifecycle: SessionLifecycleService,
   ) {}
 
+  /**
+   * 이용 세션을 만든다(좌석 이용 가능 확인·기간권 첫 활성화 포함)
+   * @param ticketId 이용권 ID
+   * @param shopId 매장 ID
+   * @param seatId 좌석 ID
+   * @param userId 이용자 ID
+   * @param plannedEndAt 자동 종료 예정 시각
+   * @param startedAt 시작 시각
+   * @param updatePeriodTicketData 기간권 첫 입실이면 활성화 데이터
+   * @param beforeCreate 같은 트랜잭션에서 세션 생성 전에 실행할 확인
+   * @returns 생성한 세션 ID
+   * @throws SeatAlreadyOccupiedError 좌석이 이용 중이거나 이용 불가일 때
+   */
   async createSession(
     ticketId: string,
     shopId: string,

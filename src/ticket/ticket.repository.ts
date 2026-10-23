@@ -61,6 +61,12 @@ export class TicketRepository {
     });
   }
 
+  /**
+   * 이용권을 조회한다(좌석 타입·배정 좌석·최근 세션·진행 중 정지 포함)
+   * @param ticketId 이용권 ID
+   * @returns 이용권
+   * @throws Prisma.NotFoundError 이용권이 없을 때
+   */
   async getTicketById(ticketId: string) {
     return await this.prisma.ticket.findUniqueOrThrow({
       where: { id: ticketId },
