@@ -19,23 +19,25 @@ import { GetSeatOutDto } from './dto/get-seat-out.dto';
 export class ShopSeatController {
   constructor(private readonly service: SeatService) {}
 
+  /**
+   * 매장에 좌석을 등록한다
+   * @param shopId 매장 ID
+   * @param createSeatDto 좌석 이름·번호·타입
+   * @returns 없음
+   */
   @ApiOperation({ summary: '좌석 등록' })
   @ApiParam({
     name: 'shopId',
     description: '매장 아이디',
     example: 'c7578f77-e52b-4e7e-9b9d-5b02f9696878',
   })
-  @ApiBody({ type: CreateSeatDto, required: false })
+  @ApiBody({ type: CreateSeatDto })
   @Post()
   async createSeat(
     @Param('shopId') shopId: string,
-    @Body() createSeatDto?: CreateSeatDto,
+    @Body() createSeatDto: CreateSeatDto,
   ): Promise<void> {
-    await this.service.createSeat(
-      shopId,
-      createSeatDto?.name,
-      createSeatDto?.number,
-    );
+    await this.service.createSeat(shopId, createSeatDto);
   }
 
   @ApiOperation({ summary: '좌석 목록 조회' })

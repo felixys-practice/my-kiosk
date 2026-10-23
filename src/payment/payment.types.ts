@@ -1,5 +1,6 @@
 import {
   PaymentStatus,
+  SeatType,
   PaymentType,
   TicketStatus,
   TicketType,
@@ -19,10 +20,12 @@ export interface PaymentOutData {
 }
 
 export interface BasePaymentData {
+  id: string; // 선점 확정과 연결하려고 서비스에서 미리 만든 이용권 ID
   userId: string;
   type: TicketType;
   status: TicketStatus;
   orderItemId: string;
+  seatType: SeatType; // 주문 항목의 좌석 타입 스냅샷을 따른다
 }
 
 export interface TimePaymentData extends BasePaymentData {

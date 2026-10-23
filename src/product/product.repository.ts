@@ -1,6 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { CreatePeriodProductData, CreateTimeProductData } from './product.type';
+import {
+  CreatePeriodProductData,
+  CreateTimeProductData,
+  ProductForUpdate,
+  ProductHistoryRow,
+  UpdatableProductFields,
+} from './product.type';
 import { TicketType } from '@prisma/client';
 import { GetProductOutDto } from './dto';
 import { PaginationUtil } from 'src/common/pagination/pagination.util';
@@ -13,6 +19,12 @@ import {
 export class ProductRepository {
   constructor(private readonly prisma: PrismaService) {}
 
+  /**
+   * 상품을 저장한다
+   * @param shopId 매장 ID
+   * @param data 상품 데이터(좌석 타입 포함)
+   * @returns 생성한 상품 ID
+   */
   async createProduct(
     shopId: string,
     data: CreatePeriodProductData | CreateTimeProductData,
@@ -25,6 +37,7 @@ export class ProductRepository {
         amount: data.amount,
         usableDays: data.usableDays,
         isActive: data.isActive,
+        seatType: data.seatType,
         purchasedMinutes:
           data.ticketType === 'TIME' ? data.purchasedMinutes : undefined,
         purchasedDurationDays:
@@ -34,6 +47,61 @@ export class ProductRepository {
     return product.id;
   }
 
+  /**
+   * 수정할 상품을 조회한다(삭제되지 않은 해당 매장 상품만)
+   * @param shopId 매장 ID
+   * @param productId 상품 ID
+   * @returns 상품의 현재 값, 없으면 null
+   */
+  async findProductForUpdate(
+    shopId: string,
+    productId: string,
+  ): Promise<ProductForUpdate | null> {
+    return this.prisma.product.findFirst({
+      where: { id: productId, shopId, deletedAt: null },
+      select: {
+        id: true,
+        name: true,
+        ticketType: true,
+        amount: true,
+        usableDays: true,
+        isActive: true,
+        purchasedMinutes: true,
+        purchasedDurationDays: true,
+        seatType: true,
+      },
+    });
+  }
+
+  /**
+   * 상품을 수정하고 변경 이력을 같은 트랜잭션에서 저장한다
+   * @param productId 상품 ID
+   * @param data 바꿀 필드
+   * @param histories 저장할 변경 이력 행
+   * @returns 없음
+   */
+  async updateProductWithHistories(
+    productId: string,
+    data: UpdatableProductFields,
+    histories: ProductHistoryRow[],
+  ): Promise<void> {
+    await this.prisma.executeTransaction(async (tx) => {
+      // 상품 갱신
+      await tx.product.update({ where: { id: productId }, data });
+
+      // 바뀐 필드마다 이력 1행
+      await tx.productHistory.createMany({
+        data: histories.map((history) => ({ ...history, productId })),
+      });
+    });
+  }
+
+  /**
+   * 매장의 상품 목록을 페이지 단위로 조회한다
+   * @param shopId 매장 ID
+   * @param options 이용권 종류 필터와 페이지 옵션
+   * @returns 상품 목록과 페이지 정보
+   */
   async getProduct(
     shopId: string,
     options: {
@@ -56,6 +124,7 @@ export class ProductRepository {
           purchasedDurationDays: true,
           usableDays: true,
           isActive: true,
+          seatType: true,
           createdAt: true,
         },
         orderBy: [{ [sortBy]: sortOrder }],

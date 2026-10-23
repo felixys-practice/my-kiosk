@@ -102,4 +102,43 @@ describe('validationSchema', () => {
       },
     );
   });
+
+  describe('고정석 선점 유효시간(SEAT_HOLD_MINUTES)', () => {
+    it('미설정 시 기본값 10으로 통과한다', () => {
+      const { error, value } = validationSchema.validate(validEnv, {
+        abortEarly: false,
+      });
+      expect(error).toBeUndefined();
+      expect(value.SEAT_HOLD_MINUTES).toBe(10);
+    });
+
+    it('1 이상의 정수는 통과한다', () => {
+      const { error, value } = validationSchema.validate(
+        { ...validEnv, SEAT_HOLD_MINUTES: 5 },
+        { abortEarly: false },
+      );
+      expect(error).toBeUndefined();
+      expect(value.SEAT_HOLD_MINUTES).toBe(5);
+    });
+
+    it.each([0, -1])('%s(1 미만)는 거부한다', (minutes) => {
+      const { error } = validationSchema.validate(
+        { ...validEnv, SEAT_HOLD_MINUTES: minutes },
+        { abortEarly: false },
+      );
+      expect(
+        error?.details.some((d) => d.path.includes('SEAT_HOLD_MINUTES')),
+      ).toBe(true);
+    });
+
+    it('정수가 아닌 값은 거부한다', () => {
+      const { error } = validationSchema.validate(
+        { ...validEnv, SEAT_HOLD_MINUTES: 1.5 },
+        { abortEarly: false },
+      );
+      expect(
+        error?.details.some((d) => d.path.includes('SEAT_HOLD_MINUTES')),
+      ).toBe(true);
+    });
+  });
 });

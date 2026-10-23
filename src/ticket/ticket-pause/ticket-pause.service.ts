@@ -1,7 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
-import { TicketStatus, TicketType } from '@prisma/client';
+import {
+  SeatReleaseReason,
+  SeatType,
+  TicketStatus,
+  TicketType,
+} from '@prisma/client';
+import { SeatSelectionRequiredError } from 'src/seat-assignment/errors/seat-selection-required.error';
+import { SeatAssignmentService } from 'src/seat-assignment/seat-assignment.service';
 import { TicketPauseRepository } from './ticket-pause.repository';
 import { SessionLifecycleService } from 'src/session-lifecycle/session-lifecycle.service';
 import { DomainBadRequestError, DomainConflictError } from 'src/common/errors';
@@ -13,6 +20,7 @@ export class TicketPauseService {
     private readonly ticketPauseRepository: TicketPauseRepository,
     private readonly sessionLifecycle: SessionLifecycleService,
     @InjectQueue('usage-session') private readonly usageSessionQueue: Queue,
+    private readonly seatAssignmentService: SeatAssignmentService,
   ) {}
 
   /**
@@ -21,6 +29,7 @@ export class TicketPauseService {
    * - 진행 중인 UsageSession이 있으면 SessionLifecycleService를 통해 강제 종료
    * - 시간권: 세션 종료 시 소비 시간을 remainingMinutes에서 차감
    * - 정기권: 세션 종료만 (시간 차감 없음)
+   * - 고정석 이용권: 배정 좌석을 해제한다(재개 시 다시 배정)
    * @param ticketId 정지할 티켓 ID
    * @param pausedBy 정지를 요청한 주체 (userId 또는 'SYSTEM')
    * @param reason 정지 사유 (선택)
@@ -82,11 +91,21 @@ export class TicketPauseService {
           tx,
         );
 
+        // 6. 고정석 이용권이면 배정을 해제한다(정지 중 다른 이용자가 쓸 수 있게, FR-018)
+        if (ticket.seatType === SeatType.FIXED) {
+          await this.seatAssignmentService.releaseByTicket(
+            ticketId,
+            SeatReleaseReason.TICKET_PAUSED,
+            now,
+            tx,
+          );
+        }
+
         return { bullmqJobId: sessionJobId };
       },
     );
 
-    // 6. 트랜잭션 성공 후 BullMQ 자동만료 Job 제거
+    // 7. 트랜잭션 성공 후 BullMQ 자동만료 Job 제거
     //    실패해도 endSession의 멱등 로직이 이중 종료를 방지한다
     if (bullmqJobId) {
       await this.usageSessionQueue.remove(bullmqJobId).catch(() => {});
@@ -103,11 +122,13 @@ export class TicketPauseService {
    * @param ticketId 재개할 티켓 ID
    * @param resumedBy 재개를 요청한 주체 (userId 또는 'SYSTEM')
    * @param reason 재개 사유 (선택)
+   * @param seatId 고정석 이용권이면 다시 배정할 좌석 ID
    */
   async resumeTicket(
     ticketId: string,
     resumedBy: string,
     reason?: string,
+    seatId?: string,
   ): Promise<void> {
     const now = new Date();
 
@@ -132,6 +153,13 @@ export class TicketPauseService {
       if (ticket.status !== TicketStatus.ACTIVE) {
         throw new DomainBadRequestError(
           `재개할 수 없는 상태의 티켓입니다 (현재: ${ticket.status})`,
+        );
+      }
+
+      // 고정석 이용권은 다시 배정할 좌석이 필수다(FR-018)
+      if (ticket.seatType === SeatType.FIXED && !seatId) {
+        throw new SeatSelectionRequiredError(
+          '고정석 이용권은 재개할 때 좌석을 선택해야 합니다',
         );
       }
 
@@ -170,6 +198,15 @@ export class TicketPauseService {
           {
             expiresAt: new Date(ticket.expiresAt.getTime() + pauseDurationMs),
           },
+          tx,
+        );
+      }
+
+      // 6. 고정석 이용권이면 요청한 좌석으로 다시 배정한다(FR-018)
+      if (ticket.seatType === SeatType.FIXED) {
+        await this.seatAssignmentService.assign(
+          { seatId: seatId!, shopId: ticket.shopId, ticketId },
+          now,
           tx,
         );
       }

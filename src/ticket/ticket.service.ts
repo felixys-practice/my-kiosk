@@ -1,6 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { TicketRepository } from './ticket.repository';
-import { TicketStatus, TicketType, UsageSessionStatus } from '@prisma/client';
+import {
+  SeatType,
+  TicketStatus,
+  TicketType,
+  UsageSessionStatus,
+} from '@prisma/client';
 import { differenceInCalendarDays, differenceInMinutes } from 'date-fns';
 import {
   PeriodTicketData,
@@ -30,6 +35,8 @@ type TicketWithRelations = {
   expiresAt: Date | null;
   purchasedDurationDays: number | null;
   purchasedMinutes: number | null;
+  seatType: SeatType;
+  seatAssignments: { seat: { id: string; number: number; name: string } }[];
   usageSessions: {
     startedAt: Date;
     endedAt: Date | null;
@@ -78,6 +85,12 @@ export class TicketService {
     };
   }
 
+  /**
+   * 이용권 조회 결과를 응답 형태로 바꾼다(좌석 타입·배정 좌석 포함)
+   * @param ticket 이용권 조회 결과
+   * @returns 시간권 또는 기간권 응답
+   * @throws Error 시간권에 잔여시간, 기간권에 만료일이 없을 때
+   */
   private toTicketOutData(
     ticket: TicketWithRelations,
   ): TimeTicketOutData | PeriodTicketOutData {
@@ -96,6 +109,8 @@ export class TicketService {
         seatNumber: ticket.usageSessions[0]?.seat.number,
         lastEnteredAt: ticket.usageSessions[0]?.startedAt,
         lastExitedAt: ticket.usageSessions[0]?.endedAt,
+        seatType: ticket.seatType,
+        assignedSeat: ticket.seatAssignments[0]?.seat ?? null,
       } as PeriodTicketOutData;
     } else if (ticket.type === 'TIME') {
       if (ticket.remainingMinutes === null)
@@ -112,6 +127,8 @@ export class TicketService {
         seatNumber: ticket.usageSessions[0]?.seat.number,
         lastEnteredAt: ticket.usageSessions[0]?.startedAt,
         lastExitedAt: ticket.usageSessions[0]?.endedAt,
+        seatType: ticket.seatType,
+        assignedSeat: ticket.seatAssignments[0]?.seat ?? null,
       } as TimeTicketOutData;
     } else {
       // eslint-disable-next-line @typescript-eslint/naming-convention

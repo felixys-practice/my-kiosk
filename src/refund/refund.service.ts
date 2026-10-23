@@ -3,6 +3,7 @@ import {
   PaymentCancelFailureCode,
   PaymentCancelStatus as PrismaPaymentCancelStatus,
   RefundLock,
+  SeatReleaseReason,
   TicketStatus,
   TicketType,
 } from '@prisma/client';
@@ -19,6 +20,8 @@ import {
 } from 'src/common/errors';
 import { TransactionLoggerService } from '../logger/transaction-logger.service';
 import { PgService } from 'src/pg/pg.service';
+import { TransactionClient } from 'src/prisma/prisma.service';
+import { SeatAssignmentService } from 'src/seat-assignment/seat-assignment.service';
 import { PgCancelInquiryResult } from 'src/pg/pg.types';
 import { assertNever, UnhandledCaseError } from '@felix_ys/ts-utils';
 
@@ -42,6 +45,7 @@ export class RefundService {
     private readonly refundRepository: RefundRepository,
     private readonly transactionLoggerService: TransactionLoggerService,
     private readonly pgService: PgService,
+    private readonly seatAssignmentService: SeatAssignmentService,
   ) {}
 
   /**
@@ -94,6 +98,69 @@ export class RefundService {
     return this.processAutoRefund(ticket, payment, userId, idempotencyKey);
   }
 
+  /**
+   * 시스템이 이용권을 자동으로 환불한다(결제 승인 후 좌석을 줄 수 없을 때, research R12-A)
+   * - 이용자 요청이 아니므로 소유자 검사를 하지 않는다
+   * - 미사용 자동 환불 경로(락 획득 → PG 취소 요청)를 그대로 탄다
+   * @param ticketId 이용권 ID
+   * @param reason 자동 취소 사유
+   * @returns 없음
+   * @throws DomainNotFoundError 이용권이 없을 때
+   * @throws DomainConflictError 이미 환불됐거나 사용 이력이 있는 이용권일 때
+   */
+  async refundBySystem(ticketId: string, reason: string): Promise<void> {
+    // 이용권과 결제 정보 조회(기존 refund와 같은 순서로 검증한다)
+    const ticket = await this.refundRepository.getTicketById(ticketId);
+    if (!ticket) {
+      throw new DomainNotFoundError('티켓이 존재하지 않습니다');
+    }
+    if (ticket.status === TicketStatus.REVOKED) {
+      throw new DomainConflictError('이미 환불 처리된 티켓입니다');
+    }
+    const [payment] = ticket.orderItem.order.payments;
+
+    // 사용 이력이 있으면 점주 재량이 필요하므로 시스템이 자동 취소하지 않는다
+    if (!isUnusedTicket(ticket)) {
+      throw new DomainConflictError(
+        '시스템 자동 취소는 미사용 이용권만 가능합니다',
+      );
+    }
+
+    // 결제한 이용자 기준으로 미사용 자동 환불을 진행한다
+    await this.processAutoRefund(
+      ticket,
+      payment,
+      ticket.userId,
+      undefined,
+      reason,
+    );
+  }
+
+  /**
+   * 환불로 소멸된 이용권의 고정석 배정을 해제한다
+   * @param orderItemId 주문 항목 ID
+   * @param now 해제 시각
+   * @param tx 트랜잭션 클라이언트(환불 확정과 같은 트랜잭션)
+   * @returns 없음
+   */
+  private async releaseRevokedTicketSeat(
+    orderItemId: string,
+    now: Date,
+    tx: TransactionClient,
+  ): Promise<void> {
+    const ticketId = await this.refundRepository.findTicketIdByOrderItem(
+      orderItemId,
+      tx,
+    );
+    if (!ticketId) return;
+    await this.seatAssignmentService.releaseByTicket(
+      ticketId,
+      SeatReleaseReason.TICKET_REVOKED,
+      now,
+      tx,
+    );
+  }
+
   // 사용 이력이 있는 건 - 점주 승인 없이는 금액/락을 확정할 수 없으므로
   // 승인 대기 상태의 PaymentCancel만 만들고 멈춘다.
   private async processPendingApproval(
@@ -111,12 +178,23 @@ export class RefundService {
     return { status: 'PENDING_APPROVAL', paymentCancelId: pending.id };
   }
 
-  // 미사용 건 - 재량이 필요 없으므로 이 요청 안에서 락 획득부터 PG 요청까지 처리한다.
+  /**
+   * 미사용 이용권을 자동 환불한다(락 획득 → PG 취소 요청)
+   * - 미사용 건 - 재량이 필요 없으므로 이 요청 안에서 락 획득부터 PG 요청까지 처리한다.
+   * @param ticket 이용권 스냅샷
+   * @param payment 결제
+   * @param userId 환불을 요청한 사용자 ID(시스템 자동 취소는 이용권 소유자)
+   * @param idempotencyKey 멱등 키(선택)
+   * @param reason 취소 사유(시스템 자동 취소 시 기록)
+   * @returns 처리 결과
+   * @throws DomainConflictError 환불 진행 중이거나 이미 환불된 상품일 때
+   */
   private async processAutoRefund(
     ticket: RefundTicketSnapshot,
     payment: { id: string },
     userId: string,
     idempotencyKey?: string,
+    reason?: string,
   ): Promise<RefundResult> {
     // 2️⃣ 낡은 락(만료됐는데 아무도 후속 처리를 안 해서 방치된 락)이 있으면 정리한다.
     const staleLock = await this.acquireStaleLock(ticket.orderItem.id);
@@ -149,6 +227,7 @@ export class RefundService {
       ticket.orderItem.id,
       payment.id,
       idempotencyKey,
+      reason,
     );
 
     // 4️⃣ PG 요청 시도(+실패로깅) - 응답은 완료 콜백 함수에서 처리
@@ -179,12 +258,22 @@ export class RefundService {
     return { status: 'PROCESSED' };
   }
 
-  // 환불 가능 금액을 계산하고 새 깃발(락)과 함께 환불을 생성한다.
-  // 미사용 자동 처리 경로 전용 - 금액은 클라이언트 입력 없이 원가 전액으로 서버가 계산한다.
+  /**
+   * 환불 가능 금액을 계산해 결제 취소 기록과 환불 락을 함께 만든다
+   * - 환불 가능 금액을 계산하고 새 깃발(락)과 함께 환불을 생성한다.
+   * - 미사용 자동 처리 경로 전용 - 금액은 클라이언트 입력 없이 원가 전액으로 서버가 계산한다.
+   * @param orderItemId 주문 항목 ID
+   * @param paymentId 결제 ID
+   * @param idempotencyKey 멱등 키(선택)
+   * @param reason 취소 사유(선택)
+   * @returns 생성한 결제 취소 기록
+   * @throws DomainConflictError 환불 진행 중이거나 이미 환불된 상품일 때
+   */
   private async createRefundWithLock(
     orderItemId: string,
     paymentId: string,
     idempotencyKey?: string,
+    reason?: string,
   ) {
     // 환불 가능 금액 계산 -> 환불 진행 락(트랜잭션으로)
     const { paymentCancel } = await this.refundRepository.runInTransaction(
@@ -219,6 +308,7 @@ export class RefundService {
           new Date(),
           idempotencyKey,
           tx,
+          reason,
         );
 
         await this.refundRepository.createRefundLock(
@@ -369,12 +459,15 @@ export class RefundService {
         // paymentCancel의 상태가 아직 REQUESTED(callback 응답을 받기전)
         // - PG 상태 조회 결과로 업데이트
         if (inquiryResult === PgCancelInquiryResult.SUCCEEDED) {
+          const now = new Date();
           await this.refundRepository.confirmRefundSuccess(
             staleLock.paymentCancelId,
             orderItemId,
-            new Date(),
+            now,
             tx,
           );
+          // 환불로 소멸된 이용권의 고정석 배정을 같은 트랜잭션에서 해제한다(FR-017)
+          await this.releaseRevokedTicketSeat(orderItemId, now, tx);
           await this.refundRepository.deleteRefundLock(
             orderItemId,
             staleLock.paymentCancelId,
@@ -489,6 +582,16 @@ export class RefundService {
   //   clearStaleLock 쪽에서 PG 재조회 결과보다 이미 확정된 상태를 우선 신뢰하는
   //   방식으로 흡수한다(refund.service.ts의 clearStaleLock, PrismaPaymentCancelStatus
   //   !== REQUESTED 분기 참고).
+  /**
+   * PG 환불 결과 콜백을 처리한다
+   * - 성공이면 결제 취소를 확정하고 이용권을 소멸시키며, 같은 트랜잭션에서 고정석 배정을 해제한다(FR-017)
+   * @param success PG 처리 성공 여부
+   * @param paymentCancelId 결제 취소 ID
+   * @param orderItemId 주문 항목 ID
+   * @param refundedAmount PG가 환불한 금액
+   * @param reason 실패 사유(선택)
+   * @returns 없음
+   */
   async callback(
     success: boolean,
     paymentCancelId: string,
@@ -510,14 +613,18 @@ export class RefundService {
     if (success) {
       // 금액 비교 - PG가 실패로 응답한 경우 금액 비교는 의미가 없으므로 성공 시에만 검사한다
       if (refundedAmount === paymentCancel.amount) {
-        await this.refundRepository.runInTransaction((tx) =>
-          this.refundRepository.confirmRefundSuccess(
+        await this.refundRepository.runInTransaction(async (tx) => {
+          const now = new Date();
+          await this.refundRepository.confirmRefundSuccess(
             paymentCancelId,
             orderItemId,
-            new Date(),
+            now,
             tx,
-          ),
-        );
+          );
+
+          // 환불로 소멸된 이용권의 고정석 배정을 같은 트랜잭션에서 해제한다(FR-017)
+          await this.releaseRevokedTicketSeat(orderItemId, now, tx);
+        });
       } else {
         // 잘못된 환불 금액에 대한 처리 - 그대로 성공 처리하지 않고 실패로 확정한다
         // 🔥 관리자가 확인: 상황 자체가 **정상 흐름이 아니라 이상 상황(PG 연동 버그, PG 측 처리 오류)**이기 때문

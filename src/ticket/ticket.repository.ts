@@ -1,5 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { Ticket, TicketStatus, TicketType } from '@prisma/client';
+import {
+  Ticket,
+  TicketStatus,
+  TicketType,
+  SeatAssignmentStatus,
+} from '@prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 import {
   CreateTicketData,
@@ -56,6 +61,12 @@ export class TicketRepository {
     });
   }
 
+  /**
+   * 이용권을 조회한다(좌석 타입·배정 좌석·최근 세션·진행 중 정지 포함)
+   * @param ticketId 이용권 ID
+   * @returns 이용권
+   * @throws Prisma.NotFoundError 이용권이 없을 때
+   */
   async getTicketById(ticketId: string) {
     return await this.prisma.ticket.findUniqueOrThrow({
       where: { id: ticketId },
@@ -70,6 +81,13 @@ export class TicketRepository {
         expiresAt: true,
         purchasedMinutes: true,
         purchasedDurationDays: true,
+        seatType: true,
+        // 확정(ACTIVE)된 지정 좌석(이용권당 최대 1개)
+        seatAssignments: {
+          where: { status: SeatAssignmentStatus.ACTIVE },
+          select: { seat: { select: { id: true, number: true, name: true } } },
+          take: 1,
+        },
         usageSessions: {
           where: { ticketId },
           select: {

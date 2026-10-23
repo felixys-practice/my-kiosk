@@ -1,5 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { TicketStatus, UsageSessionStatus } from '@prisma/client';
+import {
+  SeatReleaseReason,
+  TicketStatus,
+  UsageSessionStatus,
+} from '@prisma/client';
+import { SeatAssignmentService } from 'src/seat-assignment/seat-assignment.service';
 import { TransactionClient } from 'src/prisma/prisma.service';
 import { DomainNotFoundError } from 'src/common/errors';
 
@@ -16,11 +21,13 @@ export type EndSessionResult = {
  *
  * - FOR UPDATE 락으로 동시 종료 방지
  * - 이미 종료된 세션은 멱등 처리
- * - 시간권(TIME)은 소비 시간을 remainingMinutes에서 차감하고, 소진 시 EXHAUSTED로 전이
+ * - 시간권(TIME)은 소비 시간을 remainingMinutes에서 차감하고, 소진 시 EXHAUSTED로 전이하며 고정석 배정을 해제
  * - 정기권(PERIOD)은 세션 상태만 ENDED로 변경 (시간 차감 없음)
  */
 @Injectable()
 export class SessionLifecycleService {
+  constructor(private readonly seatAssignmentService: SeatAssignmentService) {}
+
   /**
    * 세션을 종료한다. 외부 트랜잭션 내에서 호출해야 한다.
    * @param sessionId 종료할 세션 ID
@@ -76,7 +83,7 @@ export class SessionLifecycleService {
         (now.getTime() - session.startedAt.getTime()) / 60000,
       );
 
-      await tx.$executeRaw`
+      const [updated] = await tx.$queryRaw<{ status: TicketStatus }[]>`
         UPDATE tickets
         SET "remaining_minutes" = GREATEST(0, "remaining_minutes" - ${consumedMinutes}),
             status = CASE
@@ -85,7 +92,18 @@ export class SessionLifecycleService {
               ELSE status
             END
         WHERE id = ${session.ticketId}
+        RETURNING status
       `;
+
+      // 소진(EXHAUSTED)으로 바뀌었으면 같은 트랜잭션에서 고정석 배정을 해제한다(FR-017)
+      if (updated?.status === TicketStatus.EXHAUSTED) {
+        await this.seatAssignmentService.releaseByTicket(
+          session.ticketId,
+          SeatReleaseReason.TICKET_EXHAUSTED,
+          now,
+          tx,
+        );
+      }
     }
 
     return {

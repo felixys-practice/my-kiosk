@@ -67,7 +67,18 @@ export class RefundRepository {
     });
   }
 
-  // 자동 처리(REQUESTED) 전용 - 승인 대기 생성은 createPendingApprovalPaymentCancel 참고
+  /**
+   * 결제 취소(환불) 요청 기록을 만든다
+   * - 자동 처리(REQUESTED) 전용 - 승인 대기 생성은 createPendingApprovalPaymentCancel 참고
+   * @param amount 취소 금액
+   * @param paymentId 결제 ID
+   * @param orderItemId 주문 항목 ID
+   * @param requestedAt 요청 시각
+   * @param idempotencyKey 멱등 키(선택)
+   * @param client 트랜잭션 클라이언트(없으면 기본 클라이언트)
+   * @param reason 취소 사유(시스템 자동 취소 시 기록)
+   * @returns 생성한 결제 취소 기록
+   */
   async createPaymentCancel(
     amount: number,
     paymentId: string,
@@ -75,6 +86,7 @@ export class RefundRepository {
     requestedAt: Date,
     idempotencyKey?: string,
     client: TransactionClient | PrismaService = this.prisma,
+    reason?: string, // 취소 사유(시스템 자동 취소 시 기록, 이용자 요청은 기존처럼 비움)
   ) {
     return await client.paymentCancel.create({
       data: {
@@ -83,6 +95,7 @@ export class RefundRepository {
         orderItemId,
         requestedAt,
         idempotencyKey,
+        reason,
         status: PaymentCancelStatus.REQUESTED,
       },
     });
@@ -231,6 +244,23 @@ export class RefundRepository {
         paymentCancelId,
       },
     });
+  }
+
+  /**
+   * 주문 항목으로 발급된 이용권 ID를 조회한다
+   * @param orderItemId 주문 항목 ID
+   * @param tx 트랜잭션 클라이언트
+   * @returns 이용권 ID, 없으면 null
+   */
+  async findTicketIdByOrderItem(
+    orderItemId: string,
+    tx: TransactionClient,
+  ): Promise<string | null> {
+    const ticket = await tx.ticket.findUnique({
+      where: { orderItemId },
+      select: { id: true },
+    });
+    return ticket?.id ?? null;
   }
 
   async getPaymentCancelById(

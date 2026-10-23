@@ -29,4 +29,7 @@ export const validationSchema = Joi.object({
 
   // Idempotency
   IDEMPOTENCY_KEY_TTL_SECONDS: Joi.number().default(600), // 기본값 10분
+
+  // 좌석
+  SEAT_HOLD_MINUTES: Joi.number().integer().min(1).default(10), // 고정석 선점 유효시간(분), 기본값 10분
 });

@@ -1,4 +1,11 @@
-import { TicketStatus, TicketType } from '@prisma/client';
+import { SeatType, TicketStatus, TicketType } from '@prisma/client';
+
+/** 이용권에 지정된 고정석 */
+export interface AssignedSeatOutData {
+  id: string;
+  number: number;
+  name: string;
+}
 
 interface BaseTicketData {
   userId: string;
@@ -29,6 +36,8 @@ export interface TimeTicketOutData {
   seatNumber?: number | null; // 좌석 번호
   lastEnteredAt?: Date; // 입실 시작 시간
   lastExitedAt?: Date; // 마지막 퇴실 시간
+  seatType: SeatType; // 좌석 타입(고정석·자유석)
+  assignedSeat: AssignedSeatOutData | null; // 지정 좌석(자유석이거나 지정이 없으면 null)
 }
 // 정기권 응답 데이터
 export interface PeriodTicketOutData {
@@ -43,6 +52,8 @@ export interface PeriodTicketOutData {
   seatNumber?: number; // 좌석 번호
   lastEnteredAt?: Date; // 입실 시작 시간
   lastExitedAt?: Date; // 마지막 퇴실 시간
+  seatType: SeatType; // 좌석 타입(고정석·자유석)
+  assignedSeat: AssignedSeatOutData | null; // 지정 좌석(자유석이거나 지정이 없으면 null)
 }
 
 // order 도메인 등 금액/만료 상세 정보가 필요 없는 소비처를 위한 최소 요약 데이터
