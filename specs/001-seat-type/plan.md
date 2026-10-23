@@ -76,12 +76,14 @@ prisma/
 └── migrations/<timestamp>_add_seat_type/ # 컬럼 추가(기본값 FREE) + 부분 유일 인덱스 raw SQL
 
 src/
+├── config/                               # SEAT_HOLD_MINUTES(고정석 선점 유효시간, 기본 10분) 설정·검증
 ├── seat/                                 # 좌석 등록·수정 DTO에 type·status, 이용 중·지정 가드, 조회 결과에 type
 ├── seat-assignment/                      # 신규: 좌석 지정(선점·확정·해제·유효성 판정) Service/Repository
 ├── product/                              # 상품 등록 DTO에 seatType, 상품 수정 API(신규) + ProductHistory 기록
 ├── order/                                # 주문 DTO에 seatId, 고정석 검증 + HELD 선점, 주문 취소 API(신규)
 ├── payment/                              # 결제 요청 시 선점 검사, 성공 시 HELD → ACTIVE, 실패 시 해제, 충돌 시 자동 환불 호출(R12)
-├── ticket/
+├── ticket/                               # 이용권 조회 결과에 seatType·assignedSeat
+│   ├── errors/                           # 신규: 이용권 종료·일시정지·변경 없음·없음 오류
 │   ├── ticket-seat/                      # 신규: 이용권 좌석 변경 API + 변경 이력 조회
 │   └── ticket-pause/                     # 일시정지 시 해제, 재개 시 고정석 재지정
 ├── usage-session/                        # 입실 시 좌석 타입·지정 좌석 검증
@@ -91,6 +93,10 @@ src/
 test/
 └── seat-type.e2e-spec.ts                 # 신규 E2E (quickstart 시나리오)
 ```
+
+**오류 클래스**: 거부 사유마다 클라이언트 대응이 다르므로(헌법 VI) 각 모듈의 `errors/` 디렉터리에
+도메인 오류 클래스를 둔다(`seat/`, `seat-assignment/`, `order/`, `product/`, `ticket/`).
+클래스 이름이 응답의 `error.code`가 되며, 사유별 코드는 [contracts/rest-api.md](./contracts/rest-api.md)의 오류 표를 따른다.
 
 **구조 결정**: 기존 단일 NestJS 프로젝트의 도메인 모듈 구조를 따른다.
 좌석 지정은 order·payment·ticket·usage-session·refund가 함께 쓰므로 별도 모듈 `seat-assignment`로 분리해 각 모듈이 명시적으로 import한다(CLAUDE.md: `@Global()`은 Prisma·Redis만).

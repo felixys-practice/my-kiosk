@@ -87,7 +87,8 @@ npm run test:e2e -- --testPathPatterns=seat-type -t "\(QS-n\)"
   - 실행 결과(2026-10-22): `seat-assignment.policy.spec.ts`, `seat-assignment.service.spec.ts` 2개 파일 모두 `Cannot find module`로 실패했다(구현 파일 없음)
   - 미완료로 남은 이유: 실패를 확인한 뒤 기록과 체크를 하지 않은 채 T007~T014를 진행했다
   - 처리: T012·T013 구현이 끝나 같은 조건으로 다시 실행할 수 없으므로, 위 실행 결과를 기록하고 닫는다.
-    이 task는 헌법 v1.3.0 경과 규정의 대상이 아니다. 노리는 사유로 실패하는지는 확인하지 못했다
+    이 task는 헌법 v1.3.0 경과 규정의 대상이 아니다. 노리는 사유로 실패하는지는 확인하지 못했으나,
+    실패 대상인 T004·T005 테스트는 개정 이전에 작성되어 경과 규정 둘째 항목(실패 이유를 소급해 확인하지 않음)에 해당한다
 
 
 ### 기반 구현
@@ -1382,6 +1383,16 @@ QS-16a는 동작 15·16을 거쳐야 통과한다. 동작 15에서 E2E를 작성
   ① 구현: 고정석이고 `seatId`가 없으면 `SeatSelectionRequiredError`
   ② 통과 확인: 단위 단건 통과, 파일 전체 회귀 없음
   - 결과(2026-10-23): 재개 상태 확인 직후(정지 해제·기한 연장 전) 고정석이고 `seatId`가 없으면 `SeatSelectionRequiredError`. 단위 25개 통과, `tsc` 오류 없음
+
+#### 동작 24a. 재개 요청의 재배정 좌석 ID는 UUID여야 한다 — 동작 23 구현으로 함께 통과
+
+`/speckit-analyze` 지적 U2(2026-10-23)에 따라 추가했다. 필드는 T180에서 실패 확인용으로 넣었지만 검증 테스트가 없었다.
+
+- [x] T182a [US4] 작성 + 조건 깨뜨리기:
+  ① 작성: `src/ticket/ticket-pause/dto/resume-ticket.dto.spec.ts`(신규)에 `it('재배정할 좌석 ID가 UUID가 아니면 isUuid 오류다')`
+  ② 조건 깨뜨리기: 단건 통과를 확인한 뒤 `seatId`의 `@IsUUID('4')`를 잠시 지워 실패하는지 확인한다
+  ③ 원복 후 통과 확인: 원복하고 파일 전체·`ticket-pause` 단위 통과. ②에서 실패하지 않으면 멈추고 사용자에게 알린다
+  - 결과(2026-10-23): ① 통과 → ② `@IsUUID` 제거 시 `seatId` 오류 항목 없음(`Received has value: undefined`)으로 실패 → ③ 원복 후 `resume-ticket.dto`·`ticket-pause` 단위 5개 통과
 
 #### 동작 25. 지정할 수 없는 좌석이면 재개를 거부하고 정지를 유지한다 (QS-19) — 동작 23으로 이미 통과
 

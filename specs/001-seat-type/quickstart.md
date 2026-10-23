@@ -37,7 +37,7 @@ npm run build
 | 7 | 이미 지정된 좌석으로 다른 이용자가 주문 | 409 | FR-009, US2-4 |
 | 8 | 같은 좌석으로 두 주문을 동시에 생성 | 한 건만 성공, 나머지 409 | 경계 상황 |
 | 9 | 고정석 주문 후 결제 실패 콜백 → 같은 좌석으로 새 주문 | 새 주문 성공 | R2 |
-| 10 | 자유석 상품을 좌석 없이 주문·결제 | 이용권 `seatType = FREE`, `assignedSeat = null` | FR-008 |
+| 10 | 자유석 **시간권** 상품을 좌석 없이 주문·결제 (활성화 전 기간권은 기존 이용권 조회 오류로 제외) | 이용권 `seatType = FREE`, `assignedSeat = null` | FR-008 |
 | 11 | 고정석 이용권으로 지정 좌석 입실 / 다른 좌석 입실 | 성공 / 400 | FR-011, US3 |
 | 11a | 고정석 이용권으로 자유석 입실 | 400 | FR-011, 경우의 수 표 1 |
 | 11b | 지정 좌석이 없는 고정석 이용권(자동 취소 대기 중)으로 입실 | 400 | FR-011, R12, 경우의 수 표 1 |
@@ -111,11 +111,14 @@ npm run build
 | ACTIVE | 일시정지 | RELEASED (TICKET_PAUSED) | 18 |
 | ACTIVE | 자유석으로 변경 | RELEASED (SEAT_TYPE_CHANGED) | 14, 14a |
 | ACTIVE | 다른 고정석으로 이동 | RELEASED (SEAT_MOVED) + 새 좌석 ACTIVE | 15, 15a |
-| 없음 | 점주가 자유석 → 고정석 변경, 일시정지 재개 | ACTIVE | 13, 13a, 18·19 |
+| 없음 | 점주가 자유석 → 고정석 변경 | ACTIVE | 13, 13a |
+| 없음 | 일시정지 재개 | ACTIVE | 단위 테스트 (`ticket-pause.service.spec.ts`), 재개 실패는 19 |
 | RELEASED | (어떤 일이든) | 바뀌지 않음. 다시 쓸 때는 새 행을 만든다 | 단위 테스트 (`seat-assignment.service.spec.ts`) |
 
 ## 기대 결과 요약
 
 - 위 시나리오가 모두 통과하고, 단위 테스트·E2E·린트·빌드가 성공한다.
+- 거부 시나리오의 E2E는 상태 코드와 함께 `error.code`를 검증한다. 사유별 코드는 [contracts/rest-api.md](./contracts/rest-api.md)의
+  오류 표를 따른다(헌법 VI). DTO 검증 실패(400)는 코드 검증 대상이 아니다.
 - 기존 E2E(`test/app.e2e-spec.ts`, `test/ticket-pause.e2e-spec.ts`)가 회귀 없이 통과한다.
   `test/app.e2e-spec.ts:20`의 기존 타입 오류는 이 기능과 무관한 기존 문제다.
