@@ -19,6 +19,11 @@ description: "좌석 타입(고정석·자유석) 추가 기능의 구현 task �
 완료 상태와 원래 설명을 그대로 두고 다시 수행하지 않으며, 이 task들에서 작성한 테스트의 실패 이유는 소급해 확인하지 않는다.
 T006은 적용 대상이 아니다(처리 내용은 T006 아래 기록).
 
+**함수 이름 변경**(커밋 `266e55d`): 완료된 task의 설명과 기록에 남은 옛 이름은 당시 기록이라 그대로 둔다.
+현재 이름은 `isValidAssignment` → `isOccupyingAssignment`, `getInvalidReleaseReason` → `getExpiredReleaseReason`,
+`findValidBySeat` → `findOccupyingBySeat`, `releaseInvalidHolds` → `releaseEndedHolds`,
+`assertSeatHoldsValid` → `assertSeatHoldsOccupying`이다.
+
 ## 형식: `[ID] [P?] [Story] 설명`
 
 - **[P]**: 동시에 진행 가능(다른 파일, 미완료 task에 의존하지 않음). 사이클 안의 두 task는 서로 의존하므로 [P]를 붙이지 않는다
@@ -1442,6 +1447,7 @@ QS-16a는 동작 15·16을 거쳐야 통과한다. 동작 15에서 E2E를 작성
   - 결과(2026-10-23): quickstart QS 40개(알파벳 번호 포함)가 E2E에 이름 끝 `(QS-n)`으로 정확히 하나씩 있고, 번호 없는 E2E·중복은 없다. 경우의 수 표 1·2의 모든 칸은 해당 QS로 검증된다.
     표 3의 "없음 → 일시정지 재개 → ACTIVE" 칸은 QS "18·19"로 적혀 있지만 QS-18은 일시정지, QS-19는 재개 실패라서, 재개 성공 후 재배정은
     단위 테스트(`ticket-pause.service.spec.ts` 「고정석 이용권을 재개하면 요청한 좌석으로 다시 배정한다」)로만 검증된다(표 규칙은 충족, 표 표기는 부정확)
+    정정(2026-10-23): 커밋 `8d54ba4`에서 quickstart 표 3의 재개 행을 두 행으로 나눠 표기를 바로잡았다
 
 ---
 
