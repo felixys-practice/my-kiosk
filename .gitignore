@@ -60,3 +60,5 @@ logs/
 CLAUDE.md
 AGENTS.md
 .claude
+TEMP.md
+.agents/skills/speckit-*/
