@@ -12,9 +12,10 @@ import { SeatTypeMismatchError } from 'src/seat-assignment/errors/seat-type-mism
 import { TicketSeatUnassignedError } from 'src/seat-assignment/errors/ticket-seat-unassigned.error';
 import { SeatAssignmentService } from 'src/seat-assignment/seat-assignment.service';
 
-const mockExternalApi = async (waitMs: number = 1000) => {
+// TODO: 테스트 용 함수
+const mockExternalApi = async (waitMs: number = 100) => {
   await new Promise((resolve) => setTimeout(resolve, waitMs));
-  if (Math.random() < 0.3) {
+  if (Math.random() < 0.1) {
     return false;
   }
   return true;
