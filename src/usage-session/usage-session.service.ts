@@ -5,7 +5,7 @@ import { TicketRepository } from 'src/ticket/ticket.repository';
 import { addDays, addMinutes } from 'date-fns';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
-import { SortOrder } from './usage-session.types';
+import { SortOrder, FirstEntryTicketUpdate } from './usage-session.types';
 import { withRetry, assertDefined } from '@felix_ys/ts-utils';
 import { NotAssignedSeatError } from 'src/seat-assignment/errors/not-assigned-seat.error';
 import { SeatTypeMismatchError } from 'src/seat-assignment/errors/seat-type-mismatch.error';
@@ -95,18 +95,21 @@ export class UsageSessionService {
       }
     }
 
-    if (ticket.status === 'UNUSED' && ticket.type === 'PERIOD') {
+    // 미사용(UNUSED) 이용권으로 첫 입실하면 이용권에 기록할 값을 만든다(ACTIVE = 첫 입실 이후)
+    // - 기간권: activatedAt과 함께 expiresAt(첫 입실 시각 + 구매 일수)을 기록한다
+    // - 시간권: activatedAt만 기록한다(기한은 결제 때 정한 minuteExpireDeadline을 그대로 쓴다)
+    let firstEntryUpdate: FirstEntryTicketUpdate | undefined;
+    if (ticket.status === 'UNUSED') {
       const now = new Date();
-      ticket.activatedAt = now;
-      ticket.expiresAt = addDays(now, ticket.purchasedDurationDays!);
+      firstEntryUpdate = { activatedAt: now };
+      if (ticket.type === 'PERIOD') {
+        firstEntryUpdate.expiresAt = addDays(
+          now,
+          ticket.purchasedDurationDays!,
+        );
+        ticket.expiresAt = firstEntryUpdate.expiresAt;
+      }
     }
-
-    let updateTicketData:
-      | {
-          activatedAt: Date;
-          expiresAt: Date;
-        }
-      | undefined;
 
     let plannedEndAt: Date;
 
@@ -122,17 +125,7 @@ export class UsageSessionService {
       plannedEndAt = addMinutes(new Date(), ticket.remainingMinutes);
     }
 
-    if (ticket.status === 'UNUSED' && ticket.type === 'PERIOD') {
-      const now = new Date();
-      ticket.activatedAt = now;
-      ticket.expiresAt = addDays(now, ticket.purchasedDurationDays!);
-      updateTicketData = {
-        activatedAt: now,
-        expiresAt: ticket.expiresAt,
-      };
-    }
-
-    // Step 1. 세션 생성 (정기권 첫 입장이면 티켓 활성화도 같은 트랜잭션)
+    // Step 1. 세션 생성 (첫 입실이면 이용권 UNUSED → ACTIVE 변경도 같은 트랜잭션)
     const sessionId = await this.repository.createSession(
       ticketId,
       shopId,
@@ -140,7 +133,7 @@ export class UsageSessionService {
       userId,
       plannedEndAt,
       new Date(),
-      updateTicketData,
+      firstEntryUpdate,
       ticket.seatType === SeatType.FIXED
         ? async (tx) => {
             // 검증 이후 배정이 바뀌었으면(좌석 이동·해제) 입실하지 않고 롤백한다

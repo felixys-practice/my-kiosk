@@ -10,6 +10,7 @@ import { PrismaService, TransactionClient } from 'src/prisma/prisma.service';
 import { SeatAlreadyOccupiedError } from './errors/seat-already-occupied.error';
 import { JobRegistrationFailedError } from './errors/job-registration-failed.error';
 import { SessionLifecycleService } from 'src/session-lifecycle/session-lifecycle.service';
+import { FirstEntryTicketUpdate } from './usage-session.types';
 
 @Injectable()
 export class UsageSessionRepository {
@@ -19,14 +20,14 @@ export class UsageSessionRepository {
   ) {}
 
   /**
-   * 이용 세션을 만든다(좌석 이용 가능 확인·기간권 첫 활성화 포함)
+   * 이용 세션을 만든다(좌석 이용 가능 확인, 첫 입실이면 이용권 UNUSED → ACTIVE 변경 포함)
    * @param ticketId 이용권 ID
    * @param shopId 매장 ID
    * @param seatId 좌석 ID
    * @param userId 이용자 ID
    * @param plannedEndAt 자동 종료 예정 시각
    * @param startedAt 시작 시각
-   * @param updatePeriodTicketData 기간권 첫 입실이면 활성화 데이터
+   * @param firstEntryUpdate 미사용 이용권의 첫 입실이면 이용권에 기록할 값(activatedAt, 기간권은 expiresAt)
    * @param beforeCreate 같은 트랜잭션에서 세션 생성 전에 실행할 확인
    * @returns 생성한 세션 ID
    * @throws SeatAlreadyOccupiedError 좌석이 이용 중이거나 이용 불가일 때
@@ -38,10 +39,7 @@ export class UsageSessionRepository {
     userId: string,
     plannedEndAt: Date, // ⭐️ 남은 시간
     startedAt: Date,
-    updatePeriodTicketData?: {
-      activatedAt: Date; // 첫 입장(활성화) 시각
-      expiresAt: Date; // ⭐️ 정기권 실제 만료 시각(activatedAt + purchasedDurationDays)
-    },
+    firstEntryUpdate?: FirstEntryTicketUpdate,
     beforeCreate?: (tx: TransactionClient) => Promise<void>, // 같은 트랜잭션에서 세션 생성 전에 실행할 확인(서비스가 판단)
   ): Promise<string> {
     return await this.prisma.executeTransaction(async (tx) => {
@@ -62,8 +60,8 @@ export class UsageSessionRepository {
         throw new SeatAlreadyOccupiedError(seatId);
       }
 
-      // Step 2. 미사용 기간권 업데이트
-      if (updatePeriodTicketData) {
+      // Step 2. 첫 입실이면 이용권을 UNUSED → ACTIVE로 바꾼다 (UNUSED 조건부 — 이미 ACTIVE면 P2025로 덮어쓰지 않는다)
+      if (firstEntryUpdate) {
         await tx.ticket.update({
           where: {
             id: ticketId,
@@ -71,8 +69,11 @@ export class UsageSessionRepository {
           },
           data: {
             status: TicketStatus.ACTIVE,
-            activatedAt: updatePeriodTicketData.activatedAt,
-            expiresAt: updatePeriodTicketData.expiresAt,
+            activatedAt: firstEntryUpdate.activatedAt,
+            // 시간권은 만료 시각이 없으므로 넘어온 경우에만 설정한다
+            ...(firstEntryUpdate.expiresAt && {
+              expiresAt: firstEntryUpdate.expiresAt,
+            }),
           },
         });
       }

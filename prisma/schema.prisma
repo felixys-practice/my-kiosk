@@ -201,7 +201,7 @@ enum TicketType {
 
 enum TicketStatus {
   UNUSED // 미사용 (시간권: 미사용, 정기권: 미활성화)
-  ACTIVE // 사용 중 (정기권 활성화됨)
+  ACTIVE // 이용 시작됨 (첫 입실 이후, 시간권·정기권 공통)
   EXPIRED // 만료 (기간 초과)
   EXHAUSTED // 소진 (시간권 분 다 씀)
   REVOKED // 관리자 강제 소멸

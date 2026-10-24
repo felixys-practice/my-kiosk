@@ -114,7 +114,7 @@ describe('UsageSessionService', () => {
     });
 
     it('고정석 이용권으로 배정 좌석에 입실하면 세션을 만든다', async () => {
-      // 외부 API 스텁(30% 실패)이 항상 성공하도록 고정한다
+      // 외부 API 스텁(무작위 실패)이 항상 성공하도록 고정한다
       jest.spyOn(Math, 'random').mockReturnValue(0.99);
       ticketRepository.getTicketById.mockResolvedValue(
         timeTicket(SeatType.FIXED, 'seat-assigned'),
@@ -174,8 +174,68 @@ describe('UsageSessionService', () => {
       );
     }, 10000);
 
+    it('미사용 기간권으로 처음 입실하면 activatedAt과 expiresAt을 함께 넘긴다', async () => {
+      // 외부 API 스텁(무작위 실패)이 항상 성공하도록 고정한다
+      jest.spyOn(Math, 'random').mockReturnValue(0.99);
+      ticketRepository.getTicketById.mockResolvedValue({
+        ...timeTicket(SeatType.FREE),
+        type: TicketType.PERIOD,
+        minuteExpireDeadline: null,
+        remainingMinutes: null,
+        purchasedMinutes: null,
+        purchasedDurationDays: 30,
+      });
+      repository.findSeatType.mockResolvedValue(SeatType.FREE);
+
+      await service.createSession('ticket-1', shopId, 'seat-free', userId);
+
+      // repository createSession의 7번째 인자: activatedAt(첫 입실 시각)과 30일 뒤 expiresAt
+      const firstEntryUpdate = repository.createSession.mock.calls[0][6];
+      expect(firstEntryUpdate?.activatedAt).toBeInstanceOf(Date);
+      expect(firstEntryUpdate?.expiresAt).toBeInstanceOf(Date);
+      expect(
+        (firstEntryUpdate?.expiresAt?.getTime() ?? 0) -
+          (firstEntryUpdate?.activatedAt.getTime() ?? 0),
+      ).toBe(30 * 24 * 60 * 60 * 1000);
+      jest.restoreAllMocks();
+    }, 10000);
+
+    it('미사용 시간권으로 처음 입실하면 activatedAt만 넘기고 expiresAt은 넘기지 않는다', async () => {
+      // 외부 API 스텁(무작위 실패)이 항상 성공하도록 고정한다
+      jest.spyOn(Math, 'random').mockReturnValue(0.99);
+      ticketRepository.getTicketById.mockResolvedValue(
+        timeTicket(SeatType.FREE),
+      );
+      repository.findSeatType.mockResolvedValue(SeatType.FREE);
+
+      await service.createSession('ticket-1', shopId, 'seat-free', userId);
+
+      // 시간권 기한(minuteExpireDeadline)은 결제 때 정해지므로 첫 입실 때 expiresAt을 계산하지 않는다
+      const firstEntryUpdate = repository.createSession.mock.calls[0][6];
+      expect(firstEntryUpdate?.activatedAt).toBeInstanceOf(Date);
+      expect(firstEntryUpdate).not.toHaveProperty('expiresAt');
+      jest.restoreAllMocks();
+    }, 10000);
+
+    it('이미 ACTIVE인 시간권으로 다시 입실하면 7번째 인자를 넘기지 않는다', async () => {
+      // 외부 API 스텁(무작위 실패)이 항상 성공하도록 고정한다
+      jest.spyOn(Math, 'random').mockReturnValue(0.99);
+      ticketRepository.getTicketById.mockResolvedValue({
+        ...timeTicket(SeatType.FREE),
+        status: TicketStatus.ACTIVE,
+        activatedAt: new Date('2026-10-20T00:00:00Z'),
+      });
+      repository.findSeatType.mockResolvedValue(SeatType.FREE);
+
+      await service.createSession('ticket-1', shopId, 'seat-free', userId);
+
+      // 첫 입실 시각(activatedAt)을 덮어쓰지 않는다
+      expect(repository.createSession.mock.calls[0][6]).toBeUndefined();
+      jest.restoreAllMocks();
+    }, 10000);
+
     it('자유석 이용권으로 자유석에 입실하면 세션을 만든다', async () => {
-      // 외부 API 스텁(30% 실패)이 항상 성공하도록 고정한다
+      // 외부 API 스텁(무작위 실패)이 항상 성공하도록 고정한다
       jest.spyOn(Math, 'random').mockReturnValue(0.99);
       ticketRepository.getTicketById.mockResolvedValue(
         timeTicket(SeatType.FREE),

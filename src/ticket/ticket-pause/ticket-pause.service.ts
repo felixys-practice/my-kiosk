@@ -50,7 +50,8 @@ export class TicketPauseService {
         );
 
         // 2. 정지 가능 상태 검증
-        // > UNUSED 상태에서는 minuteExpireDeadline도 expiresAt도 아직 설정되지 않으므로, 재개 시 연장할 기한 자체가 없으므로 ACTIVE 만
+        // > ACTIVE = 첫 입실 이후. 입실 전(UNUSED) 이용권은 정지 대상이 아니다
+        // > (기간권은 UNUSED일 때 expiresAt이 없어 재개 시 연장할 기한도 없다. 시간권은 결제 때 minuteExpireDeadline이 정해진다)
         if (ticket.status !== TicketStatus.ACTIVE) {
           throw new DomainBadRequestError(
             `정지할 수 없는 상태의 티켓입니다 (현재: ${ticket.status})`,
