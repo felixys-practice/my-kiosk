@@ -33,6 +33,22 @@
       },
       "registered_skills": [],
       "installed_at": "2026-10-24T11:17:31.914160+00:00"
+    },
+    "product": {
+      "version": "2.2.0",
+      "source": "local",
+      "manifest_hash": "sha256:dbcb967a3d8f1046c1e8db81266d4fca22baed95a33ada22f7d49e83e538eb1d",
+      "enabled": true,
+      "priority": 10,
+      "registered_commands": {
+        "claude": [
+          "speckit.product.brief",
+          "speckit.product.plan",
+          "speckit.product.design"
+        ]
+      },
+      "registered_skills": [],
+      "installed_at": "2026-10-25T03:00:30.689726+00:00"
     }
   }
 }

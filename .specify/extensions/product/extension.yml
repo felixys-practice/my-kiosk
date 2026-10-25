@@ -1,0 +1,63 @@
+schema_version: "1.0"
+
+extension:
+  id: product
+  name: "Product Spec Extension"
+  version: "2.2.0"
+  description: "Generates PRFAQ, Lean PRD, stakeholder summaries, and technical designs from engineering specs."
+  author: d0whc3r
+  repository: https://github.com/d0whc3r/spec-kit-product
+  homepage: https://d0whc3r.github.io/spec-kit-product/
+  license: MIT
+  category: docs
+  effect: read-write
+
+requires:
+  speckit_version: ">=0.12.17"
+
+provides:
+  commands:
+    - name: speckit.product.brief
+      file: commands/speckit.product.brief.md
+      description: "Generate product/00-info.md and product/10-spec.md together from the current feature's spec.md, then update the shared quality checklist"
+    - name: speckit.product.plan
+      file: commands/speckit.product.plan.md
+      description: "Generate a high-level, product-oriented plan from the current feature's plan.md"
+    - name: speckit.product.design
+      file: commands/speckit.product.design.md
+      description: "Generate a high-level technical design document from the current feature's plan.md and spec.md, aimed at tech leads and senior developers"
+
+hooks:
+  after_specify:
+    command: speckit.product.brief
+    optional: true
+    prompt: "Generate the product brief (product/00-info.md + product/10-spec.md) from the new spec.md?"
+    description: "Generate product/00-info.md and product/10-spec.md from spec.md (recommended first artifacts)"
+  after_clarify:
+    command: speckit.product.brief
+    optional: true
+    prompt: "Regenerate the product brief after clarification?"
+    description: "Update product/00-info.md and product/10-spec.md from the clarified spec.md"
+  after_plan:
+    - command: speckit.product.plan
+      optional: true
+      priority: 10
+      prompt: "Generate the product-facing plan product/20-plan.md from plan.md?"
+      description: "Generate product/20-plan.md from plan.md"
+    - command: speckit.product.design
+      optional: true
+      priority: 20
+      prompt: "Generate the technical design product/30-design.md from plan.md, research.md, and contracts/?"
+      description: "Generate product/30-design.md from plan.md, spec.md, and the optional plan outputs (research.md, data-model.md, contracts/)"
+
+tags:
+  - documentation
+  - jtbd
+  - lean-prd
+  - planning
+  - prd
+  - prfaq
+  - product
+  - product-management
+  - stakeholder
+  - technical-design

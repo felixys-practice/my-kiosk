@@ -1,5 +1,6 @@
 installed:
 - bug
+- product
 - tdd
 settings:
   auto_execute_hooks: true
@@ -35,4 +36,44 @@ hooks:
     prompt: Audit TDD discipline and test strength for this feature?
     description: 'Write specs/<feature>/tdd/verification.md: test-first evidence,
       test-smell rubric, mutation results, and acceptance-criteria coverage'
+    condition: null
+  after_specify:
+  - extension: product
+    command: speckit.product.brief
+    enabled: true
+    optional: true
+    priority: 10
+    prompt: Generate the product brief (product/00-info.md + product/10-spec.md) from
+      the new spec.md?
+    description: Generate product/00-info.md and product/10-spec.md from spec.md (recommended
+      first artifacts)
+    condition: null
+  after_clarify:
+  - extension: product
+    command: speckit.product.brief
+    enabled: true
+    optional: true
+    priority: 10
+    prompt: Regenerate the product brief after clarification?
+    description: Update product/00-info.md and product/10-spec.md from the clarified
+      spec.md
+    condition: null
+  after_plan:
+  - extension: product
+    command: speckit.product.plan
+    enabled: true
+    optional: true
+    priority: 10
+    prompt: Generate the product-facing plan product/20-plan.md from plan.md?
+    description: Generate product/20-plan.md from plan.md
+    condition: null
+  - extension: product
+    command: speckit.product.design
+    enabled: true
+    optional: true
+    priority: 20
+    prompt: Generate the technical design product/30-design.md from plan.md, research.md,
+      and contracts/?
+    description: Generate product/30-design.md from plan.md, spec.md, and the optional
+      plan outputs (research.md, data-model.md, contracts/)
     condition: null
