@@ -316,5 +316,19 @@ describe('validationSchema', () => {
         )?.type,
       ).toBe('number.min');
     });
+
+    it('REFUND_QUERY_INTERVAL_SECONDS가 SWEEP+TIMEOUT과 같으면 검증을 통과한다', () => {
+      const { error } = validationSchema.validate(
+        {
+          ...validEnv,
+          REFUND_SWEEP_INTERVAL_SECONDS: 5,
+          REFUND_PG_TIMEOUT_SECONDS: 10,
+          REFUND_QUERY_INTERVAL_SECONDS: 15,
+        },
+        { abortEarly: false },
+      );
+
+      expect(error).toBeUndefined();
+    });
   });
 });
