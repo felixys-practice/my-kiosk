@@ -39,6 +39,15 @@ export class PgService {
     ) {
       return { result: 'NOT_FOUND', authoritative: true };
     }
+
+    // 취소 성공
+    if (response.httpStatus === 200 && response.body?.status === 'SUCCEEDED') {
+      return {
+        result: 'SUCCEEDED',
+        pgTransactionId: response.body.pgTransactionId!,
+        cancelledAmount: response.body.cancelledAmount!,
+      };
+    }
     return {
       result: 'QUERY_ERROR',
       reason: `판단할 수 없는 PG 조회 응답(HTTP ${response.httpStatus})`,
