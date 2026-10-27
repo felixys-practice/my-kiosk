@@ -235,9 +235,21 @@ describe('validationSchema', () => {
       );
     });
 
-    it.each(positiveIntegerKeys)('%s=1이면 검증을 통과한다', (key) => {
+    // 처리 기한은 PG 응답 제한(최소 1)보다 커야 하고, 정상 재조회 간격은 탐색 주기+응답 제한(최소 2) 이상이어야 하므로
+    // 두 설정은 1이 될 수 없다 (API 계약 §8). 하한은 설정 간 관계 검증에서 확인한다
+    const keysAllowingOne = positiveIntegerKeys.filter(
+      (key) =>
+        key !== 'REFUND_WORK_LEASE_SECONDS' &&
+        key !== 'REFUND_QUERY_INTERVAL_SECONDS',
+    );
+    // 조회 간격 상한은 첫 재조회 간격 이상이어야 하므로 1을 확인할 때 첫 간격도 1로 둔다
+    const companionsForOne: Record<string, Record<string, number>> = {
+      REFUND_QUERY_BACKOFF_MAX_SECONDS: { REFUND_QUERY_BACKOFF_SECONDS: 1 },
+    };
+
+    it.each(keysAllowingOne)('%s=1이면 검증을 통과한다', (key) => {
       const { error } = validationSchema.validate(
-        { ...validEnv, [key]: 1 },
+        { ...validEnv, ...companionsForOne[key], [key]: 1 },
         { abortEarly: false },
       );
 
