@@ -224,5 +224,17 @@ describe('환불 저장 모델 DB 제약', () => {
         }),
       ).rejects.toThrow(/refunds_paid_amount_check/);
     });
+
+    it('확정된 환불의 지급 상태가 NOT_APPLICABLE이면 저장이 실패한다', async () => {
+      const target = await createPaidItem();
+
+      await expect(
+        prisma.refund.create({
+          data: acceptedRefund(target, {
+            payoutStatus: RefundPayoutStatus.NOT_APPLICABLE,
+          }),
+        }),
+      ).rejects.toThrow(/refunds_not_applicable_legacy_check/);
+    });
   });
 });

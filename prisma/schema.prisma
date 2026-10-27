@@ -786,6 +786,7 @@ model Refund {
   // NOTE: CHECK 제약 (raw migration으로 관리)
   // - refunds_amount_check: amount >= 0
   // - refunds_paid_amount_check: paid_amount >= 0
+  // - refunds_not_applicable_legacy_check: payout_status='NOT_APPLICABLE'은 decision_status='LEGACY_REJECTED'만
 
   @@index([paymentId])
   @@index([orderItemId])
