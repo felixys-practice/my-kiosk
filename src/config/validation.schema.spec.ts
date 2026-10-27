@@ -347,5 +347,18 @@ describe('validationSchema', () => {
         )?.type,
       ).toBe('number.min');
     });
+
+    it('REFUND_QUERY_BACKOFF_MAX_SECONDS가 REFUND_QUERY_BACKOFF_SECONDS와 같으면 검증을 통과한다', () => {
+      const { error } = validationSchema.validate(
+        {
+          ...validEnv,
+          REFUND_QUERY_BACKOFF_SECONDS: 15,
+          REFUND_QUERY_BACKOFF_MAX_SECONDS: 15,
+        },
+        { abortEarly: false },
+      );
+
+      expect(error).toBeUndefined();
+    });
   });
 });
