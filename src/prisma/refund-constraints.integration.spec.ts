@@ -406,5 +406,15 @@ describe('환불 저장 모델 DB 제약', () => {
         }),
       ).rejects.toMatchObject({ code: uniqueViolation });
     });
+
+    it('PG가 확인한 실제 취소액이 -1이면 저장이 실패한다', async () => {
+      const refund = await createAcceptedRefund();
+
+      await expect(
+        prisma.paymentCancel.create({
+          data: paymentCancelAttempt(refund, { actualAmount: -1 }),
+        }),
+      ).rejects.toThrow(/payment_cancels_actual_amount_check/);
+    });
   });
 });

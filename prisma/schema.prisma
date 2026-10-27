@@ -500,6 +500,8 @@ model PaymentCancel {
   ledger      Ledger? // SUCCEEDED 확정 시 생성되는 원장 레코드(1:1 — 멱등키로 1건만 허용)
   // NOTE: Partial Unique Index (raw migration으로 관리)
   // - payment_cancels_refund_id_active_key: (refund_id) WHERE status IN ('REQUESTED','QUERY_FAILED')
+  // NOTE: CHECK 제약 (raw migration으로 관리)
+  // - payment_cancels_actual_amount_check: actual_amount >= 0
 
   @@unique([refundId, attemptNumber]) // 환불 안의 시도 번호는 중복 불가
   @@index([paymentId])
