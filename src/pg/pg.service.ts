@@ -59,6 +59,11 @@ export class PgService {
       };
     }
 
+    // PG가 해당 요청을 거절함
+    if (response.httpStatus === 200 && body?.status === 'REJECTED') {
+      return { result: 'REJECTED', reason: body.reason ?? '' };
+    }
+
     // 판단할 수 없는 응답은 보낸 뒤 결과를 모르는 것으로 보고 조회로 확인한다
     return {
       result: 'UNKNOWN',

@@ -222,5 +222,18 @@ describe('PgService', () => {
         cancelledAmount: 10000,
       });
     });
+
+    it('PG가 거절한 응답은 사유와 함께 REJECTED로 분류된다', async () => {
+      client.sendResponse = () =>
+        Promise.resolve({
+          httpStatus: 200,
+          body: { status: 'REJECTED', reason: '취소 가능 기간 경과' },
+        });
+
+      await expect(service.sendCancel(sendRequest)).resolves.toEqual({
+        result: 'REJECTED',
+        reason: '취소 가능 기간 경과',
+      });
+    });
   });
 });
