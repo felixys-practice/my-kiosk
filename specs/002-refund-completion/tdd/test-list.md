@@ -208,10 +208,10 @@ suite_baseline: green
 | U298 | 최초 응답 저장이 실패하면 같은 트랜잭션의 처리(환불 확정)도 커밋되지 않고, 같은 키의 다음 요청이 처리될 수 있다 (Phase 2 검수 R4) | FR-041 | example | DONE | `src/refund/refund-idempotency.service.spec.ts` |
 | U299 | 처리 기한이 지난 처리 중 기록은 같은 본문의 다음 요청이 이어받아 처리한다(처리와 응답 저장이 한 트랜잭션이라 이전 처리가 커밋되지 않았음이 보장됨) (Phase 2 검수 R4) | FR-041 | example | DONE | `src/refund/refund-idempotency.service.spec.ts` |
 | U300 | 처리에 성공하면 최초 응답과 만든 환불이 처리와 같은 트랜잭션에서 기록된다 (Phase 2 검수 R4) | FR-041 | example | DROPPED | U298 테스트가 같은 내용(성공 시 환불·응답 함께 커밋, 실패 시 함께 미커밋)을 확인 |
-| U301 | 처리 트랜잭션을 시작하기 전에 멈췄던 요청 A의 기록을 기한 경과 후 B가 이어받아 성공하면, 늦게 재개한 A의 처리는 커밋되지 않고 B의 완료 기록과 최초 응답이 보존된다(같은 키 C는 B 응답을 재생) (Phase 2 재검수 P1) | FR-041 | example | PENDING | |
-| U302 | 처리 트랜잭션 안에서 처리 중인 요청의 기록은 기한이 지나도 다른 요청이 이어받지 못한다(기한 경과를 이전 작업 종료의 증거로 쓰지 않음) (Phase 2 재검수 P1) | FR-041 | example | PENDING | |
-| U303 | 기한이 지난 같은 기록을 두 요청이 동시에 이어받으려 하면 하나만 처리한다 (Phase 2 재검수 P1) | FR-041 | example | PENDING | |
-| U304 | (실제 DB) 담당 토큰이 다른 완료·정리는 기록을 바꾸거나 지우지 못하고, 처리 트랜잭션이 잡은 기록의 이어받기는 그 트랜잭션이 끝날 때까지 기다린 뒤 실패한다 (Phase 2 재검수 P1) | FR-041 | example | PENDING | |
+| U301 | 처리 트랜잭션을 시작하기 전에 멈췄던 요청 A의 기록을 기한 경과 후 B가 이어받아 성공하면, 늦게 재개한 A의 처리는 커밋되지 않고 B의 완료 기록과 최초 응답이 보존된다(같은 키 C는 B 응답을 재생) (Phase 2 재검수 P1) | FR-041 | example | DONE | `src/refund/refund-idempotency.service.spec.ts` |
+| U302 | 처리 트랜잭션 안에서 처리 중인 요청의 기록은 기한이 지나도 다른 요청이 이어받지 못한다(기한 경과를 이전 작업 종료의 증거로 쓰지 않음) (Phase 2 재검수 P1) | FR-041 | example | DONE | `src/refund/refund-idempotency.service.spec.ts` |
+| U303 | 기한이 지난 같은 기록을 두 요청이 동시에 이어받으려 하면 하나만 처리한다 (Phase 2 재검수 P1) | FR-041 | example | DONE | `src/refund/refund-idempotency.service.spec.ts` |
+| U304 | (실제 DB) 담당 토큰이 다른 완료·정리는 기록을 바꾸거나 지우지 못하고, 처리 트랜잭션이 잡은 기록의 이어받기는 그 트랜잭션이 끝날 때까지 기다린 뒤 실패한다 (Phase 2 재검수 P1) | FR-041 | example | DONE | `src/refund/refund-idempotency.repository.integration.spec.ts` |
 
 ### `src/refund/refund-idempotency.service.ts`
 
