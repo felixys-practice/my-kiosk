@@ -18,6 +18,7 @@ Table user {
   ticketSeatChanges ticket_seat_changes [not null]
   requestedRefunds refunds [not null]
   reviewedRefunds refunds [not null]
+  requestedPaymentCancels payment_cancels [not null]
   createdAt DateTime [default: `now()`, not null]
   updatedAt DateTime [not null]
 }
@@ -193,6 +194,7 @@ Table payments {
   status PaymentStatus [not null, default: 'PENDING']
   orderId String [not null]
   amount Int [not null]
+  approvedAmount Int
   van VanType
   pgTransactionId String [unique]
   requestedAt DateTime
@@ -219,6 +221,27 @@ Table payment_cancels {
   requestedAt DateTime [not null]
   cancelledAt DateTime
   failedAt DateTime
+  refundId String
+  attemptNumber Int
+  actualAmount Int
+  resendCount Int [not null, default: 0]
+  manualResendCount Int [not null, default: 0]
+  inquiryCount Int [not null, default: 0]
+  inquiryFailureCount Int [not null, default: 0]
+  lastInquiryAt DateTime
+  nextInquiryAt DateTime
+  lastInquiryError String
+  queryFailedAt DateTime
+  recoveryGeneration Int [not null, default: 0]
+  lastSendAttemptAt DateTime
+  sendAttemptCount Int [not null, default: 0]
+  claimToken String
+  claimUntil DateTime
+  requestedById String
+  retryReason String
+  updatedAt DateTime [default: `now()`, not null]
+  refund refunds
+  requestedBy user
   payment payments [not null]
   orderItemId String [not null]
   orderItem order_items [not null]
@@ -397,6 +420,7 @@ Table refunds {
   requestedBy user
   reviewedBy user
   endedSession usage_sessions
+  paymentCancels payment_cancels [not null]
   createdAt DateTime [default: `now()`, not null]
   updatedAt DateTime [not null]
 }
@@ -493,6 +517,7 @@ Enum PaymentStatus {
 
 Enum PaymentCancelStatus {
   REQUESTED
+  QUERY_FAILED
   PENDING_APPROVAL
   SUCCEEDED
   FAILED
@@ -501,6 +526,9 @@ Enum PaymentCancelStatus {
 Enum PaymentCancelFailureCode {
   AMOUNT_MISMATCH
   PG_NOT_REACHED
+  SEND_FAILED
+  PG_REJECTED
+  RETRY_EXHAUSTED
 }
 
 Enum UsageSessionStatus {
@@ -579,6 +607,10 @@ Ref: order_items.orderId > orders.id
 
 Ref: payments.orderId > orders.id
 
+Ref: payment_cancels.refundId > refunds.id [delete: Restrict]
+
+Ref: payment_cancels.requestedById > user.id [delete: Restrict]
+
 Ref: payment_cancels.paymentId > payments.id
 
 Ref: payment_cancels.orderItemId > order_items.id
@@ -623,10 +655,10 @@ Ref: ticket_seat_changes.changedBy > user.id
 
 Ref: refunds.paymentId > payments.id
 
-Ref: refunds.orderItemId > order_items.id
+Ref: refunds.orderItemId > order_items.id [delete: Restrict]
 
-Ref: refunds.requestedById > user.id
+Ref: refunds.requestedById > user.id [delete: Restrict]
 
-Ref: refunds.reviewedById > user.id
+Ref: refunds.reviewedById > user.id [delete: Restrict]
 
-Ref: refunds.endedSessionId > usage_sessions.id
+Ref: refunds.endedSessionId > usage_sessions.id [delete: Restrict]

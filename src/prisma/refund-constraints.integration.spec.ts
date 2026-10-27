@@ -2,6 +2,7 @@
 import 'dotenv/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import {
+  PaymentCancelStatus,
   PaymentType,
   Prisma,
   RefundDecisionStatus,
@@ -100,6 +101,42 @@ describe('환불 저장 모델 DB 제약', () => {
     };
   }
 
+  /**
+   * 새 결제·주문 항목에 확정된 상품 대상 환불을 만든다
+   * @returns 환불과 그 결제·주문 항목 ID
+   */
+  async function createAcceptedRefund(): Promise<{
+    refundId: string;
+    paymentId: string;
+    orderItemId: string;
+  }> {
+    const target = await createPaidItem();
+    const refund = await prisma.refund.create({ data: acceptedRefund(target) });
+    return { refundId: refund.id, ...target };
+  }
+
+  /**
+   * 환불 아래의 PG 취소 요청 저장 값을 만든다
+   * @param refund 소속 환불과 그 결제·주문 항목
+   * @param overrides 바꿀 필드
+   * @returns PaymentCancel 생성 데이터
+   */
+  function paymentCancelAttempt(
+    refund: { refundId: string; paymentId: string; orderItemId: string },
+    overrides: Partial<Prisma.PaymentCancelUncheckedCreateInput> = {},
+  ): Prisma.PaymentCancelUncheckedCreateInput {
+    return {
+      refundId: refund.refundId,
+      paymentId: refund.paymentId,
+      orderItemId: refund.orderItemId,
+      attemptNumber: 1,
+      amount: 10000,
+      status: PaymentCancelStatus.REQUESTED,
+      requestedAt: new Date(),
+      ...overrides,
+    };
+  }
+
   beforeAll(async () => {
     const module: TestingModule = await Test.createTestingModule({
       imports: [PrismaModule],
@@ -136,6 +173,7 @@ describe('환불 저장 모델 DB 제약', () => {
   afterAll(async () => {
     // FK 역순으로 자기 데이터만 지운다
     const byOrder = { orderId: { in: orderIds } };
+    await prisma.paymentCancel.deleteMany({ where: { payment: byOrder } });
     await prisma.refund.deleteMany({ where: { payment: byOrder } });
     await prisma.payment.deleteMany({ where: byOrder });
     await prisma.orderItem.deleteMany({ where: byOrder });
@@ -307,6 +345,24 @@ describe('환불 저장 모델 DB 제약', () => {
           data: acceptedRefund(target, { acceptedAt: null }),
         }),
       ).rejects.toThrow(/refunds_accepted_at_check/);
+    });
+  });
+
+  describe('PaymentCancel', () => {
+    it('한 환불에 미확정 PG 취소 요청을 두 번째로 저장하면 고유 위반으로 실패한다', async () => {
+      const refund = await createAcceptedRefund();
+      await prisma.paymentCancel.create({
+        data: paymentCancelAttempt(refund),
+      });
+
+      await expect(
+        prisma.paymentCancel.create({
+          data: paymentCancelAttempt(refund, {
+            attemptNumber: 2,
+            status: PaymentCancelStatus.QUERY_FAILED,
+          }),
+        }),
+      ).rejects.toMatchObject({ code: uniqueViolation });
     });
   });
 });

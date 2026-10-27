@@ -498,6 +498,8 @@ model PaymentCancel {
   orderItem   OrderItem    @relation(fields: [orderItemId], references: [id])
   locks       RefundLock[] // 이 취소 요청이 보유 중인 상품별 락(확정되면 삭제됨)
   ledger      Ledger? // SUCCEEDED 확정 시 생성되는 원장 레코드(1:1 — 멱등키로 1건만 허용)
+  // NOTE: Partial Unique Index (raw migration으로 관리)
+  // - payment_cancels_refund_id_active_key: (refund_id) WHERE status IN ('REQUESTED','QUERY_FAILED')
 
   @@index([paymentId])
   @@index([orderItemId])
