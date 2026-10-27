@@ -1,4 +1,5 @@
 import { RefundIdempotencyStatus } from '@prisma/client';
+import { DomainBadRequestError } from 'src/common/errors';
 import { RefundIdempotencyService } from './refund-idempotency.service';
 import {
   IdempotencyKeyReusedError,
@@ -168,5 +169,30 @@ describe('RefundIdempotencyService', () => {
     const replay = await service.execute(command, handler);
 
     expect(replay).toEqual(first);
+  });
+
+  it('동의 누락으로 거절된 요청의 키는 동의를 포함한 이후 요청의 처리를 막지 않는다', async () => {
+    const withoutConsent = { ticketId: 'ticket-1', terminationConsent: false };
+    const rejectConsent = () =>
+      Promise.reject(new DomainBadRequestError('이용 종료 동의가 필요합니다'));
+    await expect(
+      service.execute(
+        {
+          requesterId,
+          operation,
+          key,
+          request: withoutConsent,
+          authorize: allow,
+        },
+        rejectConsent,
+      ),
+    ).rejects.toBeInstanceOf(DomainBadRequestError);
+
+    const accepted = await service.execute(
+      { requesterId, operation, key, request, authorize: allow },
+      () => Promise.resolve({ status: 202, body: { refundId: 'refund-1' } }),
+    );
+
+    expect(accepted).toEqual({ status: 202, body: { refundId: 'refund-1' } });
   });
 });

@@ -73,8 +73,16 @@ export class RefundIdempotencyService {
       };
     }
 
-    // 처음 요청이면 처리하고 최초 응답을 저장한다
-    const result = await handler();
+    // 처음 요청이면 처리한다. 거절되면 기록을 지워 같은 키의 이후 요청을 막지 않는다
+    let result: IdempotentResult<T>;
+    try {
+      result = await handler();
+    } catch (error) {
+      await this.repository.remove(created.id);
+      throw error;
+    }
+
+    // 최초 응답을 저장한다
     await this.repository.complete(created.id, result);
     return result;
   }
