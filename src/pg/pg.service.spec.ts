@@ -71,5 +71,15 @@ describe('PgService', () => {
         authoritative: true,
       });
     });
+
+    it('일반 HTTP 404 응답은 NOT_FOUND가 아니라 QUERY_ERROR로 분류된다', async () => {
+      client.inquireResponse = () => Promise.resolve({ httpStatus: 404 });
+
+      await expect(service.inquireCancel(cancelRequest)).resolves.toMatchObject(
+        {
+          result: 'QUERY_ERROR',
+        },
+      );
+    });
   });
 });

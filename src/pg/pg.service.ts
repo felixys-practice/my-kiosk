@@ -22,11 +22,27 @@ export class PgService {
    * @param request 조회할 PG 취소 요청 식별자
    * @returns 계약 §8의 조회 결과
    */
-  inquireCancel(request: {
+  async inquireCancel(request: {
     paymentCancelId: string;
   }): Promise<PgCancelQueryResult> {
-    void request;
-    return Promise.resolve({ result: 'NOT_FOUND', authoritative: true });
+    // PG 원래 응답을 받는다
+    const response = await this.cancelClient.inquire(
+      request,
+      new AbortController().signal,
+    );
+
+    // PG가 미접수를 확정한 응답만 NOT_FOUND다. 일반 HTTP 404는 미접수 근거가 아니다
+    if (
+      response.httpStatus === 200 &&
+      response.body?.status === 'NOT_FOUND' &&
+      response.body.authoritative === true
+    ) {
+      return { result: 'NOT_FOUND', authoritative: true };
+    }
+    return {
+      result: 'QUERY_ERROR',
+      reason: `판단할 수 없는 PG 조회 응답(HTTP ${response.httpStatus})`,
+    };
   }
 
   // PG 결제 승인 요청
