@@ -174,8 +174,9 @@ export class PgService {
     let timer: NodeJS.Timeout | undefined;
     const timeout = new Promise<typeof timedOut>((resolve) => {
       timer = setTimeout(() => {
-        controller.abort();
+        // 시간 초과를 먼저 확정한 뒤 호출을 중단한다(중단에 반응해 거부하는 전송 계층이 먼저 끝나지 않게)
         resolve(timedOut);
+        controller.abort();
       }, timeoutMs);
     });
     try {

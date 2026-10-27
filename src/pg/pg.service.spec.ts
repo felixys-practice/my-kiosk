@@ -11,19 +11,32 @@ import {
 /**
  * 원래 응답을 미리 정해 두는 PG 전송 계층 대역
  */
+/**
+ * 중단 신호를 받으면 AbortError로 거부하고, 그 전에는 응답하지 않는 전송 계층 응답
+ * @param signal 중단 신호
+ * @returns 응답하지 않는 Promise
+ */
+function rejectOnAbort(signal: AbortSignal): Promise<PgRawResponse> {
+  return new Promise<PgRawResponse>((_resolve, reject) => {
+    signal.addEventListener('abort', () =>
+      reject(new DOMException('aborted', 'AbortError')),
+    );
+  });
+}
+
 class FakePgCancelClient implements PgCancelClient {
   configured = true;
-  sendResponse: () => Promise<PgRawResponse> = () =>
+  sendResponse: (signal: AbortSignal) => Promise<PgRawResponse> = () =>
     Promise.resolve({ httpStatus: 202, body: { status: 'ACCEPTED' } });
-  inquireResponse: () => Promise<PgRawResponse> = () =>
+  inquireResponse: (signal: AbortSignal) => Promise<PgRawResponse> = () =>
     Promise.resolve({ httpStatus: 200, body: { status: 'IN_PROGRESS' } });
 
-  send(): Promise<PgRawResponse> {
-    return this.sendResponse();
+  send(_request: unknown, signal: AbortSignal): Promise<PgRawResponse> {
+    return this.sendResponse(signal);
   }
 
-  inquire(): Promise<PgRawResponse> {
-    return this.inquireResponse();
+  inquire(_request: unknown, signal: AbortSignal): Promise<PgRawResponse> {
+    return this.inquireResponse(signal);
   }
 }
 
@@ -289,5 +302,18 @@ describe('PgService', () => {
         });
       },
     );
+
+    it('중단 신호에 반응해 거부하는 전송 계층이라도 송신 시간 초과는 시간 초과 사유의 UNKNOWN이다', async () => {
+      jest.useFakeTimers();
+      client.sendResponse = rejectOnAbort;
+
+      const pending = service.sendCancel(sendRequest);
+      await jest.advanceTimersByTimeAsync(pgTimeoutSeconds * 1000);
+
+      await expect(pending).resolves.toEqual({
+        result: 'UNKNOWN',
+        reason: 'PG 송신 응답 시간 초과',
+      });
+    });
   });
 });
