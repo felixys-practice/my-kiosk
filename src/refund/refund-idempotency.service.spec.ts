@@ -1,6 +1,9 @@
 import { RefundIdempotencyStatus } from '@prisma/client';
 import { RefundIdempotencyService } from './refund-idempotency.service';
-import { IdempotencyKeyReusedError } from './errors';
+import {
+  IdempotencyKeyReusedError,
+  IdempotencyRequestInProgressError,
+} from './errors';
 import {
   IdempotencyRecord,
   IdempotencyScope,
@@ -113,5 +116,24 @@ describe('RefundIdempotencyService', () => {
         handler,
       ),
     ).rejects.toBeInstanceOf(IdempotencyKeyReusedError);
+  });
+
+  it('최초 요청이 처리 중일 때 같은 키 요청은 IDEMPOTENCY_REQUEST_IN_PROGRESS로 거절된다', async () => {
+    let finishFirst!: () => void;
+    const firstHandler = () =>
+      new Promise<{ status: number; body: object }>((resolve) => {
+        finishFirst = () => resolve({ status: 202, body: {} });
+      });
+    const command = { requesterId, operation, key, request, authorize: allow };
+    const first = service.execute(command, firstHandler);
+
+    await expect(
+      service.execute(command, () =>
+        Promise.resolve({ status: 202, body: {} }),
+      ),
+    ).rejects.toBeInstanceOf(IdempotencyRequestInProgressError);
+
+    finishFirst();
+    await first;
   });
 });

@@ -1,6 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { RefundIdempotencyRepository } from './refund-idempotency.repository';
-import { IdempotencyKeyReusedError } from './errors';
+import { RefundIdempotencyStatus } from '@prisma/client';
+import {
+  IdempotencyKeyReusedError,
+  IdempotencyRequestInProgressError,
+} from './errors';
 
 /** 멱등 처리 대상 요청 */
 export type IdempotentCommand = {
@@ -31,6 +35,7 @@ export class RefundIdempotencyService {
    * @param handler 처음 요청일 때 실행할 처리
    * @returns 최초 응답
    * @throws IdempotencyKeyReusedError 같은 키로 다른 내용을 보냈을 때
+   * @throws IdempotencyRequestInProgressError 같은 키의 최초 요청이 아직 처리 중일 때
    */
   async execute<T>(
     command: IdempotentCommand,
@@ -53,6 +58,11 @@ export class RefundIdempotencyService {
       // 같은 키로 다른 내용을 보내면 거절한다
       if (existing!.requestFingerprint !== fingerprint) {
         throw new IdempotencyKeyReusedError();
+      }
+
+      // 최초 요청이 아직 응답을 저장하지 않았으면 처리 중으로 거절한다
+      if (existing!.status === RefundIdempotencyStatus.IN_PROGRESS) {
+        throw new IdempotencyRequestInProgressError();
       }
       return {
         status: existing!.responseStatus!,

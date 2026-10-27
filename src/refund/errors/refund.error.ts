@@ -14,3 +14,13 @@ export class IdempotencyKeyReusedError extends DomainConflictError {
     this.name = 'IdempotencyKeyReusedError';
   }
 }
+
+/** 같은 Idempotency-Key의 최초 요청이 아직 처리 중 (409) */
+export class IdempotencyRequestInProgressError extends DomainConflictError {
+  readonly code = 'IDEMPOTENCY_REQUEST_IN_PROGRESS';
+
+  constructor() {
+    super('같은 Idempotency-Key의 최초 요청이 아직 처리 중입니다');
+    this.name = 'IdempotencyRequestInProgressError';
+  }
+}
