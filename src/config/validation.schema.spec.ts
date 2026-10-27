@@ -8,6 +8,8 @@ describe('validationSchema', () => {
     DATABASE_URL: 'postgresql://postgres:password@localhost:5432/db',
     JWT_SECRET: 'valid-secret-key',
     JWT_REFRESH_SECRET: 'valid-refresh-secret',
+    // PG 콜백 서명 비밀값 — 최소 32자 (API 계약 §8)
+    PG_CALLBACK_SECRET: 'test-pg-callback-secret-32-chars',
   };
 
   describe('유효한 환경변수', () => {
@@ -139,6 +141,19 @@ describe('validationSchema', () => {
       expect(
         error?.details.some((d) => d.path.includes('SEAT_HOLD_MINUTES')),
       ).toBe(true);
+    });
+  });
+
+  describe('PG 콜백 서명 비밀값(PG_CALLBACK_SECRET)', () => {
+    it('PG_CALLBACK_SECRET이 없으면 필수값 누락으로 검증이 실패한다', () => {
+      const env: Record<string, unknown> = { ...validEnv };
+      delete env.PG_CALLBACK_SECRET;
+
+      const { error } = validationSchema.validate(env, { abortEarly: false });
+
+      expect(
+        error?.details.find((d) => d.path.includes('PG_CALLBACK_SECRET'))?.type,
+      ).toBe('any.required');
     });
   });
 });
