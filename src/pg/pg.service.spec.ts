@@ -2,7 +2,11 @@ import { ConfigService } from '@nestjs/config';
 import { TransactionLoggerService } from '../logger/transaction-logger.service';
 import { PgService } from './pg.service';
 import { PgCancelInquiryResult } from './pg.types';
-import { PgCancelClient, PgRawResponse } from './pg-cancel.client';
+import {
+  PgCancelClient,
+  PgRawResponse,
+  UnconfiguredPgCancelClient,
+} from './pg-cancel.client';
 
 /**
  * 원래 응답을 미리 정해 두는 PG 전송 계층 대역
@@ -162,6 +166,18 @@ describe('PgService', () => {
       await jest.advanceTimersByTimeAsync(pgTimeoutSeconds * 1000);
 
       await expect(pending).resolves.toMatchObject({ result: 'QUERY_ERROR' });
+    });
+
+    it('PG 미연동 상태의 조회 결과는 QUERY_ERROR다', async () => {
+      const unconfigured = new PgService(
+        {} as TransactionLoggerService,
+        new UnconfiguredPgCancelClient(),
+        { get: () => pgTimeoutSeconds } as unknown as ConfigService,
+      );
+
+      await expect(
+        unconfigured.inquireCancel(cancelRequest),
+      ).resolves.toMatchObject({ result: 'QUERY_ERROR' });
     });
   });
 });
