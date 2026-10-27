@@ -1,4 +1,8 @@
-import { DomainConflictError, DomainForbiddenError } from 'src/common/errors';
+import {
+  DomainConflictError,
+  DomainForbiddenError,
+  DomainNotFoundError,
+} from 'src/common/errors';
 
 /**
  * 환불 도메인 오류 (API 계약 §10)
@@ -32,5 +36,15 @@ export class RefundForbiddenError extends DomainForbiddenError {
   constructor() {
     super('이 환불 기능을 사용할 권한이 없습니다');
     this.name = 'RefundForbiddenError';
+  }
+}
+
+/** 요청자의 조회 범위 밖이거나 없는 매장 (404) */
+export class ShopNotFoundError extends DomainNotFoundError {
+  readonly code = 'SHOP_NOT_FOUND';
+
+  constructor(shopId: string) {
+    super(`매장을 찾을 수 없습니다: ${shopId}`);
+    this.name = 'ShopNotFoundError';
   }
 }

@@ -12,6 +12,19 @@ import { DomainConflictError } from 'src/common/errors';
 export class RefundRepository {
   constructor(private readonly prisma: PrismaService) {}
 
+  /**
+   * 사용자가 지금 이 매장의 점주(ShopOwner)인지 확인한다
+   * @param shopId 매장 ID
+   * @param userId 사용자 ID
+   * @returns 현재 점주면 true
+   */
+  async isCurrentShopOwner(shopId: string, userId: string): Promise<boolean> {
+    const owner = await this.prisma.shopOwner.findUnique({
+      where: { shopId_userId: { shopId, userId } },
+    });
+    return owner !== null;
+  }
+
   async runInTransaction<T>(
     work: (tx: TransactionClient) => Promise<T>,
   ): Promise<T> {
