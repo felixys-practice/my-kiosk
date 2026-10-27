@@ -236,5 +236,15 @@ describe('환불 저장 모델 DB 제약', () => {
         }),
       ).rejects.toThrow(/refunds_not_applicable_legacy_check/);
     });
+
+    it('상품 대상 환불의 주문 항목 ID가 없으면 저장이 실패한다', async () => {
+      const { paymentId } = await createPaidItem();
+
+      await expect(
+        prisma.refund.create({
+          data: acceptedRefund({ paymentId, orderItemId: null }),
+        }),
+      ).rejects.toThrow(/refunds_order_item_target_check/);
+    });
   });
 });
