@@ -2,6 +2,7 @@
 import 'dotenv/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import {
+  LedgerStatus,
   ManualRefundPayoutStatus,
   PaymentCancelStatus,
   PaymentType,
@@ -36,9 +37,10 @@ describe('환불 저장 모델 DB 제약', () => {
 
   /**
    * 새 주문·주문 항목·결제를 만든다
-   * @returns 주문 항목 ID와 결제 ID
+   * @returns 주문·주문 항목·결제 ID
    */
   async function createPaidItem(): Promise<{
+    orderId: string;
     orderItemId: string;
     paymentId: string;
   }> {
@@ -70,7 +72,11 @@ describe('환불 저장 모델 DB 제약', () => {
     const payment = await prisma.payment.create({
       data: { orderId: order.id, type: PaymentType.CARD, amount: 10000 },
     });
-    return { orderItemId: orderItem.id, paymentId: payment.id };
+    return {
+      orderId: order.id,
+      orderItemId: orderItem.id,
+      paymentId: payment.id,
+    };
   }
 
   /**
@@ -104,10 +110,11 @@ describe('환불 저장 모델 DB 제약', () => {
 
   /**
    * 새 결제·주문 항목에 확정된 상품 대상 환불을 만든다
-   * @returns 환불과 그 결제·주문 항목 ID
+   * @returns 환불과 그 주문·결제·주문 항목 ID
    */
   async function createAcceptedRefund(): Promise<{
     refundId: string;
+    orderId: string;
     paymentId: string;
     orderItemId: string;
   }> {
@@ -159,6 +166,26 @@ describe('환불 저장 모델 DB 제약', () => {
     };
   }
 
+  /**
+   * 환불 원장 저장 값을 만든다(기본: 지급 연결 없는 0원 원장)
+   * @param refund 소속 환불과 그 주문
+   * @param overrides 바꿀 필드
+   * @returns Ledger 생성 데이터
+   */
+  function refundLedger(
+    refund: { refundId: string; orderId: string },
+    overrides: Partial<Prisma.LedgerUncheckedCreateInput> = {},
+  ): Prisma.LedgerUncheckedCreateInput {
+    return {
+      shopId,
+      orderId: refund.orderId,
+      refundId: refund.refundId,
+      amount: 0,
+      status: LedgerStatus.RELEASABLE,
+      ...overrides,
+    };
+  }
+
   beforeAll(async () => {
     const module: TestingModule = await Test.createTestingModule({
       imports: [PrismaModule],
@@ -195,6 +222,15 @@ describe('환불 저장 모델 DB 제약', () => {
   afterAll(async () => {
     // FK 역순으로 자기 데이터만 지운다
     const byOrder = { orderId: { in: orderIds } };
+    const byRefund = { refund: { payment: byOrder } };
+    await prisma.ledger.deleteMany({ where: { orderId: { in: orderIds } } });
+    await prisma.refundNotificationReceipt.deleteMany({
+      where: { notification: byRefund },
+    });
+    await prisma.refundNotification.deleteMany({ where: byRefund });
+    await prisma.refundIdempotencyRecord.deleteMany({
+      where: { requesterId: userId },
+    });
     await prisma.manualRefundPayout.deleteMany({
       where: { refund: { payment: byOrder } },
     });
@@ -500,6 +536,26 @@ describe('환불 저장 모델 DB 제약', () => {
           data: manualPayout(refundId, { amount: 0 }),
         }),
       ).rejects.toThrow(/manual_refund_payouts_amount_check/);
+    });
+  });
+
+  describe('Ledger', () => {
+    it('같은 PG 취소 요청을 가리키는 원장을 두 번째로 저장하면 고유 위반으로 실패한다', async () => {
+      const refund = await createAcceptedRefund();
+      const attempt = await prisma.paymentCancel.create({
+        data: paymentCancelAttempt(refund, {
+          status: PaymentCancelStatus.SUCCEEDED,
+        }),
+      });
+      const pgLedger = refundLedger(refund, {
+        paymentCancelId: attempt.id,
+        amount: -10000,
+      });
+      await prisma.ledger.create({ data: pgLedger });
+
+      await expect(
+        prisma.ledger.create({ data: pgLedger }),
+      ).rejects.toMatchObject({ code: uniqueViolation });
     });
   });
 });
