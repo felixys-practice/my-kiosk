@@ -360,5 +360,14 @@ describe('validationSchema', () => {
 
       expect(error).toBeUndefined();
     });
+
+    it('REFUND_PG_TIMEOUT_SECONDS를 생략하고 REFUND_WORK_LEASE_SECONDS=11만 설정하면 기본 응답 제한 10과 비교해 통과한다', () => {
+      const { error } = validationSchema.validate(
+        { ...validEnv, REFUND_WORK_LEASE_SECONDS: 11 },
+        { abortEarly: false },
+      );
+
+      expect(error).toBeUndefined();
+    });
   });
 });

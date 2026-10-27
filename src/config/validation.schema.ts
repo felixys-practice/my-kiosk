@@ -63,7 +63,7 @@ export const validationSchema = Joi.object({
         'REFUND_PG_TIMEOUT_SECONDS',
       ),
     ),
-  REFUND_PG_TIMEOUT_SECONDS: Joi.number().integer().min(1), // PG 전송·조회 응답 제한(초)
+  REFUND_PG_TIMEOUT_SECONDS: Joi.number().integer().min(1).default(10), // PG 전송·조회 응답 제한(초)
   // 작업자 처리 기한(초). PG 응답 제한보다 길어야 응답 대기 중 다른 작업자가 같은 작업을 가져가지 않는다
   REFUND_WORK_LEASE_SECONDS: Joi.number()
     .integer()
