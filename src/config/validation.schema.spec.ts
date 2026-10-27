@@ -298,5 +298,23 @@ describe('validationSchema', () => {
 
       expect(error).toBeUndefined();
     });
+
+    it('REFUND_QUERY_INTERVAL_SECONDS가 SWEEP+TIMEOUT보다 1 작으면 검증이 실패한다', () => {
+      const { error } = validationSchema.validate(
+        {
+          ...validEnv,
+          REFUND_SWEEP_INTERVAL_SECONDS: 5,
+          REFUND_PG_TIMEOUT_SECONDS: 10,
+          REFUND_QUERY_INTERVAL_SECONDS: 14,
+        },
+        { abortEarly: false },
+      );
+
+      expect(
+        error?.details.find((d) =>
+          d.path.includes('REFUND_QUERY_INTERVAL_SECONDS'),
+        )?.type,
+      ).toBe('number.min');
+    });
   });
 });
