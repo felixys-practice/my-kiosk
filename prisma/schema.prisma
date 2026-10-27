@@ -133,6 +133,7 @@ model Ledger {
   // - ledger_refund_id_zero_payout_key: (refund_id) WHERE 두 지급 ID가 모두 null(0원 환불 원장)
   // NOTE: CHECK 제약 (raw migration으로 관리)
   // - ledger_single_payout_check: payment_cancel_id와 manual_refund_payout_id 중 하나만
+  // - ledger_zero_payout_amount_check: refund_id가 있고 두 지급 ID가 모두 null이면 amount = 0
 
   @@index([shopId])
   @@index([orderId, status]) // 정산 배치의 주 조회 패턴: orderId별 미마감 레코드 집계

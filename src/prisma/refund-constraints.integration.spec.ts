@@ -626,6 +626,16 @@ describe('환불 저장 모델 DB 제약', () => {
         prisma.ledger.create({ data: refundLedger(refund) }),
       ).rejects.toMatchObject({ code: uniqueViolation });
     });
+
+    it('환불에 연결되고 두 지급 ID가 모두 없는 원장의 금액이 0이 아니면 저장이 실패한다', async () => {
+      const refund = await createAcceptedRefund();
+
+      await expect(
+        prisma.ledger.create({
+          data: refundLedger(refund, { amount: -10000 }),
+        }),
+      ).rejects.toThrow(/ledger_zero_payout_amount_check/);
+    });
   });
 
   describe('RefundNotification', () => {
