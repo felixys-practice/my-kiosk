@@ -153,9 +153,9 @@ class InMemoryIdempotencyRepository {
   }
 
   find(scope: IdempotencyScope): Promise<IdempotencyRecord | null> {
-    return Promise.resolve(
-      this.records.get(InMemoryIdempotencyRepository.keyOf(scope)) ?? null,
-    );
+    // 실제 DB처럼 읽은 시점의 사본을 돌려준다(이후 다른 요청의 갱신이 이미 읽은 값에 반영되지 않게)
+    const record = this.records.get(InMemoryIdempotencyRepository.keyOf(scope));
+    return Promise.resolve(record ? { ...record } : null);
   }
 
   remove(id: string, claimToken: string): Promise<void> {
@@ -515,6 +515,30 @@ describe('RefundIdempotencyService', () => {
         body: { refundId: 'refund-A' },
       });
       expect(repository.committed).toEqual(['refund-A']);
+    });
+
+    it('기한이 지난 같은 기록을 두 요청이 동시에 이어받으려 하면 하나만 처리한다', async () => {
+      const command = {
+        requesterId,
+        operation,
+        key,
+        request,
+        authorize: allow,
+      };
+      repository.pauseNextTransaction = new Promise<void>(() => {});
+      void service.execute(command, acceptRefund('refund-A'));
+      await flush();
+      expireClaims();
+      const handlerB = jest.fn(acceptRefund('refund-B'));
+      const handlerC = jest.fn(acceptRefund('refund-C'));
+
+      const results = await Promise.allSettled([
+        service.execute(command, handlerB),
+        service.execute(command, handlerC),
+      ]);
+
+      expect(handlerB.mock.calls.length + handlerC.mock.calls.length).toBe(1);
+      expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
     });
   });
 });
