@@ -885,6 +885,9 @@ model ManualRefundPayout {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  // NOTE: Partial Unique Index (raw migration으로 관리)
+  // - manual_refund_payouts_refund_id_reserved_key: (refund_id) WHERE status='RESERVED'
+
   @@index([refundId])
   @@index([status, reservedAt]) // 예약 후 미확인 알림 대상 탐색
   @@map("manual_refund_payouts")

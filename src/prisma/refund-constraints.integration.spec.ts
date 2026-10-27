@@ -2,6 +2,7 @@
 import 'dotenv/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import {
+  ManualRefundPayoutStatus,
   PaymentCancelStatus,
   PaymentType,
   Prisma,
@@ -137,6 +138,27 @@ describe('환불 저장 모델 DB 제약', () => {
     };
   }
 
+  /**
+   * 환불의 별도 환불금 지급 예약 저장 값을 만든다
+   * @param refundId 소속 환불
+   * @param overrides 바꿀 필드
+   * @returns ManualRefundPayout 생성 데이터
+   */
+  function manualPayout(
+    refundId: string,
+    overrides: Partial<Prisma.ManualRefundPayoutUncheckedCreateInput> = {},
+  ): Prisma.ManualRefundPayoutUncheckedCreateInput {
+    return {
+      refundId,
+      status: ManualRefundPayoutStatus.RESERVED,
+      amount: 10000,
+      reservedById: userId,
+      reservedAt: new Date(),
+      reason: 'PG 결제 취소 실패로 별도 지급',
+      ...overrides,
+    };
+  }
+
   beforeAll(async () => {
     const module: TestingModule = await Test.createTestingModule({
       imports: [PrismaModule],
@@ -173,6 +195,9 @@ describe('환불 저장 모델 DB 제약', () => {
   afterAll(async () => {
     // FK 역순으로 자기 데이터만 지운다
     const byOrder = { orderId: { in: orderIds } };
+    await prisma.manualRefundPayout.deleteMany({
+      where: { refund: { payment: byOrder } },
+    });
     await prisma.paymentCancel.deleteMany({ where: { payment: byOrder } });
     await prisma.refund.deleteMany({ where: { payment: byOrder } });
     await prisma.payment.deleteMany({ where: byOrder });
@@ -431,6 +456,17 @@ describe('환불 저장 모델 DB 제약', () => {
           data: paymentCancelAttempt(refund, { [field]: -1 }),
         }),
       ).rejects.toThrow(/payment_cancels_counts_check/);
+    });
+  });
+
+  describe('ManualRefundPayout', () => {
+    it('한 환불에 별도 환불금 지급 예약을 두 번째로 저장하면 고유 위반으로 실패한다', async () => {
+      const { refundId } = await createAcceptedRefund();
+      await prisma.manualRefundPayout.create({ data: manualPayout(refundId) });
+
+      await expect(
+        prisma.manualRefundPayout.create({ data: manualPayout(refundId) }),
+      ).rejects.toMatchObject({ code: uniqueViolation });
     });
   });
 });
