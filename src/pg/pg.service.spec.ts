@@ -204,5 +204,23 @@ describe('PgService', () => {
         result: 'ACCEPTED',
       });
     });
+
+    it('PG가 즉시 취소한 응답은 거래 ID·실제 취소액과 함께 SUCCEEDED로 분류된다', async () => {
+      client.sendResponse = () =>
+        Promise.resolve({
+          httpStatus: 200,
+          body: {
+            status: 'SUCCEEDED',
+            pgTransactionId: 'pg-cancel-tx-1',
+            cancelledAmount: 10000,
+          },
+        });
+
+      await expect(service.sendCancel(sendRequest)).resolves.toEqual({
+        result: 'SUCCEEDED',
+        pgTransactionId: 'pg-cancel-tx-1',
+        cancelledAmount: 10000,
+      });
+    });
   });
 });

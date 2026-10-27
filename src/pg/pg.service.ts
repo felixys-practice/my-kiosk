@@ -43,7 +43,21 @@ export class PgService {
     );
 
     // PG가 접수만 함(최종 결과는 조회로 확인)
-    if (response.body?.status === 'ACCEPTED') return { result: 'ACCEPTED' };
+    const body = response.body;
+    if (body?.status === 'ACCEPTED') return { result: 'ACCEPTED' };
+
+    // PG가 즉시 취소함. 실제 취소액·거래 ID가 없으면 결과를 모르는 것으로 둔다
+    if (
+      body?.status === 'SUCCEEDED' &&
+      typeof body.cancelledAmount === 'number' &&
+      typeof body.pgTransactionId === 'string'
+    ) {
+      return {
+        result: 'SUCCEEDED',
+        pgTransactionId: body.pgTransactionId,
+        cancelledAmount: body.cancelledAmount,
+      };
+    }
 
     // 판단할 수 없는 응답은 보낸 뒤 결과를 모르는 것으로 보고 조회로 확인한다
     return {
