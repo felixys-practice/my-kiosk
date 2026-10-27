@@ -595,5 +595,14 @@ describe('환불 저장 모델 DB 제약', () => {
         }),
       ).rejects.toThrow(/ledger_single_payout_check/);
     });
+
+    it('같은 환불의 0원 원장을 두 번째로 저장하면 고유 위반으로 실패한다', async () => {
+      const refund = await createAcceptedRefund();
+      await prisma.ledger.create({ data: refundLedger(refund) });
+
+      await expect(
+        prisma.ledger.create({ data: refundLedger(refund) }),
+      ).rejects.toMatchObject({ code: uniqueViolation });
+    });
   });
 });
