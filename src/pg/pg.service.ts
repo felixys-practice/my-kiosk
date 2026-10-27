@@ -105,9 +105,18 @@ export class PgService {
     }
 
     // PG 원래 응답을 응답 제한 시간 안에 받는다. 시간 초과는 결과를 알 수 없으므로 조회 오류다
-    const response = await this.withinPgTimeout((signal) =>
-      this.cancelClient.inquire(request, signal),
-    );
+    let response: PgRawResponse | typeof timedOut;
+    try {
+      response = await this.withinPgTimeout((signal) =>
+        this.cancelClient.inquire(request, signal),
+      );
+    } catch (error) {
+      // 조회 중 예외는 결과를 알 수 없으므로 조회 오류다
+      return {
+        result: 'QUERY_ERROR',
+        reason: `PG 조회 오류: ${errorMessage(error)}`,
+      };
+    }
     if (response === timedOut) {
       return { result: 'QUERY_ERROR', reason: 'PG 조회 응답 시간 초과' };
     }

@@ -179,6 +179,28 @@ describe('PgService', () => {
         unconfigured.inquireCancel(cancelRequest),
       ).resolves.toMatchObject({ result: 'QUERY_ERROR' });
     });
+
+    it.each([
+      [
+        '비동기 거부',
+        (): Promise<PgRawResponse> => Promise.reject(new Error('socket reset')),
+      ],
+      [
+        '동기 throw',
+        (): Promise<PgRawResponse> => {
+          throw new Error('socket reset');
+        },
+      ],
+    ])(
+      '조회 중 전송 계층이 예외(%s)를 내면 QUERY_ERROR다',
+      async (_kind, failure) => {
+        client.inquireResponse = failure;
+
+        await expect(
+          service.inquireCancel(cancelRequest),
+        ).resolves.toMatchObject({ result: 'QUERY_ERROR' });
+      },
+    );
   });
 
   describe('PG 취소 송신 결과 분류 (API 계약 §8)', () => {
