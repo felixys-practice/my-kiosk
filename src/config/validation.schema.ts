@@ -1,6 +1,23 @@
 import * as Joi from 'joi';
 
 /**
+ * 같은 환경 변수 묶음의 다른 설정값 합 이상인지 검사하는 Joi custom 규칙을 만든다.
+ * 같은 키에 `.min()`을 두 번 걸면 앞의 `.min(1)`이 대체되므로 custom으로 따로 붙인다.
+ * @param keys 합계를 낼 다른 환경 변수 이름
+ * @returns 값이 합계보다 작으면 `number.min` 오류를 내는 custom 검증 함수
+ */
+const atLeastSumOf =
+  (...keys: string[]): Joi.CustomValidator<number> =>
+  (value, helpers) => {
+    // 검증 중인 환경 변수 객체에서 비교 대상 값을 더한다
+    const [env] = helpers.state.ancestors as Record<string, number>[];
+    const limit = keys.reduce((sum, key) => sum + env[key], 0);
+
+    // 합계 이상이면 통과, 작으면 하한 위반으로 보고한다
+    return value >= limit ? value : helpers.error('number.min', { limit });
+  };
+
+/**
  * 환경 변수 유효성 검사 스키마
  * - 필수 환경 변수 체크 (.required())
  * - 타입 및 형식 검증
@@ -40,12 +57,12 @@ export const validationSchema = Joi.object({
   REFUND_QUERY_INTERVAL_SECONDS: Joi.number()
     .integer()
     .min(1)
-    .custom((value: number, helpers) => {
-      const [env] = helpers.state.ancestors as Record<string, number>[];
-      const limit =
-        env.REFUND_SWEEP_INTERVAL_SECONDS + env.REFUND_PG_TIMEOUT_SECONDS;
-      return value >= limit ? value : helpers.error('number.min', { limit });
-    }),
+    .custom(
+      atLeastSumOf(
+        'REFUND_SWEEP_INTERVAL_SECONDS',
+        'REFUND_PG_TIMEOUT_SECONDS',
+      ),
+    ),
   REFUND_PG_TIMEOUT_SECONDS: Joi.number().integer().min(1), // PG 전송·조회 응답 제한(초)
   // 작업자 처리 기한(초). PG 응답 제한보다 길어야 응답 대기 중 다른 작업자가 같은 작업을 가져가지 않는다
   REFUND_WORK_LEASE_SECONDS: Joi.number()
@@ -57,11 +74,7 @@ export const validationSchema = Joi.object({
   REFUND_QUERY_BACKOFF_MAX_SECONDS: Joi.number()
     .integer()
     .min(1)
-    .custom((value: number, helpers) => {
-      const [env] = helpers.state.ancestors as Record<string, number>[];
-      const limit = env.REFUND_QUERY_BACKOFF_SECONDS;
-      return value >= limit ? value : helpers.error('number.min', { limit });
-    }),
+    .custom(atLeastSumOf('REFUND_QUERY_BACKOFF_SECONDS')),
   REFUND_QUERY_FAILURE_THRESHOLD: Joi.number().integer().min(1), // 결과 확인 실패 전환 연속 오류 횟수
   REFUND_RECOVERY_PROBE_SECONDS: Joi.number().integer().min(1), // 장애 복구 확인용 1건 조회 간격(초)
   REFUND_RECOVERY_BATCH_SIZE: Joi.number().integer().min(1), // 일반·복구 조회 처리 단위(건)
