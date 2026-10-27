@@ -33,6 +33,9 @@ export const validationSchema = Joi.object({
   // 좌석
   SEAT_HOLD_MINUTES: Joi.number().integer().min(1).default(10), // 고정석 선점 유효시간(분), 기본값 10분
 
+  // 환불 PG 요청·조회·복구 (API 계약 §8 운영 설정)
+  REFUND_RESEND_LIMIT: Joi.number(), // 백그라운드 자동 재전송 한도(회)
+
   // PG 콜백
   PG_CALLBACK_SECRET: Joi.string().min(32).required(), // 공유 서명 비밀값(최소 32자), 기본값 없음
 });

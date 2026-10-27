@@ -185,4 +185,15 @@ describe('validationSchema', () => {
       expect(error).toBeUndefined();
     });
   });
+
+  describe('환불 PG 처리 설정(REFUND_*)', () => {
+    it('REFUND_RESEND_LIMIT=0이면 검증을 통과한다', () => {
+      const { error } = validationSchema.validate(
+        { ...validEnv, REFUND_RESEND_LIMIT: 0 },
+        { abortEarly: false },
+      );
+
+      expect(error).toBeUndefined();
+    });
+  });
 });
