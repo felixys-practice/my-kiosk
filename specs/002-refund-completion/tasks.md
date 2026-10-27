@@ -29,8 +29,8 @@
 - [ ] T001 기존 `src/refund/refund.service.ts`, `src/payment/payment.service.ts`, `src/pg/pg.service.ts`, `prisma/schema.prisma`와 테스트 기준선을 확인하고 `specs/002-refund-completion/tdd/baseline.md`에 실행 결과·기존 실패·새 계약으로 바뀌는 동작을 기록한다.
 - [ ] T002 `test/helpers/refund-test-context.ts`에 앱 부트스트랩·USER/OWNER/MANAGER·공동 점주·시간권/정기권·고정석 fixture와 자기 데이터만 정리하는 종료 절차를 만든다. 기존 `test/seat-type.e2e-spec.ts`와 같은 필터·파이프·응답 래핑을 적용한다.
 - [ ] T003 `test/helpers/refund-pg.stub.ts`에 송신·조회 결과, 호출된 PG 취소 요청 식별자·금액, 응답 지연과 중단을 제어하는 테스트 전용 PG 대역을 만든다. 실제 운영 코드에 성공 스위치를 추가하지 않는다.
-- [ ] T004 [U1] [U2] [U3] [U4] [U5] [U6] [U7] [U8] [U9] [U10] [U11] [U12] [U13] [U14] [U15] `src/config/validation.schema.spec.ts`와 `src/config/configuration.spec.ts`에 API 계약 §8의 14개 설정 기본값과 경계 검증을 추가하고 동작별 실패를 확인한다.
-- [ ] T005 [U1] [U2] [U3] [U4] [U5] [U6] [U7] [U8] [U9] [U10] [U11] [U12] [U13] [U14] [U15] `src/config/configuration.ts`, `src/config/validation.schema.ts`, `.env.example`에 API 계약 §8 설정을 반영한다. 시간·횟수는 양의 정수, 재전송 한도는 0 이상, 비밀값은 최소 32자이며 `lease>timeout`, `interval>=sweep+timeout`, `backoffCap>=backoffBase`를 검증한다.
+- [X] T004 [U1] [U2] [U3] [U4] [U5] [U6] [U7] [U8] [U9] [U10] [U11] [U12] [U13] [U14] [U15] `src/config/validation.schema.spec.ts`와 `src/config/configuration.spec.ts`에 API 계약 §8의 14개 설정 기본값과 경계 검증을 추가하고 동작별 실패를 확인한다.
+- [X] T005 [U1] [U2] [U3] [U4] [U5] [U6] [U7] [U8] [U9] [U10] [U11] [U12] [U13] [U14] [U15] `src/config/configuration.ts`, `src/config/validation.schema.ts`, `.env.example`에 API 계약 §8 설정을 반영한다. 시간·횟수는 양의 정수, 재전송 한도는 0 이상, 비밀값은 최소 32자이며 `lease>timeout`, `interval>=sweep+timeout`, `backoffCap>=backoffBase`를 검증한다.
 
 **검수 관문**: T001부터 T005까지 마치면 실행 규칙의 Phase 검수 절차에 따라 Codex 검수를 받는다. "통과" 판정 전에는 다음 Phase로 넘어가지 않는다.
 

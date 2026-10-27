@@ -135,21 +135,24 @@ suite_baseline: green
 
 | id | behavior | traces | kind | state | test |
 |---|---|---|---|---|---|
-| U1 | PG_CALLBACK_SECRET 외 13개 환불 설정을 생략하면 API 계약 §8 표의 기본값(60·5·15·10·30·15·300·5·900·20·3·3600·300)으로 읽힌다 | FR-022, FR-055 | example | PENDING | |
-| U2 | PG_CALLBACK_SECRET이 없으면 설정 검증이 실패한다 | FR-032 | example | PENDING | |
-| U3 | PG_CALLBACK_SECRET이 31자이면 설정 검증이 실패한다 | FR-032 | example | PENDING | |
-| U4 | PG_CALLBACK_SECRET이 32자이면 설정 검증을 통과한다 | FR-032 | example | PENDING | |
-| U5 | REFUND_RESEND_LIMIT=0이면 설정 검증을 통과한다 | FR-024 | example | PENDING | |
-| U6 | REFUND_RESEND_LIMIT=-1이면 설정 검증이 실패한다 | FR-024 | example | PENDING | |
-| U7 | 시간·횟수 설정(표본: REFUND_QUERY_INTERVAL_SECONDS)이 0이면 설정 검증이 실패한다 | FR-055 | example | PENDING | |
-| U8 | 같은 설정이 1이면 설정 검증을 통과한다 | FR-055 | example | PENDING | |
-| U9 | 같은 설정이 소수 1.5이면 설정 검증이 실패한다 | FR-055 | example | PENDING | |
-| U10 | REFUND_WORK_LEASE_SECONDS가 REFUND_PG_TIMEOUT_SECONDS와 같으면 설정 검증이 실패한다 | FR-055 | example | PENDING | |
-| U11 | REFUND_WORK_LEASE_SECONDS가 REFUND_PG_TIMEOUT_SECONDS보다 1 크면 설정 검증을 통과한다 | FR-055 | example | PENDING | |
-| U12 | REFUND_QUERY_INTERVAL_SECONDS가 SWEEP+TIMEOUT과 같으면 설정 검증을 통과한다 | FR-055 | example | PENDING | |
-| U13 | REFUND_QUERY_INTERVAL_SECONDS가 SWEEP+TIMEOUT보다 1 작으면 설정 검증이 실패한다 | FR-055 | example | PENDING | |
-| U14 | REFUND_QUERY_BACKOFF_MAX_SECONDS가 REFUND_QUERY_BACKOFF_SECONDS와 같으면 설정 검증을 통과한다 | FR-025 | example | PENDING | |
-| U15 | REFUND_QUERY_BACKOFF_MAX_SECONDS가 REFUND_QUERY_BACKOFF_SECONDS보다 1 작으면 설정 검증이 실패한다 | FR-025 | example | PENDING | |
+| U1 | PG_CALLBACK_SECRET 외 13개 환불 설정을 생략하면 API 계약 §8 표의 기본값(60·5·15·10·30·15·300·5·900·20·3·3600·300)으로 읽힌다 | FR-022, FR-055 | example | DONE | `src/config/configuration.spec.ts` › refund·pgCallback 섹션 › PG_CALLBACK_SECRET 외 13개 환불 설정을 생략하면 API 계약 §8의 기본값으로 읽힌다 |
+| U2 | PG_CALLBACK_SECRET이 없으면 설정 검증이 실패한다 | FR-032 | example | DONE | `src/config/validation.schema.spec.ts` › PG 콜백 서명 비밀값(PG_CALLBACK_SECRET) › PG_CALLBACK_SECRET이 없으면 필수값 누락으로 검증이 실패한다 |
+| U3 | PG_CALLBACK_SECRET이 31자이면 설정 검증이 실패한다 | FR-032 | example | DONE | `src/config/validation.schema.spec.ts` › PG 콜백 서명 비밀값(PG_CALLBACK_SECRET) › PG_CALLBACK_SECRET이 31자이면 검증이 실패한다 |
+| U4 | PG_CALLBACK_SECRET이 32자이면 설정 검증을 통과한다 | FR-032 | example | DONE | `src/config/validation.schema.spec.ts` › PG 콜백 서명 비밀값(PG_CALLBACK_SECRET) › PG_CALLBACK_SECRET이 32자이면 검증을 통과한다 |
+| U5 | REFUND_RESEND_LIMIT=0이면 설정 검증을 통과한다 | FR-024 | example | DONE | `src/config/validation.schema.spec.ts` › 환불 PG 처리 설정(REFUND_*) › REFUND_RESEND_LIMIT=0이면 검증을 통과한다 |
+| U6 | REFUND_RESEND_LIMIT=-1이면 설정 검증이 실패한다 | FR-024 | example | DONE | `src/config/validation.schema.spec.ts` › 환불 PG 처리 설정(REFUND_*) › REFUND_RESEND_LIMIT=-1이면 검증이 실패한다 |
+| U7 | 시간·횟수 설정(표본: REFUND_QUERY_INTERVAL_SECONDS)이 0이면 설정 검증이 실패한다 | FR-055 | example | DONE | `src/config/validation.schema.spec.ts` › 환불 PG 처리 설정(REFUND_*) › %s=0이면 검증이 실패한다 (12개 설정) |
+| U8 | 1이 허용되는 시간·횟수 설정(처리 기한·정상 재조회 간격 제외, 조회 간격 상한은 첫 간격도 1)이 1이면 설정 검증을 통과한다. 2026-10-27 정정: 처음 표본으로 적은 REFUND_QUERY_INTERVAL_SECONDS는 탐색 주기+응답 제한(최소 2) 이상이어야 해 1이 될 수 없다 | FR-055 | example | DONE | `src/config/validation.schema.spec.ts` › 환불 PG 처리 설정(REFUND_*) › %s=1이면 검증을 통과한다 (10개 설정) |
+| U9 | 같은 설정이 소수 1.5이면 설정 검증이 실패한다 | FR-055 | example | DONE | `src/config/validation.schema.spec.ts` › 환불 PG 처리 설정(REFUND_*) › %s가 소수 1.5이면 검증이 실패한다 (13개 설정) |
+| U10 | REFUND_WORK_LEASE_SECONDS가 REFUND_PG_TIMEOUT_SECONDS와 같으면 설정 검증이 실패한다 | FR-055 | example | DONE | `src/config/validation.schema.spec.ts` › 환불 PG 처리 설정(REFUND_*) › REFUND_WORK_LEASE_SECONDS가 REFUND_PG_TIMEOUT_SECONDS와 같으면 검증이 실패한다 |
+| U11 | REFUND_WORK_LEASE_SECONDS가 REFUND_PG_TIMEOUT_SECONDS보다 1 크면 설정 검증을 통과한다 | FR-055 | example | DONE | `src/config/validation.schema.spec.ts` › 환불 PG 처리 설정(REFUND_*) › REFUND_WORK_LEASE_SECONDS가 REFUND_PG_TIMEOUT_SECONDS보다 1 크면 검증을 통과한다 |
+| U12 | REFUND_QUERY_INTERVAL_SECONDS가 SWEEP+TIMEOUT과 같으면 설정 검증을 통과한다 | FR-055 | example | DONE | `src/config/validation.schema.spec.ts` › 환불 PG 처리 설정(REFUND_*) › REFUND_QUERY_INTERVAL_SECONDS가 SWEEP+TIMEOUT과 같으면 검증을 통과한다 |
+| U13 | REFUND_QUERY_INTERVAL_SECONDS가 SWEEP+TIMEOUT보다 1 작으면 설정 검증이 실패한다 | FR-055 | example | DONE | `src/config/validation.schema.spec.ts` › 환불 PG 처리 설정(REFUND_*) › REFUND_QUERY_INTERVAL_SECONDS가 SWEEP+TIMEOUT보다 1 작으면 검증이 실패한다 |
+| U14 | REFUND_QUERY_BACKOFF_MAX_SECONDS가 REFUND_QUERY_BACKOFF_SECONDS와 같으면 설정 검증을 통과한다 | FR-025 | example | DONE | `src/config/validation.schema.spec.ts` › 환불 PG 처리 설정(REFUND_*) › REFUND_QUERY_BACKOFF_MAX_SECONDS가 REFUND_QUERY_BACKOFF_SECONDS와 같으면 검증을 통과한다 |
+| U15 | REFUND_QUERY_BACKOFF_MAX_SECONDS가 REFUND_QUERY_BACKOFF_SECONDS보다 1 작으면 설정 검증이 실패한다 | FR-025 | example | DONE | `src/config/validation.schema.spec.ts` › 환불 PG 처리 설정(REFUND_*) › REFUND_QUERY_BACKOFF_MAX_SECONDS가 REFUND_QUERY_BACKOFF_SECONDS보다 1 작으면 검증이 실패한다 |
+| U267 | REFUND_PG_TIMEOUT_SECONDS를 생략하고 REFUND_WORK_LEASE_SECONDS=11만 설정하면 기본 응답 제한 10과 비교해 설정 검증을 통과한다 | FR-055 | example | DONE | `src/config/validation.schema.spec.ts` › 환불 PG 처리 설정(REFUND_*) › REFUND_PG_TIMEOUT_SECONDS를 생략하고 REFUND_WORK_LEASE_SECONDS=11만 설정하면 기본 응답 제한 10과 비교해 통과한다 |
+| U268 | REFUND_SWEEP_INTERVAL_SECONDS·REFUND_PG_TIMEOUT_SECONDS를 생략하고 REFUND_QUERY_INTERVAL_SECONDS=15만 설정하면 기본값 합 15와 비교해 설정 검증을 통과한다 | FR-055 | example | DONE | `src/config/validation.schema.spec.ts` › 환불 PG 처리 설정(REFUND_*) › SWEEP·TIMEOUT을 생략하고 REFUND_QUERY_INTERVAL_SECONDS=15만 설정하면 기본값 합 15와 비교해 통과한다 |
+| U269 | REFUND_QUERY_BACKOFF_SECONDS를 생략하고 REFUND_QUERY_BACKOFF_MAX_SECONDS=15만 설정하면 기본 첫 간격 15와 비교해 설정 검증을 통과한다 | FR-025 | example | DONE | `src/config/validation.schema.spec.ts` › 환불 PG 처리 설정(REFUND_*) › REFUND_QUERY_BACKOFF_SECONDS를 생략하고 REFUND_QUERY_BACKOFF_MAX_SECONDS=15만 설정하면 기본 첫 간격 15와 비교해 통과한다 |
 
 ### prisma/schema.prisma (검증용 DB 제약, src/prisma/refund-constraints.integration.spec.ts)
 
