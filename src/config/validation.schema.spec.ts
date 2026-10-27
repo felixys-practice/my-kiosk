@@ -399,5 +399,18 @@ describe('validationSchema', () => {
           ?.type,
       ).toBe('number.greater');
     });
+
+    it('REFUND_SWEEP_INTERVAL_SECONDS=20만 설정하면 기본 재조회 간격 15가 20+10보다 작아 검증이 실패한다', () => {
+      const { error } = validationSchema.validate(
+        { ...validEnv, REFUND_SWEEP_INTERVAL_SECONDS: 20 },
+        { abortEarly: false },
+      );
+
+      expect(
+        error?.details.find((d) =>
+          d.path.includes('REFUND_QUERY_INTERVAL_SECONDS'),
+        )?.type,
+      ).toBe('number.min');
+    });
   });
 });

@@ -39,6 +39,20 @@ function checkRefundRelations(
       { ...helpers.state, path: ['REFUND_WORK_LEASE_SECONDS'] },
     );
   }
+  // 정상 재조회 간격은 탐색 주기+PG 응답 제한 이상이어야 앞선 조회가 끝나기 전에 다음 조회가 잡히지 않는다
+  const interval = env.REFUND_QUERY_INTERVAL_SECONDS;
+  const minInterval = env.REFUND_SWEEP_INTERVAL_SECONDS + timeout;
+  if (interval < minInterval) {
+    return helpers.error(
+      'number.min',
+      {
+        label: 'REFUND_QUERY_INTERVAL_SECONDS',
+        limit: minInterval,
+        value: interval,
+      },
+      { ...helpers.state, path: ['REFUND_QUERY_INTERVAL_SECONDS'] },
+    );
+  }
   return env;
 }
 
@@ -81,16 +95,7 @@ export const validationSchema = Joi.object({
   REFUND_PG_TIMEOUT_SECONDS: Joi.number().integer().min(1).default(10), // PG 전송·조회 응답 제한(초)
   // 정상 재조회 간격(초). 탐색 주기+PG 응답 제한 이상이어야 앞선 조회가 끝나기 전에 다음 조회가 잡히지 않는다.
   // custom 검증은 앞에 선언된 키의 기본값만 볼 수 있으므로 비교 대상 두 설정을 이 키보다 먼저 선언한다
-  REFUND_QUERY_INTERVAL_SECONDS: Joi.number()
-    .integer()
-    .min(1)
-    .custom(
-      atLeastSumOf(
-        'REFUND_SWEEP_INTERVAL_SECONDS',
-        'REFUND_PG_TIMEOUT_SECONDS',
-      ),
-    )
-    .default(15),
+  REFUND_QUERY_INTERVAL_SECONDS: Joi.number().integer().min(1).default(15),
   // 작업자 처리 기한(초). PG 응답 제한보다 길어야 한다(관계 검증은 아래 checkRefundRelations)
   REFUND_WORK_LEASE_SECONDS: Joi.number().integer().min(1).default(30),
   REFUND_QUERY_BACKOFF_SECONDS: Joi.number().integer().min(1).default(15), // 조회 실패 후 첫 재조회 간격(초)
@@ -116,4 +121,5 @@ export const validationSchema = Joi.object({
   .custom(checkRefundRelations)
   .messages({
     'number.greater': '{{#label}} must be greater than {{#limit}}',
+    'number.min': '{{#label}} must be greater than or equal to {{#limit}}',
   });
