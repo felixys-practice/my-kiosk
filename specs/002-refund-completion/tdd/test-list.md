@@ -205,6 +205,9 @@ suite_baseline: green
 | U295 | 같은 멱등 키 기록 생성이 실패한 뒤 기록이 사라져 있으면(최초 요청 거절로 삭제) 다시 기록을 만들어 처리한다 (Phase 2 검수 R3) | FR-041 | example | PENDING | |
 | U296 | 환불에 연결되고 두 지급 ID가 모두 null인 원장의 amount가 0이 아니면 저장이 실패한다 (Phase 2 검수 R5) | FR-016a | example | PENDING | |
 | U297 | PaymentCancel의 실패가 아닌 갱신(담당 토큰 등)은 failedAt을 바꾸지 않는다 (Phase 2 검수 의견) | FR-021 | example | PENDING | |
+| U298 | 최초 응답 저장이 실패하면 같은 트랜잭션의 처리(환불 확정)도 커밋되지 않고, 같은 키의 다음 요청이 처리될 수 있다 (Phase 2 검수 R4) | FR-041 | example | PENDING | |
+| U299 | 처리 기한이 지난 처리 중 기록은 같은 본문의 다음 요청이 이어받아 처리한다(처리와 응답 저장이 한 트랜잭션이라 이전 처리가 커밋되지 않았음이 보장됨) (Phase 2 검수 R4) | FR-041 | example | PENDING | |
+| U300 | 처리에 성공하면 최초 응답과 만든 환불이 처리와 같은 트랜잭션에서 기록된다 (Phase 2 검수 R4) | FR-041 | example | PENDING | |
 
 ### `src/refund/refund-idempotency.service.ts`
 

@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { createHash } from 'crypto';
+import { TransactionClient } from 'src/prisma/prisma.service';
 import {
   IdempotencyRecord,
   RefundIdempotencyRepository,
@@ -61,7 +62,7 @@ export class RefundIdempotencyService {
   /**
    * 같은 요청은 최초 응답을 돌려주고, 처음 요청이면 처리한다
    * @param command 요청자·기능·키·본문·권한 재확인
-   * @param handler 처음 요청일 때 실행할 처리
+   * @param handler 처음 요청일 때 실행할 처리(넘겨받은 트랜잭션 안에서 업무 데이터를 쓴다. PG 호출 등 외부 호출은 넣지 않는다)
    * @returns 최초 응답
    * @throws BadRequestException 키 형식이 잘못됐을 때
    * @throws IdempotencyKeyReusedError 같은 키로 다른 내용을 보냈을 때
@@ -69,10 +70,12 @@ export class RefundIdempotencyService {
    */
   async execute<T>(
     command: IdempotentCommand,
-    handler: () => Promise<IdempotentResult<T>>,
+    handler: (tx: TransactionClient) => Promise<IdempotentResult<T>>,
   ): Promise<IdempotentResult<T>> {
     // 키가 없으면 멱등 처리 없이 실행한다(상품당 확정 환불 unique가 중복 환불을 막는다)
-    if (command.key === undefined) return handler();
+    if (command.key === undefined) {
+      return this.repository.runInTransaction(handler);
+    }
 
     // 키 형식 검사(API 계약 중복 요청: 1~128자 ASCII 비공백)
     if (command.key.length > maxKeyLength) {
@@ -107,18 +110,18 @@ export class RefundIdempotencyService {
     }
     if (!created) throw new IdempotencyRequestInProgressError();
 
-    // 처음 요청이면 처리한다. 거절되면 기록을 지워 같은 키의 이후 요청을 막지 않는다
-    let result: IdempotentResult<T>;
+    // 처음 요청이면 처리한다. 처리와 최초 응답 저장을 한 트랜잭션으로 묶어 환불이 커밋되면 응답도 반드시 남긴다
     try {
-      result = await handler();
+      return await this.repository.runInTransaction(async (tx) => {
+        const result = await handler(tx);
+        await this.repository.completeInTransaction(tx, created.id, result);
+        return result;
+      });
     } catch (error) {
+      // 거절·저장 실패면 처리도 커밋되지 않았으므로 기록을 지워 같은 키의 이후 요청을 막지 않는다
       await this.repository.remove(created.id);
       throw error;
     }
-
-    // 최초 응답을 저장한다
-    await this.repository.complete(created.id, result);
-    return result;
   }
 
   /**

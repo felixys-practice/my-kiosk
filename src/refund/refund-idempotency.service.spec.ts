@@ -1,6 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 import { RefundIdempotencyStatus } from '@prisma/client';
 import { DomainBadRequestError } from 'src/common/errors';
+import { TransactionClient } from 'src/prisma/prisma.service';
 import { RefundIdempotencyService } from './refund-idempotency.service';
 import {
   IdempotencyKeyReusedError,
@@ -17,9 +18,39 @@ import {
  * 멱등 기록 저장소의 메모리 대역
  * - (requesterId, operation, key) 고유성을 실제 DB 제약처럼 흉내 낸다
  */
+/** 처리와 같은 트랜잭션에서 쌓이는 쓰기(커밋되어야 반영된다) */
+type FakeTx = { writes: string[]; afterCommit: (() => void)[] };
+
 class InMemoryIdempotencyRepository {
   readonly records = new Map<string, IdempotencyRecord>();
+  /** 커밋된 처리 쓰기(예: 만든 환불) */
+  readonly committed: string[] = [];
+  /** true면 같은 트랜잭션의 최초 응답 저장이 실패한다 */
+  failCompletion = false;
   private nextId = 1;
+
+  async runInTransaction<R>(work: (tx: FakeTx) => Promise<R>): Promise<R> {
+    const tx: FakeTx = { writes: [], afterCommit: [] };
+    const result = await work(tx);
+    // 작업이 끝까지 성공해야 커밋된다
+    this.committed.push(...tx.writes);
+    tx.afterCommit.forEach((apply) => apply());
+    return result;
+  }
+
+  completeInTransaction(
+    tx: FakeTx,
+    id: string,
+    response: { status: number; body: unknown },
+  ): Promise<void> {
+    if (this.failCompletion) {
+      return Promise.reject(new Error('최초 응답 저장 실패'));
+    }
+    tx.afterCommit.push(() => {
+      void this.complete(id, response);
+    });
+    return Promise.resolve();
+  }
 
   private static keyOf(scope: IdempotencyScope): string {
     return `${scope.requesterId}|${scope.operation}|${scope.key}`;
@@ -285,5 +316,24 @@ describe('RefundIdempotencyService', () => {
     );
 
     expect(result).toEqual({ status: 202, body: { refundId: 'refund-1' } });
+  });
+
+  it('최초 응답 저장이 실패하면 같은 트랜잭션의 환불 확정도 커밋되지 않고 같은 키의 다음 요청이 처리된다', async () => {
+    const command = { requesterId, operation, key, request, authorize: allow };
+    const acceptRefund = (tx: TransactionClient) => {
+      (tx as unknown as FakeTx).writes.push('refund-1');
+      return Promise.resolve({ status: 202, body: { refundId: 'refund-1' } });
+    };
+    repository.failCompletion = true;
+    await expect(service.execute(command, acceptRefund)).rejects.toThrow(
+      '최초 응답 저장 실패',
+    );
+    expect(repository.committed).toEqual([]);
+
+    repository.failCompletion = false;
+    const retried = await service.execute(command, acceptRefund);
+
+    expect(retried).toEqual({ status: 202, body: { refundId: 'refund-1' } });
+    expect(repository.committed).toEqual(['refund-1']);
   });
 });

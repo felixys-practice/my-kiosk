@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma, RefundIdempotencyStatus } from '@prisma/client';
-import { PrismaService } from 'src/prisma/prisma.service';
+import { PrismaService, TransactionClient } from 'src/prisma/prisma.service';
 
 /** 멱등 요청 기록 (refund_idempotency_records) */
 export type IdempotencyRecord = {
@@ -70,15 +70,28 @@ export class RefundIdempotencyRepository {
   }
 
   /**
-   * 최초 응답을 저장하고 완료로 표시한다
+   * 처리와 최초 응답 저장을 한 트랜잭션에서 실행한다
+   * @param work 트랜잭션 안에서 실행할 작업
+   * @returns 작업 결과
+   */
+  async runInTransaction<R>(
+    work: (tx: TransactionClient) => Promise<R>,
+  ): Promise<R> {
+    return this.prisma.executeTransaction(work);
+  }
+
+  /**
+   * 처리와 같은 트랜잭션에서 최초 응답을 저장하고 완료로 표시한다
+   * @param tx 처리 트랜잭션
    * @param id 기록 ID
    * @param response 최초 응답의 HTTP 상태·본문·만든 환불
    */
-  async complete(
+  async completeInTransaction(
+    tx: TransactionClient,
     id: string,
     response: { status: number; body: unknown; refundId?: string },
   ): Promise<void> {
-    await this.prisma.refundIdempotencyRecord.update({
+    await tx.refundIdempotencyRecord.update({
       where: { id },
       data: {
         status: RefundIdempotencyStatus.COMPLETED,
