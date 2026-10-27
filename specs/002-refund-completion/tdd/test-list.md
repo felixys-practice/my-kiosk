@@ -197,17 +197,17 @@ suite_baseline: green
 | U287 | PG 취소 전송의 접수 응답은 ACCEPTED로 분류된다 | FR-021 | example | DONE | `src/pg/pg.service.spec.ts` |
 | U288 | PG 취소 전송의 즉시 성공 응답은 SUCCEEDED{pgTransactionId, cancelledAmount}로 분류된다 | FR-021 | example | DONE | `src/pg/pg.service.spec.ts` |
 | U289 | PG 취소 전송의 거절 응답은 REJECTED{reason}로 분류된다 | FR-021 | example | DONE | `src/pg/pg.service.spec.ts` |
-| U290 | PG 취소 송신 중 전송 계층이 예외(비동기 거부·동기 throw)를 내면 보내졌는지 모르므로 UNKNOWN이다 (Phase 2 검수 R1) | FR-022 | example | PENDING | |
-| U291 | PG 취소 조회 중 전송 계층이 예외(비동기 거부·동기 throw)를 내면 QUERY_ERROR다 (Phase 2 검수 R1) | FR-025 | example | PENDING | |
-| U292 | 중단 신호에 반응해 거부하는 전송 계층이라도 송신 시간 초과는 UNKNOWN이다 (Phase 2 검수 R1) | FR-022 | example | PENDING | |
-| U293 | 중단 신호에 반응해 거부하는 전송 계층이라도 조회 시간 초과는 QUERY_ERROR다 (Phase 2 검수 R1) | FR-025 | example | PENDING | |
-| U294 | PG 취소 송신의 비정상 HTTP 상태(예: 401) 응답은 본문이 ACCEPTED·SUCCEEDED여도 UNKNOWN이다 (Phase 2 검수 R2) | FR-021 | example | PENDING | |
-| U295 | 같은 멱등 키 기록 생성이 실패한 뒤 기록이 사라져 있으면(최초 요청 거절로 삭제) 다시 기록을 만들어 처리한다 (Phase 2 검수 R3) | FR-041 | example | PENDING | |
-| U296 | 환불에 연결되고 두 지급 ID가 모두 null인 원장의 amount가 0이 아니면 저장이 실패한다 (Phase 2 검수 R5) | FR-016a | example | PENDING | |
-| U297 | PaymentCancel의 실패가 아닌 갱신(담당 토큰 등)은 failedAt을 바꾸지 않는다 (Phase 2 검수 의견) | FR-021 | example | PENDING | |
-| U298 | 최초 응답 저장이 실패하면 같은 트랜잭션의 처리(환불 확정)도 커밋되지 않고, 같은 키의 다음 요청이 처리될 수 있다 (Phase 2 검수 R4) | FR-041 | example | PENDING | |
-| U299 | 처리 기한이 지난 처리 중 기록은 같은 본문의 다음 요청이 이어받아 처리한다(처리와 응답 저장이 한 트랜잭션이라 이전 처리가 커밋되지 않았음이 보장됨) (Phase 2 검수 R4) | FR-041 | example | PENDING | |
-| U300 | 처리에 성공하면 최초 응답과 만든 환불이 처리와 같은 트랜잭션에서 기록된다 (Phase 2 검수 R4) | FR-041 | example | PENDING | |
+| U290 | PG 취소 송신 중 전송 계층이 예외(비동기 거부·동기 throw)를 내면 보내졌는지 모르므로 UNKNOWN이다 (Phase 2 검수 R1) | FR-022 | example | DONE | `src/pg/pg.service.spec.ts` |
+| U291 | PG 취소 조회 중 전송 계층이 예외(비동기 거부·동기 throw)를 내면 QUERY_ERROR다 (Phase 2 검수 R1) | FR-025 | example | DONE | `src/pg/pg.service.spec.ts` |
+| U292 | 중단 신호에 반응해 거부하는 전송 계층이라도 송신 시간 초과는 UNKNOWN이다 (Phase 2 검수 R1) | FR-022 | example | DONE | `src/pg/pg.service.spec.ts` |
+| U293 | 중단 신호에 반응해 거부하는 전송 계층이라도 조회 시간 초과는 QUERY_ERROR다 (Phase 2 검수 R1) | FR-025 | example | DONE | `src/pg/pg.service.spec.ts` |
+| U294 | PG 취소 송신의 비정상 HTTP 상태(예: 401) 응답은 본문이 ACCEPTED·SUCCEEDED여도 UNKNOWN이다 (Phase 2 검수 R2) | FR-021 | example | DONE | `src/pg/pg.service.spec.ts` |
+| U295 | 같은 멱등 키 기록 생성이 실패한 뒤 기록이 사라져 있으면(최초 요청 거절로 삭제) 다시 기록을 만들어 처리한다 (Phase 2 검수 R3) | FR-041 | example | DONE | `src/refund/refund-idempotency.service.spec.ts` |
+| U296 | 환불에 연결되고 두 지급 ID가 모두 null인 원장의 amount가 0이 아니면 저장이 실패한다 (Phase 2 검수 R5) | FR-016a | example | DONE | `src/prisma/refund-constraints.integration.spec.ts` |
+| U297 | PaymentCancel의 실패가 아닌 갱신(담당 토큰 등)은 failedAt을 바꾸지 않는다 (Phase 2 검수 의견) | FR-021 | example | DONE | `src/prisma/refund-constraints.integration.spec.ts` |
+| U298 | 최초 응답 저장이 실패하면 같은 트랜잭션의 처리(환불 확정)도 커밋되지 않고, 같은 키의 다음 요청이 처리될 수 있다 (Phase 2 검수 R4) | FR-041 | example | DONE | `src/refund/refund-idempotency.service.spec.ts` |
+| U299 | 처리 기한이 지난 처리 중 기록은 같은 본문의 다음 요청이 이어받아 처리한다(처리와 응답 저장이 한 트랜잭션이라 이전 처리가 커밋되지 않았음이 보장됨) (Phase 2 검수 R4) | FR-041 | example | DONE | `src/refund/refund-idempotency.service.spec.ts` |
+| U300 | 처리에 성공하면 최초 응답과 만든 환불이 처리와 같은 트랜잭션에서 기록된다 (Phase 2 검수 R4) | FR-041 | example | DROPPED | U298 테스트가 같은 내용(성공 시 환불·응답 함께 커밋, 실패 시 함께 미커밋)을 확인 |
 
 ### `src/refund/refund-idempotency.service.ts`
 

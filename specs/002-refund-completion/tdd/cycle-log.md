@@ -431,3 +431,48 @@ U10~U15를 마친 뒤, 관계 검증의 비교 대상 설정을 생략하면 정
 - `test/refund-bootstrap.e2e-spec.ts` 2개가 통과했다. 뮤턴트(`RefundLockingRepository` 등록 제거)에서는 `Nest could not find RefundLockingRepository`로 실패하는 것을 확인했다.
 - 전체 결과: 단위 288 passed, E2E 59 passed (`7404e54`).
 - tasks.md 완료 표시: T016·T017·T018에 표시했다. T015는 현재 동작 기록인 U50(BASELINE)을 포함하므로 실행 규칙("BASELINE 동작이 있는 작업은 완료 표시하지 않음")에 따라 열어 두었다. T015의 나머지 동작(U51~U58)은 모두 DONE이다.
+
+## Phase 2 Codex 검수 1차 (2026-10-28)
+
+- 범위: `da0a90f..2128308`, T006~T018
+- 판정: **수정 필요**. 확정된 업무 결정을 바꾸는 지적은 없고, 기존 계약을 지키기 위한 구현 결함 5건이다.
+  - R1 [P1]: 전송 계층이 거부·throw하면 `sendCancel`·`inquireCancel`이 예외를 그대로 낸다. 중단 신호에 반응하는 전송 계층은 시간 초과 대신 AbortError가 난다.
+  - R2 [P2]: 송신 ACCEPTED·SUCCEEDED 분기가 HTTP 상태를 보지 않는다. 401 본문의 SUCCEEDED가 지급 확정 근거가 된다.
+  - R3 [P2]: 멱등 기록 생성이 실패한 뒤 `find`가 null이면 TypeError가 난다(최초 요청 거절로 기록이 삭제되는 정상 경로).
+  - R4 [P1]: 처리(환불 확정)와 최초 응답 저장이 별도 커밋이다. 그 사이에 실패하면 기록이 영구 IN_PROGRESS로 남는다. 단순 삭제나 TTL 뒤 재실행은 중복 PG 재시도를 만들 수 있어 해결책으로 인정하지 않는다.
+  - R5 [P2]: 0원 환불 원장(환불 연결, 두 지급 ID 모두 null)의 amount=0 제약이 없다. T010·data-model §8이 명시한 조건이다.
+- 추가 의견:
+  - U274~U289 추가 근거, NULLS NOT DISTINCT 대체, 선택 FK RESTRICT, `REFUND_PG_GATEWAY` 분리, 키 형식 오류 400은 타당하다.
+  - `failedAt` `@updatedAt`은 새 담당·조회 갱신을 연결하기 전에 고쳐야 한다(잘못 기록된 기존 시각은 추정 복원하지 않음).
+  - `closedAt`은 `resumedAt: null` 조회들에서 제외되도록 US1 연결 전에 추적한다.
+- 설계 쟁점: PAYMENT 대상 Refund는 `orderItemId`가 null인데, `PaymentCancel.orderItemId`는 여전히 필수다. 결제 전체 취소를 어떤 데이터 연결로 표현할지 US6 전에 확인해야 한다. 임의 주문 상품 선택이나 가짜 상품으로 메우지 않는다.
+- 기타: T015 BASELINE과 session-lifecycle 후속 연결은 완료한 기반과 구분해 기록한다. 공유 DB 검증은 단독 실행 조건에서 한다. red 상태 커밋은 이탈 기록으로 유지한다.
+
+### 사용자 결정 (2026-10-28)
+
+- R4: **같은 트랜잭션에서 완료**. 처리 중 기록은 먼저 커밋해 동시 요청에 409 IN_PROGRESS를 유지한다. 처리(handler)는 트랜잭션 클라이언트를 받아 업무 데이터를 쓰고, 같은 트랜잭션에서 최초 응답·refundId로 기록을 완료한다. 커밋 전 중단에 대비해 처리 기한(claimUntil)을 두고, 기한이 지난 기록은 같은 본문의 다음 요청이 이어받는다.
+- VS Code Jest 확장의 `--watch` 실행은 사용자가 직접 끈다.
+
+## 사이클 94~104: Phase 2 검수 1차 수정 (U290~U299)
+
+| 동작 | 테스트 | red | green | 커밋 |
+|---|---|---|---|---|
+| U290 (R1) | `pg.service.spec.ts` 송신 중 전송 계층 예외(비동기 거부·동기 throw)는 UNKNOWN | 2 failed, `Received promise rejected instead of resolved` | `sendCancel`이 예외를 UNKNOWN으로 분류 | `902d5f5` |
+| U291 (R1) | 조회 중 전송 계층 예외는 QUERY_ERROR | 2 failed, 위와 같음 | `inquireCancel`이 예외를 QUERY_ERROR로 분류 | `c02065d` |
+| U292 (R1) | 중단에 반응하는 전송 계층의 송신 시간 초과는 시간 초과 사유의 UNKNOWN | 1 failed, `reason` 기대 'PG 송신 응답 시간 초과' / 실제 'PG 송신 오류: aborted' | 시간 초과를 먼저 확정(resolve)한 뒤 abort | `e3cb998` |
+| U293 (R1) | 같은 조건의 조회 시간 초과는 QUERY_ERROR | 첫 실행 통과(U292 수정이 공용 함수에 적용됨) → 뮤턴트(abort를 먼저) 1 failed | 구현 변경 없음 | `4bbdbd6` |
+| U294 (R2) | 비정상 HTTP(401) 송신 응답은 본문이 ACCEPTED·SUCCEEDED여도 UNKNOWN | 2 failed, `- Expected - 1 / + Received + 1` | 2xx가 아니면 먼저 UNKNOWN. REJECTED의 `=== 200` 조건은 이 공통 2xx 검사로 대체 | `f52cd21` |
+| U295 (R3) | 기록 생성 실패 후 기록이 사라졌으면 다시 만들어 처리 | `TypeError: Cannot read properties of null (reading 'requestFingerprint')` | 최대 3회 생성·조회 반복, 있으면 replay(권한·지문·처리 중 검사 유지) | `2e34c39` |
+| U296 (R5) | 환불 연결·두 지급 ID null 원장의 금액이 0이 아니면 저장 실패 | 1 failed, `Received promise resolved instead of rejected` | `ledger_zero_payout_amount_check`(refund_id가 null인 매출 원장 제외). 0원 허용은 U31이 확인 | `b5a5967` |
+| U297 | 실패가 아닌 갱신은 `failedAt`을 바꾸지 않음 | 1 failed, `Received: 2026-10-27T19:13:02.105Z` | `failedAt`의 `@updatedAt` 제거(클라이언트 동작만 바뀌어 DB 변경 없음). 기존 저장소는 생성 null·실패 now를 직접 넣으므로 동작 유지 | `c2c9cb7` |
+| U298 (R4) | 최초 응답 저장이 실패하면 같은 트랜잭션의 환불 확정도 커밋되지 않고, 같은 키 다음 요청이 처리됨 | `Cannot read properties of undefined (reading 'writes')`(처리가 트랜잭션을 받지 않음) | `runInTransaction` 안에서 `handler(tx)`·`completeInTransaction`, 실패 시 기록 삭제. 키 없는 요청도 트랜잭션 안에서 처리 | `7c13613` |
+| U299 (R4) | 처리 기한이 지난 처리 중 기록은 같은 본문의 다음 요청이 이어받음 | `IdempotencyRequestInProgressError` | `claim_until` 열 마이그레이션, 생성 시 기한(`refund.workLeaseSeconds`), 기한 지난 같은 본문 기록은 권한 확인 후 조건부 갱신(`takeOver`) | `f060a7f` |
+
+- U300("성공하면 최초 응답과 환불이 같은 트랜잭션에서 기록")은 U298 테스트가 같은 내용을 확인하므로 DROPPED로 표시했다. U298은 응답 저장이 실패하면 환불도 커밋되지 않고, 성공하면 둘 다 커밋됨을 함께 검증한다.
+- 각 green 뒤 전체 실행: 단위 290 → 301 passed, E2E 59 passed. E2E 간헐 실패가 U291·U296 첫 실행에서 각 1~2건 있었고, 재실행하면 통과했다(로그 보존).
+- 남은 쟁점(코드 미반영):
+  - PAYMENT 대상 환불의 `PaymentCancel.orderItemId` 표현(US6 전 확인)
+  - `closedAt` 정지 기록을 `resumedAt: null` 조회에서 제외(US1 전 추적)
+  - session-lifecycle 잠금 연결(US1)
+  - T015는 U50 BASELINE이라 열린 상태다. BASELINE과 실제 동시성 경합은 최종 동작 검증으로 보지 않는다.
+  - Prisma 저장소의 `takeOver`·`completeInTransaction`·`runInTransaction`은 단위 테스트가 메모리 대역을 쓰므로 실제 DB 동작은 이 단계에서 검증하지 않았다. 환불 확정 E2E(US1)에서 확인한다.
