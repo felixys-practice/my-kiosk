@@ -3,6 +3,7 @@ import 'dotenv/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import {
   LedgerStatus,
+  RefundNotificationAudience,
   ManualRefundPayoutStatus,
   PaymentCancelStatus,
   PaymentType,
@@ -182,6 +183,26 @@ describe('환불 저장 모델 DB 제약', () => {
       refundId: refund.refundId,
       amount: 0,
       status: LedgerStatus.RELEASABLE,
+      ...overrides,
+    };
+  }
+
+  /**
+   * 환불 알림 저장 값을 만든다(기본: 매장 범위 알림)
+   * @param refundId 소속 환불
+   * @param overrides 바꿀 필드
+   * @returns RefundNotification 생성 데이터
+   */
+  function refundNotification(
+    refundId: string,
+    overrides: Partial<Prisma.RefundNotificationUncheckedCreateInput> = {},
+  ): Prisma.RefundNotificationUncheckedCreateInput {
+    return {
+      refundId,
+      kind: 'REFUND_ACCEPTED',
+      audience: RefundNotificationAudience.SHOP,
+      shopId,
+      eventKey: `refund-accepted:${refundId}`,
       ...overrides,
     };
   }
@@ -602,6 +623,25 @@ describe('환불 저장 모델 DB 제약', () => {
 
       await expect(
         prisma.ledger.create({ data: refundLedger(refund) }),
+      ).rejects.toMatchObject({ code: uniqueViolation });
+    });
+  });
+
+  describe('RefundNotification', () => {
+    it('같은 알림의 같은 사용자 읽음 기록을 두 번째로 저장하면 고유 위반으로 실패한다', async () => {
+      const { refundId } = await createAcceptedRefund();
+      const notification = await prisma.refundNotification.create({
+        data: refundNotification(refundId),
+      });
+      const receipt = {
+        notificationId: notification.id,
+        userId,
+        readAt: new Date(),
+      };
+      await prisma.refundNotificationReceipt.create({ data: receipt });
+
+      await expect(
+        prisma.refundNotificationReceipt.create({ data: receipt }),
       ).rejects.toMatchObject({ code: uniqueViolation });
     });
   });
