@@ -5,9 +5,14 @@ import {
   PgCancelInquiry,
   PgCancelInquiryResult,
   PgCancelQueryResult,
+  PgCancelSendResult,
 } from './pg.types';
 import { PG_CANCEL_CLIENT } from './pg-cancel.client';
-import type { PgCancelClient, PgRawResponse } from './pg-cancel.client';
+import type {
+  PgCancelClient,
+  PgCancelRequest,
+  PgRawResponse,
+} from './pg-cancel.client';
 
 /** PG 응답 제한 시간 초과 표시 */
 const timedOut = Symbol('PG 응답 시간 초과');
@@ -19,6 +24,20 @@ export class PgService {
     @Inject(PG_CANCEL_CLIENT) private readonly cancelClient: PgCancelClient,
     private readonly configService: ConfigService,
   ) {}
+
+  /**
+   * 환불 PG 취소를 보낸다 (API 계약 §8)
+   * @param request PG 취소 요청 식별자(PG 멱등 키)와 금액
+   * @returns 계약 §8의 송신 결과
+   */
+  async sendCancel(request: PgCancelRequest): Promise<PgCancelSendResult> {
+    void request;
+    // 실제 PG가 연결되지 않았으면 보내기 전 실패가 확실하다
+    if (!this.cancelClient.configured) {
+      return { result: 'NOT_SENT', reason: 'PG 미연동' };
+    }
+    return Promise.reject(new Error('미구현'));
+  }
 
   /**
    * 환불 PG 취소 결과를 조회한다 (API 계약 §8)

@@ -180,4 +180,20 @@ describe('PgService', () => {
       ).resolves.toMatchObject({ result: 'QUERY_ERROR' });
     });
   });
+
+  describe('PG 취소 송신 결과 분류 (API 계약 §8)', () => {
+    const sendRequest = { paymentCancelId: 'payment-cancel-1', amount: 10000 };
+
+    it('PG 미연동 상태의 취소 전송 결과는 NOT_SENT다', async () => {
+      const unconfigured = new PgService(
+        {} as TransactionLoggerService,
+        new UnconfiguredPgCancelClient(),
+        { get: () => pgTimeoutSeconds } as unknown as ConfigService,
+      );
+
+      await expect(unconfigured.sendCancel(sendRequest)).resolves.toMatchObject(
+        { result: 'NOT_SENT' },
+      );
+    });
+  });
 });
