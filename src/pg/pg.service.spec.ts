@@ -113,5 +113,18 @@ describe('PgService', () => {
         },
       );
     });
+
+    it('실패 확정 응답은 FAILED와 사유로 분류된다', async () => {
+      client.inquireResponse = () =>
+        Promise.resolve({
+          httpStatus: 200,
+          body: { status: 'FAILED', reason: '이미 정산된 거래' },
+        });
+
+      await expect(service.inquireCancel(cancelRequest)).resolves.toEqual({
+        result: 'FAILED',
+        reason: '이미 정산된 거래',
+      });
+    });
   });
 });
