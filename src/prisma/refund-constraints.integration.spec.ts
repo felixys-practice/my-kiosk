@@ -285,5 +285,18 @@ describe('환불 저장 모델 DB 제약', () => {
         }),
       ).rejects.toThrow(/refunds_accepted_actor_check/);
     });
+
+    it('확정된 매장 환불의 이용 종료 동의 시각이 없으면 저장이 실패한다', async () => {
+      const target = await createPaidItem();
+
+      await expect(
+        prisma.refund.create({
+          data: acceptedRefund(target, {
+            source: RefundSource.STORE,
+            terminationConsentedAt: null,
+          }),
+        }),
+      ).rejects.toThrow(/refunds_accepted_consent_check/);
+    });
   });
 });
