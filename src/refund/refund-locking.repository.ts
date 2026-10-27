@@ -55,7 +55,8 @@ export class RefundLockingRepository {
     table: LockedTable,
     ids: string[],
   ): Promise<void> {
-    for (const id of ids) {
+    // 같은 종류의 행은 ID 오름차순으로 잠가 교착을 피한다
+    for (const id of [...ids].sort()) {
       await tx.$queryRaw(
         Prisma.sql`SELECT id FROM ${Prisma.raw(`"${table}"`)} WHERE id = ${id} FOR UPDATE`,
       );

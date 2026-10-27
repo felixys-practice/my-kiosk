@@ -41,4 +41,18 @@ describe('RefundLockingRepository', () => {
       'seat_assignments:assignment-1',
     ]);
   });
+
+  it('같은 종류의 행 여러 개는 ID 오름차순으로 잠긴다', async () => {
+    await repository.lockForAcceptance(tx as unknown as TransactionClient, {
+      paymentId: 'payment-1',
+      ticketId: 'ticket-1',
+      ticketPauseIds: [],
+      usageSessionIds: ['session-b', 'session-a'],
+      seatAssignmentIds: [],
+    });
+
+    expect(tx.locked.filter((row) => row.startsWith('usage_sessions'))).toEqual(
+      ['usage_sessions:session-a', 'usage_sessions:session-b'],
+    );
+  });
 });
