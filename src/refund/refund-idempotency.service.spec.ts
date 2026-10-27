@@ -201,6 +201,21 @@ describe('RefundIdempotencyService', () => {
     const maxKeyLength = 128;
     const handler = () => Promise.resolve({ status: 202, body: {} });
 
+    it('128자 ASCII 키는 허용된다', async () => {
+      const result = await service.execute(
+        {
+          requesterId,
+          operation,
+          key: 'k'.repeat(maxKeyLength),
+          request,
+          authorize: allow,
+        },
+        handler,
+      );
+
+      expect(result.status).toBe(202);
+    });
+
     it('129자 키는 거절된다', async () => {
       await expect(
         service.execute(
