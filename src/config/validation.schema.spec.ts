@@ -412,5 +412,18 @@ describe('validationSchema', () => {
         )?.type,
       ).toBe('number.min');
     });
+
+    it('REFUND_QUERY_BACKOFF_SECONDS=500만 설정하면 기본 간격 상한 300이 500보다 작아 검증이 실패한다', () => {
+      const { error } = validationSchema.validate(
+        { ...validEnv, REFUND_QUERY_BACKOFF_SECONDS: 500 },
+        { abortEarly: false },
+      );
+
+      expect(
+        error?.details.find((d) =>
+          d.path.includes('REFUND_QUERY_BACKOFF_MAX_SECONDS'),
+        )?.type,
+      ).toBe('number.min');
+    });
   });
 });

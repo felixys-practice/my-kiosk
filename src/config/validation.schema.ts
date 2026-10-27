@@ -53,6 +53,20 @@ function checkRefundRelations(
       { ...helpers.state, path: ['REFUND_QUERY_INTERVAL_SECONDS'] },
     );
   }
+  // 지수 증가 조회 간격 상한은 첫 재조회 간격 이상이어야 한다
+  const backoffMax = env.REFUND_QUERY_BACKOFF_MAX_SECONDS;
+  const backoff = env.REFUND_QUERY_BACKOFF_SECONDS;
+  if (backoffMax < backoff) {
+    return helpers.error(
+      'number.min',
+      {
+        label: 'REFUND_QUERY_BACKOFF_MAX_SECONDS',
+        limit: backoff,
+        value: backoffMax,
+      },
+      { ...helpers.state, path: ['REFUND_QUERY_BACKOFF_MAX_SECONDS'] },
+    );
+  }
   return env;
 }
 
@@ -100,11 +114,7 @@ export const validationSchema = Joi.object({
   REFUND_WORK_LEASE_SECONDS: Joi.number().integer().min(1).default(30),
   REFUND_QUERY_BACKOFF_SECONDS: Joi.number().integer().min(1).default(15), // 조회 실패 후 첫 재조회 간격(초)
   // 지수 증가 조회 간격 상한(초). 첫 재조회 간격 이상이어야 한다
-  REFUND_QUERY_BACKOFF_MAX_SECONDS: Joi.number()
-    .integer()
-    .min(1)
-    .custom(atLeastSumOf('REFUND_QUERY_BACKOFF_SECONDS'))
-    .default(300),
+  REFUND_QUERY_BACKOFF_MAX_SECONDS: Joi.number().integer().min(1).default(300),
   REFUND_QUERY_FAILURE_THRESHOLD: Joi.number().integer().min(1).default(5), // 결과 확인 실패 전환 연속 오류 횟수
   REFUND_RECOVERY_PROBE_SECONDS: Joi.number().integer().min(1).default(900), // 장애 복구 확인용 1건 조회 간격(초)
   REFUND_RECOVERY_BATCH_SIZE: Joi.number().integer().min(1).default(20), // 일반·복구 조회 처리 단위(건)
