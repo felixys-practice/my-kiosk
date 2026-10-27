@@ -247,6 +247,10 @@ Table payment_cancels {
   orderItem order_items [not null]
   locks refund_locks [not null]
   ledger ledger
+
+  indexes {
+    (refundId, attemptNumber) [unique]
+  }
 }
 
 Table refund_locks {

@@ -501,6 +501,7 @@ model PaymentCancel {
   // NOTE: Partial Unique Index (raw migration으로 관리)
   // - payment_cancels_refund_id_active_key: (refund_id) WHERE status IN ('REQUESTED','QUERY_FAILED')
 
+  @@unique([refundId, attemptNumber]) // 환불 안의 시도 번호는 중복 불가
   @@index([paymentId])
   @@index([orderItemId])
   @@index([status])

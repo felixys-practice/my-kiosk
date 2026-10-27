@@ -379,5 +379,17 @@ describe('환불 저장 모델 DB 제약', () => {
 
       expect(retry.status).toBe(PaymentCancelStatus.REQUESTED);
     });
+
+    it('한 환불에 같은 시도 번호의 PG 취소 요청을 두 번째로 저장하면 고유 위반으로 실패한다', async () => {
+      const refund = await createAcceptedRefund();
+      const failedAttempt = paymentCancelAttempt(refund, {
+        status: PaymentCancelStatus.FAILED,
+      });
+      await prisma.paymentCancel.create({ data: failedAttempt });
+
+      await expect(
+        prisma.paymentCancel.create({ data: failedAttempt }),
+      ).rejects.toMatchObject({ code: uniqueViolation });
+    });
   });
 });
