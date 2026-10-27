@@ -330,5 +330,22 @@ describe('validationSchema', () => {
 
       expect(error).toBeUndefined();
     });
+
+    it('REFUND_QUERY_BACKOFF_MAX_SECONDS가 REFUND_QUERY_BACKOFF_SECONDS보다 1 작으면 검증이 실패한다', () => {
+      const { error } = validationSchema.validate(
+        {
+          ...validEnv,
+          REFUND_QUERY_BACKOFF_SECONDS: 15,
+          REFUND_QUERY_BACKOFF_MAX_SECONDS: 14,
+        },
+        { abortEarly: false },
+      );
+
+      expect(
+        error?.details.find((d) =>
+          d.path.includes('REFUND_QUERY_BACKOFF_MAX_SECONDS'),
+        )?.type,
+      ).toBe('number.min');
+    });
   });
 });

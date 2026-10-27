@@ -53,7 +53,15 @@ export const validationSchema = Joi.object({
     .min(1)
     .greater(Joi.ref('REFUND_PG_TIMEOUT_SECONDS')),
   REFUND_QUERY_BACKOFF_SECONDS: Joi.number().integer().min(1), // 조회 실패 후 첫 재조회 간격(초)
-  REFUND_QUERY_BACKOFF_MAX_SECONDS: Joi.number().integer().min(1), // 지수 증가 조회 간격 상한(초)
+  // 지수 증가 조회 간격 상한(초). 첫 재조회 간격 이상이어야 한다
+  REFUND_QUERY_BACKOFF_MAX_SECONDS: Joi.number()
+    .integer()
+    .min(1)
+    .custom((value: number, helpers) => {
+      const [env] = helpers.state.ancestors as Record<string, number>[];
+      const limit = env.REFUND_QUERY_BACKOFF_SECONDS;
+      return value >= limit ? value : helpers.error('number.min', { limit });
+    }),
   REFUND_QUERY_FAILURE_THRESHOLD: Joi.number().integer().min(1), // 결과 확인 실패 전환 연속 오류 횟수
   REFUND_RECOVERY_PROBE_SECONDS: Joi.number().integer().min(1), // 장애 복구 확인용 1건 조회 간격(초)
   REFUND_RECOVERY_BATCH_SIZE: Joi.number().integer().min(1), // 일반·복구 조회 처리 단위(건)
