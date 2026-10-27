@@ -518,6 +518,7 @@ Table refund_idempotency_records {
   key String [not null]
   requestFingerprint String [not null]
   status RefundIdempotencyStatus [not null]
+  claimUntil DateTime
   responseStatus Int
   responseBody Json
   refundId String

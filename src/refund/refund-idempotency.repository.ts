@@ -9,6 +9,7 @@ export type IdempotencyRecord = {
   status: RefundIdempotencyStatus;
   responseStatus: number | null;
   responseBody: unknown;
+  claimUntil: Date | null; // 처리 중 기록의 처리 기한. 지나면 다음 요청이 이어받는다
   createdAt: Date;
 };
 
@@ -31,11 +32,13 @@ export class RefundIdempotencyRepository {
    * 처리 중 기록을 새로 만든다
    * @param scope 요청자·기능·키
    * @param requestFingerprint 요청 본문 해시
+   * @param claimUntil 처리 기한
    * @returns 만든 기록, 같은 요청자·기능·키 기록이 이미 있으면 null
    */
   async createInProgress(
     scope: IdempotencyScope,
     requestFingerprint: string,
+    claimUntil: Date,
   ): Promise<IdempotencyRecord | null> {
     try {
       // 고유 제약이 동시 요청 중 하나만 통과시킨다
@@ -44,6 +47,7 @@ export class RefundIdempotencyRepository {
           ...scope,
           requestFingerprint,
           status: RefundIdempotencyStatus.IN_PROGRESS,
+          claimUntil,
         },
       });
     } catch (error) {
@@ -67,6 +71,31 @@ export class RefundIdempotencyRepository {
     return this.prisma.refundIdempotencyRecord.findUnique({
       where: { requesterId_operation_key: scope },
     });
+  }
+
+  /**
+   * 처리 기한이 지난 처리 중 기록을 이어받는다
+   * - 처리와 최초 응답 저장이 한 트랜잭션이므로, 처리 중으로 남은 기록은 이전 처리가 커밋되지 않았다는 뜻이다
+   * - 처리 기한 값을 조건으로 갱신해 동시에 이어받으려는 요청 중 하나만 성공한다
+   * @param id 기록 ID
+   * @param expiredClaimUntil 읽어 둔(지난) 처리 기한
+   * @param claimUntil 새 처리 기한
+   * @returns 이어받았으면 true
+   */
+  async takeOver(
+    id: string,
+    expiredClaimUntil: Date,
+    claimUntil: Date,
+  ): Promise<boolean> {
+    const { count } = await this.prisma.refundIdempotencyRecord.updateMany({
+      where: {
+        id,
+        status: RefundIdempotencyStatus.IN_PROGRESS,
+        claimUntil: expiredClaimUntil,
+      },
+      data: { claimUntil },
+    });
+    return count === 1;
   }
 
   /**

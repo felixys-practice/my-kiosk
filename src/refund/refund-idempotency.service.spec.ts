@@ -1,8 +1,12 @@
 import { BadRequestException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { RefundIdempotencyStatus } from '@prisma/client';
 import { DomainBadRequestError } from 'src/common/errors';
 import { TransactionClient } from 'src/prisma/prisma.service';
-import { RefundIdempotencyService } from './refund-idempotency.service';
+import {
+  IdempotentResult,
+  RefundIdempotencyService,
+} from './refund-idempotency.service';
 import {
   IdempotencyKeyReusedError,
   IdempotencyRequestInProgressError,
@@ -56,9 +60,28 @@ class InMemoryIdempotencyRepository {
     return `${scope.requesterId}|${scope.operation}|${scope.key}`;
   }
 
+  takeOver(
+    id: string,
+    expiredClaimUntil: Date,
+    claimUntil: Date,
+  ): Promise<boolean> {
+    for (const record of this.records.values()) {
+      if (
+        record.id === id &&
+        record.status === RefundIdempotencyStatus.IN_PROGRESS &&
+        record.claimUntil?.getTime() === expiredClaimUntil.getTime()
+      ) {
+        record.claimUntil = claimUntil;
+        return Promise.resolve(true);
+      }
+    }
+    return Promise.resolve(false);
+  }
+
   createInProgress(
     scope: IdempotencyScope,
     requestFingerprint: string,
+    claimUntil: Date,
   ): Promise<IdempotencyRecord | null> {
     const key = InMemoryIdempotencyRepository.keyOf(scope);
     if (this.records.has(key)) return Promise.resolve(null);
@@ -68,6 +91,7 @@ class InMemoryIdempotencyRepository {
       status: RefundIdempotencyStatus.IN_PROGRESS,
       responseStatus: null,
       responseBody: null,
+      claimUntil,
       createdAt: new Date(),
     };
     this.records.set(key, record);
@@ -108,6 +132,8 @@ describe('RefundIdempotencyService', () => {
   const key = 'refund-key-1';
   const request = { ticketId: 'ticket-1', terminationConsent: true };
   const allow = () => Promise.resolve();
+  /** 처리 중 기록의 처리 기한(초) — 설정 기본값 */
+  const workLeaseSeconds = 30;
 
   let repository: InMemoryIdempotencyRepository;
   let service: RefundIdempotencyService;
@@ -116,6 +142,7 @@ describe('RefundIdempotencyService', () => {
     repository = new InMemoryIdempotencyRepository();
     service = new RefundIdempotencyService(
       repository as unknown as RefundIdempotencyRepository,
+      { get: () => workLeaseSeconds } as unknown as ConfigService,
     );
   });
 
@@ -335,5 +362,24 @@ describe('RefundIdempotencyService', () => {
 
     expect(retried).toEqual({ status: 202, body: { refundId: 'refund-1' } });
     expect(repository.committed).toEqual(['refund-1']);
+  });
+
+  it('처리 기한이 지난 처리 중 기록은 같은 본문의 다음 요청이 이어받아 처리한다', async () => {
+    const command = { requesterId, operation, key, request, authorize: allow };
+    // 최초 요청이 처리 중 기록만 남기고 멈춘 상황(처리 트랜잭션은 커밋되지 않음)
+    void service.execute(
+      command,
+      () => new Promise<IdempotentResult<object>>(() => {}),
+    );
+    await Promise.resolve();
+    for (const record of repository.records.values()) {
+      record.claimUntil = new Date(Date.now() - 1000);
+    }
+
+    const result = await service.execute(command, () =>
+      Promise.resolve({ status: 202, body: { refundId: 'refund-1' } }),
+    );
+
+    expect(result).toEqual({ status: 202, body: { refundId: 'refund-1' } });
   });
 });

@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { createHash } from 'crypto';
 import { TransactionClient } from 'src/prisma/prisma.service';
 import {
@@ -57,7 +58,10 @@ export type IdempotentResult<T> = {
  */
 @Injectable()
 export class RefundIdempotencyService {
-  constructor(private readonly repository: RefundIdempotencyRepository) {}
+  constructor(
+    private readonly repository: RefundIdempotencyRepository,
+    private readonly configService: ConfigService,
+  ) {}
 
   /**
    * 같은 요청은 최초 응답을 돌려주고, 처음 요청이면 처리한다
@@ -98,12 +102,21 @@ export class RefundIdempotencyService {
     const fingerprint = fingerprintOf(command.request);
     let created: IdempotencyRecord | null = null;
     for (let attempt = 0; attempt < maxAcquireAttempts; attempt++) {
-      created = await this.repository.createInProgress(scope, fingerprint);
+      created = await this.repository.createInProgress(
+        scope,
+        fingerprint,
+        this.nextClaimUntil(),
+      );
       if (created) break;
 
-      // 기록이 이미 있으면 저장된 최초 응답을 돌려준다
       const existing = await this.repository.find(scope);
       if (existing) {
+        // 처리 기한이 지난 처리 중 기록은 같은 본문이면 이어받아 처리한다
+        if (await this.tryTakeOver(existing, fingerprint, command.authorize)) {
+          created = existing;
+          break;
+        }
+        // 그 밖에는 저장된 최초 응답을 돌려준다
         return this.replay<T>(existing, fingerprint, command.authorize);
       }
       // 그 사이 최초 요청이 거절되어 기록이 지워졌다. 고유 제약으로 다시 생성을 시도한다
@@ -154,5 +167,47 @@ export class RefundIdempotencyService {
       status: existing.responseStatus!,
       body: existing.responseBody as T,
     };
+  }
+
+  /**
+   * 새 처리 기한을 계산한다(작업자 처리 기한 refund.workLeaseSeconds)
+   * @returns 처리 기한 시각
+   */
+  private nextClaimUntil(): Date {
+    const leaseSeconds = this.configService.get<number>(
+      'refund.workLeaseSeconds',
+    )!;
+    return new Date(Date.now() + leaseSeconds * 1000);
+  }
+
+  /**
+   * 처리 기한이 지난 처리 중 기록을 이어받는다
+   * @param existing 같은 요청자·기능·키의 기록
+   * @param fingerprint 이번 요청의 본문 지문
+   * @param authorize 현재 권한 재확인
+   * @returns 이어받았으면 true
+   */
+  private async tryTakeOver(
+    existing: IdempotencyRecord,
+    fingerprint: string,
+    authorize: () => Promise<void>,
+  ): Promise<boolean> {
+    // 처리 중이고 처리 기한이 지났으며 같은 본문일 때만 이어받는다
+    if (
+      existing.status !== RefundIdempotencyStatus.IN_PROGRESS ||
+      existing.claimUntil === null ||
+      existing.claimUntil.getTime() > Date.now() ||
+      existing.requestFingerprint !== fingerprint
+    ) {
+      return false;
+    }
+
+    // 이어받기 전에 현재 권한을 확인한다
+    await authorize();
+    return this.repository.takeOver(
+      existing.id,
+      existing.claimUntil,
+      this.nextClaimUntil(),
+    );
   }
 }
