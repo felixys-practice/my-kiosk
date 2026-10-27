@@ -8,6 +8,8 @@ import {
 
 /** Idempotency-Key 최대 길이 */
 const maxKeyLength = 128;
+/** 공백 없는 출력 가능 ASCII(0x21~0x7E) 1자 이상 */
+const printableAsciiWithoutSpace = /^[\x21-\x7E]+$/;
 
 /** 멱등 처리 대상 요청 */
 export type IdempotentCommand = {
@@ -48,10 +50,15 @@ export class RefundIdempotencyService {
     // 키가 없으면 멱등 처리 없이 실행한다(상품당 확정 환불 unique가 중복 환불을 막는다)
     if (command.key === undefined) return handler();
 
-    // 키 형식 검사(API 계약 §8 중복 요청: 1~128자)
+    // 키 형식 검사(API 계약 중복 요청: 1~128자 ASCII 비공백)
     if (command.key.length > maxKeyLength) {
       throw new BadRequestException(
         `Idempotency-Key는 ${maxKeyLength}자 이하여야 합니다`,
+      );
+    }
+    if (!printableAsciiWithoutSpace.test(command.key)) {
+      throw new BadRequestException(
+        'Idempotency-Key는 공백 없는 ASCII 문자여야 합니다',
       );
     }
 

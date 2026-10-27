@@ -230,5 +230,20 @@ describe('RefundIdempotencyService', () => {
         ),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
+
+    it('공백이 들어간 키는 거절된다', async () => {
+      await expect(
+        service.execute(
+          {
+            requesterId,
+            operation,
+            key: 'refund key',
+            request,
+            authorize: allow,
+          },
+          handler,
+        ),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
   });
 });
