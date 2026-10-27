@@ -32,16 +32,17 @@ model User {
   password String? // nullable: OAuth 전용 유저는 null, 로컬 로그인 유저는 bcrypt 해시 문자열
   isActive Boolean  @default(true) @map("is_active")
 
-  refreshTokens     RefreshToken[]
-  oauthAccounts     OAuthAccount[]
-  ownedShops        ShopOwner[]
-  tickets           Ticket[]
-  orders            Order[]
-  usageSessions     UsageSession[]
-  ProductHistories  ProductHistory[]
-  ticketSeatChanges TicketSeatChange[] // 이 사용자가 점주로서 변경한 이용권 좌석 이력
-  requestedRefunds  Refund[]           @relation("RefundRequestedBy") // 이 사용자가 실행한 환불 확정
-  reviewedRefunds   Refund[]           @relation("RefundReviewedBy") // 이 사용자가 검토한 PG 금액 불일치
+  refreshTokens           RefreshToken[]
+  oauthAccounts           OAuthAccount[]
+  ownedShops              ShopOwner[]
+  tickets                 Ticket[]
+  orders                  Order[]
+  usageSessions           UsageSession[]
+  ProductHistories        ProductHistory[]
+  ticketSeatChanges       TicketSeatChange[] // 이 사용자가 점주로서 변경한 이용권 좌석 이력
+  requestedRefunds        Refund[]           @relation("RefundRequestedBy") // 이 사용자가 실행한 환불 확정
+  reviewedRefunds         Refund[]           @relation("RefundReviewedBy") // 이 사용자가 검토한 PG 금액 불일치
+  requestedPaymentCancels PaymentCancel[]    @relation("PaymentCancelRequestedBy") // 이 사용자가 실행한 PG 취소 재시도
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -416,7 +417,8 @@ model Payment {
   type            PaymentType // 결재 타입(카드, 현금)
   status          PaymentStatus @default(PENDING)
   orderId         String        @map("order_id")
-  amount          Int // 결재 금액
+  amount          Int // 결재 금액(원래 요청액, 덮어쓰지 않음)
+  approvedAmount  Int?          @map("approved_amount") // PG가 인증한 실제 승인액, 승인 금액 불일치에도 보존
   van             VanType? // 카드 대행사
   pgTransactionId String?       @unique // 거래 고유 ID (요청 응답으로 수신)
   requestedAt     DateTime?     @map("requested_at") // 결재 승인 요청 시각
@@ -437,15 +439,19 @@ model Payment {
 
 enum PaymentCancelStatus {
   REQUESTED // PG에 취소 요청 발송, 응답 대기중(미확정)
-  PENDING_APPROVAL // 사용 이력 있는 건 - 점주 승인 대기(락 미획득, PG 요청 전, 금액 미확정)
+  QUERY_FAILED // 연속 조회 오류가 한도에 도달해 결과 확인 실패(미확정, 복구 조회 대상)
+  PENDING_APPROVAL // 과거 구현 전용: 사용 이력 있는 건 점주 승인 대기. 새 환불 경로에서는 만들지 않는다
   SUCCEEDED // PG가 취소 확정
-  FAILED // PG가 취소를 확정적으로 거절
+  FAILED // 시도 실패 확정: PG 거절, 확인된 전송 전 실패, 재전송 한도 소진 후 PG 미접수 확인. 환불 실패·철회가 아님
 }
 
 // 우리 시스템이 자체 판단한 실패 원인 분류 - PG가 알려주지 않는 사유(pgErrorCode로 표현 불가)를 코드로 필터링하기 위한 용도
 enum PaymentCancelFailureCode {
-  AMOUNT_MISMATCH // PG 응답 금액이 요청 금액과 다름(PG는 성공으로 응답했으나 우리가 실패로 재판정)
-  PG_NOT_REACHED // 락 만료 후 PG 거래조회 결과 "거래 없음" - 요청이 PG에 도달하지 않은 것으로 판단
+  AMOUNT_MISMATCH // 과거 구현: PG 응답 금액이 요청 금액과 다름(PG는 성공으로 응답했으나 우리가 실패로 재판정)
+  PG_NOT_REACHED // 과거 구현: 락 만료 후 PG 거래조회 결과 "거래 없음" - 요청이 PG에 도달하지 않은 것으로 판단
+  SEND_FAILED // PG에 보내기 전에 실패가 확인됨
+  PG_REJECTED // PG가 해당 요청을 거절함(취소가 실행되지 않았고 앞으로도 진행되지 않음)
+  RETRY_EXHAUSTED // 자동 재전송 한도를 소진한 뒤 PG 미접수가 확인됨
 }
 
 // PG에 대한 취소 실행 1건에 대한 정보 모델 — 한 번의 취소는 상품(OrderItem) 1건만 대상으로 한다
@@ -464,6 +470,29 @@ model PaymentCancel {
   cancelledAt     DateTime?                 @map("cancelled_at") // 취소 완료 시각
   failedAt        DateTime?                 @updatedAt @map("failed_at")
 
+  // ── 환불 확정 아래의 PG 취소 요청 (data-model §4) ──
+  refundId            String?   @map("refund_id") // 소속 환불. 새 요청은 필수, 보존할 과거 거절 이력만 이관 기간 null
+  attemptNumber       Int?      @map("attempt_number") // 환불 안에서 증가하는 시도 번호. 새 요청은 필수
+  actualAmount        Int?      @map("actual_amount") // PG가 확인한 실제 취소액, 확인 전 null
+  resendCount         Int       @default(0) @map("resend_count") // 백그라운드 자동 재전송 횟수(최초 전송·개별 확인 재전송 제외)
+  manualResendCount   Int       @default(0) @map("manual_resend_count") // 개별 확인에서 미접수 확인 후 같은 요청을 다시 보낸 횟수
+  inquiryCount        Int       @default(0) @map("inquiry_count") // 총 조회 횟수
+  inquiryFailureCount Int       @default(0) @map("inquiry_failure_count") // 연속 조회 오류 횟수
+  lastInquiryAt       DateTime? @map("last_inquiry_at") // 마지막 조회 시작 시각
+  nextInquiryAt       DateTime? @map("next_inquiry_at") // 다음 자동 조회 예정 시각
+  lastInquiryError    String?   @map("last_inquiry_error") // 마지막 조회 오류 상세(운영 전용)
+  queryFailedAt       DateTime? @map("query_failed_at") // 결과 확인 실패(QUERY_FAILED) 진입 시각
+  recoveryGeneration  Int       @default(0) @map("recovery_generation") // 확인 실패 알림 중복 방지 세대
+  lastSendAttemptAt   DateTime? @map("last_send_attempt_at") // 전송 직전에 저장하는 마지막 전송 시도 시각
+  sendAttemptCount    Int       @default(0) @map("send_attempt_count") // 전송 시도 횟수
+  claimToken          String?   @map("claim_token") // 전송·조회를 맡은 작업자의 담당 토큰
+  claimUntil          DateTime? @map("claim_until") // 담당 작업자의 처리 기한
+  requestedById       String?   @map("requested_by_id") // 최초 시스템 실행이면 null, 점주·운영자 재시도면 실행자
+  retryReason         String?   @map("retry_reason") // 재시도 사유(운영자 직접 재시도, 개별 확인 후 재시도 등)
+  updatedAt           DateTime  @default(now()) @updatedAt @map("updated_at") // 최종 갱신
+
+  refund      Refund?      @relation(fields: [refundId], references: [id], onDelete: Restrict)
+  requestedBy User?        @relation("PaymentCancelRequestedBy", fields: [requestedById], references: [id], onDelete: Restrict)
   payment     Payment      @relation(fields: [paymentId], references: [id])
   orderItemId String       @map("order_item_id") // 이 취소 요청의 대상 상품(1:1 — 한 번의 취소는 상품 1건만 대상)
   orderItem   OrderItem    @relation(fields: [orderItemId], references: [id])
@@ -475,6 +504,8 @@ model PaymentCancel {
   @@index([status])
   @@index([pgErrorCode])
   @@index([failureCode])
+  @@index([refundId])
+  @@index([status, nextInquiryAt]) // 자동 조회 대상 탐색
   @@map("payment_cancels")
 }
 
@@ -772,10 +803,12 @@ model Refund {
   paidAt                 DateTime? @map("paid_at") // 전체 환불금 지급 완료 시각
 
   payment      Payment       @relation(fields: [paymentId], references: [id])
-  orderItem    OrderItem?    @relation(fields: [orderItemId], references: [id])
-  requestedBy  User?         @relation("RefundRequestedBy", fields: [requestedById], references: [id])
-  reviewedBy   User?         @relation("RefundReviewedBy", fields: [reviewedById], references: [id])
-  endedSession UsageSession? @relation(fields: [endedSessionId], references: [id])
+  orderItem    OrderItem?    @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
+  requestedBy  User?         @relation("RefundRequestedBy", fields: [requestedById], references: [id], onDelete: Restrict)
+  reviewedBy   User?         @relation("RefundReviewedBy", fields: [reviewedById], references: [id], onDelete: Restrict)
+  endedSession UsageSession? @relation(fields: [endedSessionId], references: [id], onDelete: Restrict)
+
+  paymentCancels PaymentCancel[] // 이 환불 아래의 PG 취소 요청(시도) 기록
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
