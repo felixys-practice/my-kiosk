@@ -285,5 +285,18 @@ describe('validationSchema', () => {
           ?.type,
       ).toBe('number.greater');
     });
+
+    it('REFUND_WORK_LEASE_SECONDS가 REFUND_PG_TIMEOUT_SECONDS보다 1 크면 검증을 통과한다', () => {
+      const { error } = validationSchema.validate(
+        {
+          ...validEnv,
+          REFUND_PG_TIMEOUT_SECONDS: 10,
+          REFUND_WORK_LEASE_SECONDS: 11,
+        },
+        { abortEarly: false },
+      );
+
+      expect(error).toBeUndefined();
+    });
   });
 });
