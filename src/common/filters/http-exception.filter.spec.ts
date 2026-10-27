@@ -72,4 +72,10 @@ describe('HttpExceptionFilter', () => {
       expect(sentBody().error.code).toBe('REFUND_CONTRACT_CODE');
     },
   );
+
+  it('code가 없는 도메인 오류는 오류 클래스 이름이 error.code로 나간다', () => {
+    filter.catch(new DomainConflictError('코드 없는 충돌'), host);
+
+    expect(sentBody().error.code).toBe('DomainConflictError');
+  });
 });
