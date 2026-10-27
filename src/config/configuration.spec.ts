@@ -131,6 +131,12 @@ describe('configuration', () => {
         PG_CALLBACK_MAX_SKEW_SECONDS: config.pgCallback.maxSkewSeconds,
       }).toEqual(refundEnvDefaults);
     });
+
+    it('REFUND_WORK_LEASE_SECONDS=3e1이면 설정 검증과 같은 숫자 해석으로 30초로 읽힌다', () => {
+      process.env.REFUND_WORK_LEASE_SECONDS = '3e1';
+
+      expect(configuration().refund.workLeaseSeconds).toBe(30);
+    });
   });
 
   describe('네임스페이스 구조', () => {
