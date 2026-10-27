@@ -55,4 +55,18 @@ describe('RefundLockingRepository', () => {
       ['usage_sessions:session-a', 'usage_sessions:session-b'],
     );
   });
+
+  it('지급 경로 잠금은 Refund → PaymentCancel → ManualRefundPayout 순서로 실행된다', async () => {
+    await repository.lockForPayout(tx as unknown as TransactionClient, {
+      refundId: 'refund-1',
+      paymentCancelIds: ['attempt-1'],
+      manualRefundPayoutIds: ['payout-1'],
+    });
+
+    expect(tx.locked).toEqual([
+      'refunds:refund-1',
+      'payment_cancels:attempt-1',
+      'manual_refund_payouts:payout-1',
+    ]);
+  });
 });

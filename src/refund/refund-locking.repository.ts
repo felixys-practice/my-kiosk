@@ -8,7 +8,10 @@ type LockedTable =
   | 'tickets'
   | 'ticket_pauses'
   | 'usage_sessions'
-  | 'seat_assignments';
+  | 'seat_assignments'
+  | 'refunds'
+  | 'payment_cancels'
+  | 'manual_refund_payouts';
 
 /** 환불 확정 때 잠글 행들 */
 export type AcceptanceLockTargets = {
@@ -17,6 +20,13 @@ export type AcceptanceLockTargets = {
   ticketPauseIds: string[];
   usageSessionIds: string[];
   seatAssignmentIds: string[];
+};
+
+/** 지급 처리 때 잠글 행들 */
+export type PayoutLockTargets = {
+  refundId: string;
+  paymentCancelIds: string[];
+  manualRefundPayoutIds: string[];
 };
 
 /**
@@ -42,6 +52,26 @@ export class RefundLockingRepository {
     await this.lockRows(tx, 'ticket_pauses', targets.ticketPauseIds);
     await this.lockRows(tx, 'usage_sessions', targets.usageSessionIds);
     await this.lockRows(tx, 'seat_assignments', targets.seatAssignmentIds);
+  }
+
+  /**
+   * 이미 확정된 환불의 지급 처리(PG 결과 저장·재시도·별도 지급)에 필요한 행을 잠근다
+   * - 앞 단계(Payment~SeatAssignment) 행으로 역행하지 않는다
+   * @param tx 트랜잭션 클라이언트
+   * @param targets 잠글 환불·PG 취소 요청·별도 환불금 지급
+   */
+  async lockForPayout(
+    tx: TransactionClient,
+    targets: PayoutLockTargets,
+  ): Promise<void> {
+    // 환불 → PG 취소 요청 → 별도 환불금 지급 순서로 잠근다
+    await this.lockRows(tx, 'refunds', [targets.refundId]);
+    await this.lockRows(tx, 'payment_cancels', targets.paymentCancelIds);
+    await this.lockRows(
+      tx,
+      'manual_refund_payouts',
+      targets.manualRefundPayoutIds,
+    );
   }
 
   /**
