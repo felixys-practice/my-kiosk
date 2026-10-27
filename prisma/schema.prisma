@@ -129,6 +129,8 @@ model Ledger {
   settlementBatch   SettlementBatch? @relation(fields: [settlementBatchId], references: [id])
 
   createdAt DateTime @default(now()) @map("created_at")
+  // NOTE: CHECK 제약 (raw migration으로 관리)
+  // - ledger_single_payout_check: payment_cancel_id와 manual_refund_payout_id 중 하나만
 
   @@index([shopId])
   @@index([orderId, status]) // 정산 배치의 주 조회 패턴: orderId별 미마감 레코드 집계

@@ -573,5 +573,27 @@ describe('환불 저장 모델 DB 제약', () => {
         prisma.ledger.create({ data: manualLedger }),
       ).rejects.toMatchObject({ code: uniqueViolation });
     });
+
+    it('PG 취소 요청과 별도 환불금 지급을 둘 다 가리키는 원장은 저장이 실패한다', async () => {
+      const refund = await createAcceptedRefund();
+      const attempt = await prisma.paymentCancel.create({
+        data: paymentCancelAttempt(refund, {
+          status: PaymentCancelStatus.SUCCEEDED,
+        }),
+      });
+      const payout = await prisma.manualRefundPayout.create({
+        data: manualPayout(refund.refundId),
+      });
+
+      await expect(
+        prisma.ledger.create({
+          data: refundLedger(refund, {
+            paymentCancelId: attempt.id,
+            manualRefundPayoutId: payout.id,
+            amount: -10000,
+          }),
+        }),
+      ).rejects.toThrow(/ledger_single_payout_check/);
+    });
   });
 });
