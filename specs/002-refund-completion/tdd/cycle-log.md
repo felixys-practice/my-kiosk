@@ -279,3 +279,72 @@ U10~U15를 마친 뒤, 관계 검증의 비교 대상 설정을 생략하면 정
 ## Phase 1 완료
 
 - T001~T005 완료, Codex 재검수 통과. 다음은 Phase 2(T006~T018)다.
+
+## Phase 2 진행 방식 (2026-10-28)
+
+- **마이그레이션**: 사용자 결정에 따라 사이클마다 작은 추가 마이그레이션을 만들어 개발 DB에 적용했다. tasks.md T007~T010은 확장 마이그레이션 파일 하나(`20261027000100_refund_completion_expand`)를 요구하지만, 그 방식은 사이클마다 개발 DB를 초기화해야 해서 택하지 않았다. 하나로 합칠지는 PR 전에 따로 정한다.
+- **DB 제약 테스트**: `src/prisma/refund-constraints.integration.spec.ts`가 개발 DB(PostgreSQL)에 직접 저장해 확인한다. 테스트마다 새 주문 항목·결제를 만들고, afterAll에서 자기 데이터만 지운다.
+- **red**: 각 동작은 모델이나 열만 있고 제약은 없는 상태에서 "중복·음수 저장이 성공한다"를 먼저 확인했다. 실패 출력은 모두 `Received promise resolved instead of rejected`다. 제약 이름이 오류 메시지에 들어가므로, CHECK 테스트는 `/제약이름/`으로 실패 이유를 고정했다.
+- **이미 있던 제약**(U24·U28)과 경계 허용 쪽 동작(U17·U20·U22·U32)은 처음부터 통과한다. 그래서 개발 DB에서 인덱스나 제약을 잠시 바꾸는 뮤턴트로 테스트가 실패하는 것을 확인했다. 그 뒤 원래 정의를 다시 만들고, `pg_indexes`·`pg_constraint`의 정의가 같은지 확인했다.
+- **Prisma가 관리하지 않는 제약**(부분 unique 인덱스, CHECK)은 기존 프로젝트 방식대로 raw SQL 마이그레이션으로 만들었다. `schema.prisma`의 모델에는 이름을 주석으로 남겼다.
+- **도구 문제**:
+  - Prisma 7의 `migrate dev`는 클라이언트를 자동으로 생성하지 않는다. U21의 첫 실행은 클라이언트가 옛 상태라 무효 red였고, `prisma generate` 뒤 다시 확인했다.
+  - unique 추가 경고가 있으면 `migrate dev`가 비대화형 환경에서 실패한다. U23부터는 `prisma migrate diff`로 SQL을 만들고 마이그레이션 폴더를 직접 만들어 `migrate deploy`로 적용했다.
+
+## 사이클 24~59: Phase 2 DB 제약 (U16~U34, U274~U283)
+
+| 동작 | 내용 | red (프로필 `single`, `{file}`=`src/prisma/refund-constraints.integration.spec.ts`) | green | 커밋 |
+|---|---|---|---|---|
+| U16 | 같은 주문 항목의 확정된 상품 대상 환불 두 번째 저장 실패 | 1 failed, `Received promise resolved instead of rejected` | Refund 모델 선언 마이그레이션 + `refunds_order_item_id_accepted_key` 부분 unique | `1800975` |
+| U17 | 과거 거절 이력은 확정 환불과 공존 | 첫 실행 통과 → 뮤턴트(인덱스 조건에서 decision_status 제거) 1 failed | 구현 변경 없음 | `68f40d3` |
+| U18 | 같은 결제의 확정된 결제 전체 대상 환불 두 번째 저장 실패 | 1 failed, 위와 같은 출력 | `refunds_payment_id_accepted_key` 부분 unique | `f18fb14` |
+| U19 | 확정된 환불 금액 -1 실패 | 1 failed | `refunds_amount_check` (amount >= 0) | `18cccae` |
+| U20 | 확정된 환불 금액 0 저장 | 첫 실행 통과 → 뮤턴트(amount > 0) 1 failed, `violates check constraint` | 구현 변경 없음 | `356a732` |
+| U274 | 지급 합계 -1 실패 | 1 failed | `refunds_paid_amount_check` | `4257693` |
+| U275 | 확정된 환불의 NOT_APPLICABLE 실패 | 1 failed | `refunds_not_applicable_legacy_check` | `599119b` |
+| U276 | 상품 대상인데 주문 항목 없음 실패 | 1 failed | `refunds_order_item_target_check` | `fa901b0` |
+| U277 | 결제 전체 대상인데 주문 항목 있음 실패 | 1 failed | `refunds_payment_target_item_check` | `328b580` |
+| U278 | 결제 전체 대상인데 SYSTEM 아님 실패 | 1 failed | `refunds_payment_target_source_check` | `8f9cca7` |
+| U279 | 확정된 고객 환불의 실행자 없음 실패 | 1 failed | `refunds_accepted_actor_check` | `c78acb1` |
+| U280 | 확정된 매장 환불의 종료 동의 없음 실패 | 1 failed | `refunds_accepted_consent_check` | `afaba94` |
+| U281 | 확정된 환불의 확정 시각 없음 실패 | 1 failed | `refunds_accepted_at_check` | `331f368` |
+| (T008 선언) | PaymentCancel 필드·상태·실패 사유, Payment.approvedAmount, 환불 관련 FK ON DELETE RESTRICT | — | 구조 변경 | `5eae3ab` |
+| U21 | 한 환불의 미확정 요청 두 번째 저장 실패 | 클라이언트 재생성 후 1 failed (첫 실행은 무효 red) | `payment_cancels_refund_id_active_key` 부분 unique | `89a9a71` |
+| U22 | FAILED가 있어도 새 REQUESTED 저장 | 첫 실행 통과 → 뮤턴트(상태 조건 없는 unique) 1 failed | 구현 변경 없음 | `656be2d` |
+| U23 | 같은 (refundId, attemptNumber) 실패 | 1 failed | `@@unique([refundId, attemptNumber])` | `95cf511` |
+| U24 | 같은 PG 취소 거래 ID 실패 | 첫 실행 통과(기존 unique) → 뮤턴트(인덱스 제거) 1 failed | 구현 변경 없음 | `d91d25a` |
+| U25 | 실제 취소액 -1 실패 | 1 failed | `payment_cancels_actual_amount_check` | `b9b87db` |
+| U282 | 횟수 필드 5개 -1 실패 | 5 failed | `payment_cancels_counts_check` | `3321049` |
+| (T009 선언) | ManualRefundPayout 모델, TicketPause closedAt·closeReason | — | 구조 변경 | `f51a5e6` |
+| U26 | 한 환불의 RESERVED 두 번째 저장 실패 | 1 failed | `manual_refund_payouts_refund_id_reserved_key` 부분 unique | `cc6c4d0` |
+| U27 | 다른 환불의 같은 외부 거래 식별자 실패 | 1 failed | `externalTransactionId @unique` | `93200da` |
+| U283 | 별도 지급 금액 0 실패 | 1 failed | `manual_refund_payouts_amount_check` (amount > 0) | `bf59da3` |
+| (T010 선언) | Ledger refundId·manualRefundPayoutId, RefundNotification·Receipt, RefundRecoveryControl, RefundIdempotencyRecord | — | 구조 변경 | `82c0397` |
+| U28 | 같은 paymentCancelId 원장 실패 | 첫 실행 통과(기존 unique) → 뮤턴트(인덱스 제거) 1 failed | 구현 변경 없음 | `a458e59` |
+| U29 | 같은 manualRefundPayoutId 원장 실패 | 1 failed | `manualRefundPayoutId @unique` | `0e9fdf9` |
+| U30 | 두 지급을 모두 가리키는 원장 실패 | 1 failed | `ledger_single_payout_check` | `5790e71` |
+| U31 | 같은 환불의 0원 원장 두 번째 실패 | 1 failed | `ledger_refund_id_zero_payout_key` 부분 unique | `6ff7c54` |
+| U32 | 같은 (notificationId, userId) 읽음 실패 | 첫 실행 통과(복합 PK) → 뮤턴트(PK 제거) 1 failed | 구현 변경 없음 | `9e4fdfa` |
+| U33 | 같은 사건·범위·수신자 알림 실패(수신자 null 포함) | 1 failed | NULLS NOT DISTINCT unique → 리팩터링으로 부분 unique 2개 | `8ffff6a`, `3e7e299`(구조) |
+| U34 | 같은 (requesterId, operation, key) 멱등 기록 실패 | 1 failed | `@@unique([requesterId, operation, key])` | `dda3df6` |
+
+- 각 green 뒤 전체 실행 결과: 단위 218 → 251 passed, E2E 57 passed. 단, 아래 이탈 사항이 있다.
+- 추가 동작 U274~U283: data-model §3·§6·§5가 정했지만 테스트 목록에 빠져 있던 값 제약이다. 불변식 INV-2로 근거를 적고 목록에 추가했다.
+- U33 리팩터링: NULLS NOT DISTINCT unique 인덱스를 Prisma가 "스키마 밖 일반 인덱스"로 보고 다음 diff에서 `DROP INDEX`를 만들려 했다. 그래서 같은 의미의 부분 unique 2개(수신자 있음·없음)로 나눴다. 나누기 전에 수신자가 있는 경우의 테스트를 추가해 통과를 확인했고, 나눈 뒤 두 테스트가 모두 통과했다.
+
+### 이탈과 미해결 사항
+
+- **red 상태 커밋 1건**: `89a9a71`(U21)은 E2E 2건이 실패한 상태에서 커밋됐다. 도우미 스크립트가 실패를 확인하지 않고 커밋했기 때문이다.
+  - 실패 내용: seat-type QS-25 `expected 200, got 404`, QS-10 `expected 201, got 401`
+  - 이후 E2E 3회 재실행은 모두 57 passed였다. 도우미를 고쳐 이후 red 상태의 커밋 2건을 막았다.
+- **E2E 간헐 실패(원인 미확정)**: Phase 2 중 seat-type E2E가 다음과 같이 실패했다.
+  - U32 직전: QS-19 `got 401`
+  - U32 재실행: QS-3 `got 401`
+  - 모두 바로 재실행하면 통과했다. 실패 로그와 그 시점 리스너 목록은 스크래치 패드에 저장했다.
+  - JWT 검증이 401을 내는 조건(토큰 형식, 사용자별 `session_revoked` Redis 키)을 확인했지만 E2E 사용자에게 해당할 근거는 찾지 못했다. Phase 1 재검수의 정정대로 원인은 확정하지 않는다.
+- **E2E 멈춤 1건**: U25에서 E2E가 10분 넘게 출력 없이 멈춰 직접 종료했다. 그 시각 DB에는 대기 중인 쿼리가 없었다. VS Code Jest 확장이 `--watch`로 단위 테스트를 14시간째 실행 중이었다(PID 99019). TDD 프로필은 IDE와 E2E를 동시에 돌리지 않도록 정하고 있으므로, 간헐 실패와의 관계를 사용자에게 알린다.
+- **설계 확인 필요**(검수 때 함께 알림):
+  - `PaymentCancel.failedAt`이 기존 스키마에서 `@updatedAt`이다. 앞으로 담당 토큰·조회 일정을 갱신할 때마다 실패 시각이 바뀐다. data-model §4는 실패 확정 시각으로 정의한다.
+  - 재개 없이 닫은 정지 기록(`closedAt`)도 기존 부분 unique `unique_active_ticket_pause`(`resumed_at IS NULL`)에서는 "활성"으로 남는다. REVOKED 이용권에는 새 정지를 만들지 않으므로 제약 충돌은 없지만, "활성 정지"를 `resumedAt IS NULL`로 찾는 기존 조회는 닫힌 기록을 활성으로 볼 수 있다.
+  - 0원 원장의 금액이 0이어야 한다는 조건은 DB 제약으로 두지 않았다(테스트 목록에 없음).
+  - "이용권이 있는 신규 환불의 종료 시각 필수"는 다른 테이블을 봐야 해서 DB CHECK로 표현할 수 없다. 환불 확정 서비스(US1)에서 검증한다.

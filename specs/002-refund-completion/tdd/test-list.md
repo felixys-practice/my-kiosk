@@ -162,35 +162,35 @@ suite_baseline: green
 
 | id | behavior | traces | kind | state | test |
 |---|---|---|---|---|---|
-| U16 | 같은 주문 항목에 decisionStatus=ACCEPTED·targetKind=ORDER_ITEM 환불을 두 번째로 저장하면 unique 위반으로 실패한다 | FR-041, FR-029 | example | PENDING | |
-| U17 | 같은 주문 항목이라도 decisionStatus=LEGACY_REJECTED 환불은 ACCEPTED 환불과 함께 저장된다 | FR-007a | example | PENDING | |
-| U18 | 같은 결제에 decisionStatus=ACCEPTED·targetKind=PAYMENT 환불을 두 번째로 저장하면 실패한다 | FR-030 | example | PENDING | |
-| U19 | Refund.amount가 -1이면 저장이 실패한다 | FR-012 | example | PENDING | |
-| U20 | Refund.amount가 0이면 저장된다 | FR-016a | example | PENDING | |
-| U21 | 한 환불에 status가 REQUESTED 또는 QUERY_FAILED인 PG 취소 요청을 두 번째로 저장하면 실패한다 | FR-043 | example | PENDING | |
-| U22 | 한 환불에 FAILED PG 취소 요청이 있어도 REQUESTED PG 취소 요청 하나는 저장된다 | FR-057 | example | PENDING | |
-| U23 | 같은 (refundId, attemptNumber) PG 취소 요청을 두 번째로 저장하면 실패한다 | FR-057 | example | PENDING | |
-| U24 | 같은 pgTransactionId를 가진 PG 취소 요청을 두 번째로 저장하면 실패한다 | FR-019 | example | PENDING | |
-| U25 | PaymentCancel.actualAmount가 -1이면 저장이 실패한다 | FR-027 | example | PENDING | |
-| U26 | 한 환불에 status=RESERVED 별도 환불금 지급을 두 번째로 저장하면 실패한다 | FR-043 | example | PENDING | |
-| U27 | 다른 환불에서 같은 externalTransactionId로 별도 환불금 지급을 저장하면 실패한다 | FR-046 | example | PENDING | |
-| U28 | 같은 paymentCancelId를 가진 원장을 두 번째로 저장하면 실패한다 | FR-019 | example | PENDING | |
-| U29 | 같은 manualRefundPayoutId를 가진 원장을 두 번째로 저장하면 실패한다 | FR-019 | example | PENDING | |
-| U30 | paymentCancelId와 manualRefundPayoutId를 둘 다 가진 원장은 저장이 실패한다 | FR-019 | example | PENDING | |
-| U31 | 같은 환불의 0원 원장(두 지급 ID 모두 null)을 두 번째로 저장하면 실패한다 | FR-016a | example | PENDING | |
-| U32 | 같은 (notificationId, userId) 읽음 기록을 두 번째로 저장하면 실패한다 | FR-039 | example | PENDING | |
-| U33 | 같은 eventKey·audience·recipient 알림을 두 번째로 저장하면 recipient가 null이어도 실패한다 | FR-037 | example | PENDING | |
-| U34 | 같은 (requesterId, operation, key) 멱등 요청 기록을 두 번째로 저장하면 실패한다 | FR-041 | example | PENDING | |
-| U274 | Refund.paidAmount가 -1이면 저장이 실패한다 | INV-2 | example | PENDING | |
-| U275 | decisionStatus=ACCEPTED 환불의 payoutStatus가 NOT_APPLICABLE이면 저장이 실패한다 | INV-2 | example | PENDING | |
-| U276 | targetKind=ORDER_ITEM 환불의 orderItemId가 null이면 저장이 실패한다 | INV-2 | example | PENDING | |
-| U277 | targetKind=PAYMENT 환불에 orderItemId가 있으면 저장이 실패한다 | INV-2 | example | PENDING | |
-| U278 | targetKind=PAYMENT 환불의 source가 SYSTEM이 아니면 저장이 실패한다 | INV-2 | example | PENDING | |
-| U279 | decisionStatus=ACCEPTED·source=CUSTOMER 환불의 requestedById가 null이면 저장이 실패한다 | INV-2 | example | PENDING | |
-| U280 | decisionStatus=ACCEPTED·source=STORE 환불의 terminationConsentedAt이 null이면 저장이 실패한다 | INV-2 | example | PENDING | |
-| U281 | decisionStatus=ACCEPTED 환불의 acceptedAt이 null이면 저장이 실패한다 | INV-2 | example | PENDING | |
-| U282 | PG 취소 요청의 횟수 필드(resendCount·manualResendCount·inquiryCount·inquiryFailureCount·sendAttemptCount)가 -1이면 저장이 실패한다 | INV-2 | example | PENDING | |
-| U283 | 별도 환불금 지급 금액이 0이면 저장이 실패한다(양수만 허용) | INV-2 | example | PENDING | |
+| U16 | 같은 주문 항목에 decisionStatus=ACCEPTED·targetKind=ORDER_ITEM 환불을 두 번째로 저장하면 unique 위반으로 실패한다 | FR-041, FR-029 | example | DONE | `src/prisma/refund-constraints.integration.spec.ts` |
+| U17 | 같은 주문 항목이라도 decisionStatus=LEGACY_REJECTED 환불은 ACCEPTED 환불과 함께 저장된다 | FR-007a | example | DONE | `src/prisma/refund-constraints.integration.spec.ts` |
+| U18 | 같은 결제에 decisionStatus=ACCEPTED·targetKind=PAYMENT 환불을 두 번째로 저장하면 실패한다 | FR-030 | example | DONE | `src/prisma/refund-constraints.integration.spec.ts` |
+| U19 | Refund.amount가 -1이면 저장이 실패한다 | FR-012 | example | DONE | `src/prisma/refund-constraints.integration.spec.ts` |
+| U20 | Refund.amount가 0이면 저장된다 | FR-016a | example | DONE | `src/prisma/refund-constraints.integration.spec.ts` |
+| U21 | 한 환불에 status가 REQUESTED 또는 QUERY_FAILED인 PG 취소 요청을 두 번째로 저장하면 실패한다 | FR-043 | example | DONE | `src/prisma/refund-constraints.integration.spec.ts` |
+| U22 | 한 환불에 FAILED PG 취소 요청이 있어도 REQUESTED PG 취소 요청 하나는 저장된다 | FR-057 | example | DONE | `src/prisma/refund-constraints.integration.spec.ts` |
+| U23 | 같은 (refundId, attemptNumber) PG 취소 요청을 두 번째로 저장하면 실패한다 | FR-057 | example | DONE | `src/prisma/refund-constraints.integration.spec.ts` |
+| U24 | 같은 pgTransactionId를 가진 PG 취소 요청을 두 번째로 저장하면 실패한다 | FR-019 | example | DONE | `src/prisma/refund-constraints.integration.spec.ts` |
+| U25 | PaymentCancel.actualAmount가 -1이면 저장이 실패한다 | FR-027 | example | DONE | `src/prisma/refund-constraints.integration.spec.ts` |
+| U26 | 한 환불에 status=RESERVED 별도 환불금 지급을 두 번째로 저장하면 실패한다 | FR-043 | example | DONE | `src/prisma/refund-constraints.integration.spec.ts` |
+| U27 | 다른 환불에서 같은 externalTransactionId로 별도 환불금 지급을 저장하면 실패한다 | FR-046 | example | DONE | `src/prisma/refund-constraints.integration.spec.ts` |
+| U28 | 같은 paymentCancelId를 가진 원장을 두 번째로 저장하면 실패한다 | FR-019 | example | DONE | `src/prisma/refund-constraints.integration.spec.ts` |
+| U29 | 같은 manualRefundPayoutId를 가진 원장을 두 번째로 저장하면 실패한다 | FR-019 | example | DONE | `src/prisma/refund-constraints.integration.spec.ts` |
+| U30 | paymentCancelId와 manualRefundPayoutId를 둘 다 가진 원장은 저장이 실패한다 | FR-019 | example | DONE | `src/prisma/refund-constraints.integration.spec.ts` |
+| U31 | 같은 환불의 0원 원장(두 지급 ID 모두 null)을 두 번째로 저장하면 실패한다 | FR-016a | example | DONE | `src/prisma/refund-constraints.integration.spec.ts` |
+| U32 | 같은 (notificationId, userId) 읽음 기록을 두 번째로 저장하면 실패한다 | FR-039 | example | DONE | `src/prisma/refund-constraints.integration.spec.ts` |
+| U33 | 같은 eventKey·audience·recipient 알림을 두 번째로 저장하면 recipient가 null이어도 실패한다 | FR-037 | example | DONE | `src/prisma/refund-constraints.integration.spec.ts` |
+| U34 | 같은 (requesterId, operation, key) 멱등 요청 기록을 두 번째로 저장하면 실패한다 | FR-041 | example | DONE | `src/prisma/refund-constraints.integration.spec.ts` |
+| U274 | Refund.paidAmount가 -1이면 저장이 실패한다 | INV-2 | example | DONE | `src/prisma/refund-constraints.integration.spec.ts` |
+| U275 | decisionStatus=ACCEPTED 환불의 payoutStatus가 NOT_APPLICABLE이면 저장이 실패한다 | INV-2 | example | DONE | `src/prisma/refund-constraints.integration.spec.ts` |
+| U276 | targetKind=ORDER_ITEM 환불의 orderItemId가 null이면 저장이 실패한다 | INV-2 | example | DONE | `src/prisma/refund-constraints.integration.spec.ts` |
+| U277 | targetKind=PAYMENT 환불에 orderItemId가 있으면 저장이 실패한다 | INV-2 | example | DONE | `src/prisma/refund-constraints.integration.spec.ts` |
+| U278 | targetKind=PAYMENT 환불의 source가 SYSTEM이 아니면 저장이 실패한다 | INV-2 | example | DONE | `src/prisma/refund-constraints.integration.spec.ts` |
+| U279 | decisionStatus=ACCEPTED·source=CUSTOMER 환불의 requestedById가 null이면 저장이 실패한다 | INV-2 | example | DONE | `src/prisma/refund-constraints.integration.spec.ts` |
+| U280 | decisionStatus=ACCEPTED·source=STORE 환불의 terminationConsentedAt이 null이면 저장이 실패한다 | INV-2 | example | DONE | `src/prisma/refund-constraints.integration.spec.ts` |
+| U281 | decisionStatus=ACCEPTED 환불의 acceptedAt이 null이면 저장이 실패한다 | INV-2 | example | DONE | `src/prisma/refund-constraints.integration.spec.ts` |
+| U282 | PG 취소 요청의 횟수 필드(resendCount·manualResendCount·inquiryCount·inquiryFailureCount·sendAttemptCount)가 -1이면 저장이 실패한다 | INV-2 | example | DONE | `src/prisma/refund-constraints.integration.spec.ts` |
+| U283 | 별도 환불금 지급 금액이 0이면 저장이 실패한다(양수만 허용) | INV-2 | example | DONE | `src/prisma/refund-constraints.integration.spec.ts` |
 
 ### `src/refund/refund-idempotency.service.ts`
 
