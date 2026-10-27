@@ -1,10 +1,13 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { RefundIdempotencyRepository } from './refund-idempotency.repository';
 import { RefundIdempotencyStatus } from '@prisma/client';
 import {
   IdempotencyKeyReusedError,
   IdempotencyRequestInProgressError,
 } from './errors';
+
+/** Idempotency-Key 최대 길이 */
+const maxKeyLength = 128;
 
 /** 멱등 처리 대상 요청 */
 export type IdempotentCommand = {
@@ -34,6 +37,7 @@ export class RefundIdempotencyService {
    * @param command 요청자·기능·키·본문·권한 재확인
    * @param handler 처음 요청일 때 실행할 처리
    * @returns 최초 응답
+   * @throws BadRequestException 키 형식이 잘못됐을 때
    * @throws IdempotencyKeyReusedError 같은 키로 다른 내용을 보냈을 때
    * @throws IdempotencyRequestInProgressError 같은 키의 최초 요청이 아직 처리 중일 때
    */
@@ -43,6 +47,13 @@ export class RefundIdempotencyService {
   ): Promise<IdempotentResult<T>> {
     // 키가 없으면 멱등 처리 없이 실행한다(상품당 확정 환불 unique가 중복 환불을 막는다)
     if (command.key === undefined) return handler();
+
+    // 키 형식 검사(API 계약 §8 중복 요청: 1~128자)
+    if (command.key.length > maxKeyLength) {
+      throw new BadRequestException(
+        `Idempotency-Key는 ${maxKeyLength}자 이하여야 합니다`,
+      );
+    }
 
     // 처리 중 기록을 먼저 만든다. 이미 있으면 저장된 최초 응답을 돌려준다
     const scope = {

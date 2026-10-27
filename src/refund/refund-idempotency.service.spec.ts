@@ -1,3 +1,4 @@
+import { BadRequestException } from '@nestjs/common';
 import { RefundIdempotencyStatus } from '@prisma/client';
 import { DomainBadRequestError } from 'src/common/errors';
 import { RefundIdempotencyService } from './refund-idempotency.service';
@@ -194,5 +195,25 @@ describe('RefundIdempotencyService', () => {
     );
 
     expect(accepted).toEqual({ status: 202, body: { refundId: 'refund-1' } });
+  });
+
+  describe('Idempotency-Key 형식 (1~128자 ASCII 비공백)', () => {
+    const maxKeyLength = 128;
+    const handler = () => Promise.resolve({ status: 202, body: {} });
+
+    it('129자 키는 거절된다', async () => {
+      await expect(
+        service.execute(
+          {
+            requesterId,
+            operation,
+            key: 'k'.repeat(maxKeyLength + 1),
+            request,
+            authorize: allow,
+          },
+          handler,
+        ),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
   });
 });
