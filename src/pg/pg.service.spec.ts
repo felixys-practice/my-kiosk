@@ -135,5 +135,19 @@ describe('PgService', () => {
         result: 'IN_PROGRESS',
       });
     });
+
+    it('PG 인증 오류 응답은 실패 확정이 아니라 QUERY_ERROR로 분류된다', async () => {
+      client.inquireResponse = () =>
+        Promise.resolve({
+          httpStatus: 401,
+          body: { status: 'FAILED', reason: '가맹점 인증 실패' },
+        });
+
+      await expect(service.inquireCancel(cancelRequest)).resolves.toMatchObject(
+        {
+          result: 'QUERY_ERROR',
+        },
+      );
+    });
   });
 });
