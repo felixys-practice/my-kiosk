@@ -273,4 +273,17 @@ describe('RefundIdempotencyService', () => {
 
     expect(replay).toEqual(first);
   });
+
+  it('기록 생성이 실패한 뒤 기록이 사라져 있으면(최초 요청 거절로 삭제) 다시 기록을 만들어 처리한다', async () => {
+    // 최초 요청의 기록이 있어 생성이 실패했지만, 조회 직전에 그 요청이 거절되어 기록이 지워진 경합
+    jest.spyOn(repository, 'createInProgress').mockResolvedValueOnce(null);
+    jest.spyOn(repository, 'find').mockResolvedValueOnce(null);
+
+    const result = await service.execute(
+      { requesterId, operation, key, request, authorize: allow },
+      () => Promise.resolve({ status: 202, body: { refundId: 'refund-1' } }),
+    );
+
+    expect(result).toEqual({ status: 202, body: { refundId: 'refund-1' } });
+  });
 });

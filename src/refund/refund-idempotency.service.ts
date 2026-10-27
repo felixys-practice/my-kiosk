@@ -1,11 +1,17 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { createHash } from 'crypto';
-import { RefundIdempotencyRepository } from './refund-idempotency.repository';
+import {
+  IdempotencyRecord,
+  RefundIdempotencyRepository,
+} from './refund-idempotency.repository';
 import { RefundIdempotencyStatus } from '@prisma/client';
 import {
   IdempotencyKeyReusedError,
   IdempotencyRequestInProgressError,
 } from './errors';
+
+/** 기록 생성·조회 경합 시 다시 시도하는 최대 횟수 */
+const maxAcquireAttempts = 3;
 
 /** Idempotency-Key 최대 길이 */
 const maxKeyLength = 128;
@@ -87,27 +93,19 @@ export class RefundIdempotencyService {
       key: command.key,
     };
     const fingerprint = fingerprintOf(command.request);
-    const created = await this.repository.createInProgress(scope, fingerprint);
-    if (!created) {
+    let created: IdempotencyRecord | null = null;
+    for (let attempt = 0; attempt < maxAcquireAttempts; attempt++) {
+      created = await this.repository.createInProgress(scope, fingerprint);
+      if (created) break;
+
+      // 기록이 이미 있으면 저장된 최초 응답을 돌려준다
       const existing = await this.repository.find(scope);
-
-      // 저장된 응답을 돌려주기 전에 현재 권한을 다시 확인한다
-      await command.authorize();
-
-      // 같은 키로 다른 내용을 보내면 거절한다
-      if (existing!.requestFingerprint !== fingerprint) {
-        throw new IdempotencyKeyReusedError();
+      if (existing) {
+        return this.replay<T>(existing, fingerprint, command.authorize);
       }
-
-      // 최초 요청이 아직 응답을 저장하지 않았으면 처리 중으로 거절한다
-      if (existing!.status === RefundIdempotencyStatus.IN_PROGRESS) {
-        throw new IdempotencyRequestInProgressError();
-      }
-      return {
-        status: existing!.responseStatus!,
-        body: existing!.responseBody as T,
-      };
+      // 그 사이 최초 요청이 거절되어 기록이 지워졌다. 고유 제약으로 다시 생성을 시도한다
     }
+    if (!created) throw new IdempotencyRequestInProgressError();
 
     // 처음 요청이면 처리한다. 거절되면 기록을 지워 같은 키의 이후 요청을 막지 않는다
     let result: IdempotentResult<T>;
@@ -121,5 +119,37 @@ export class RefundIdempotencyService {
     // 최초 응답을 저장한다
     await this.repository.complete(created.id, result);
     return result;
+  }
+
+  /**
+   * 이미 있는 기록으로 최초 응답을 돌려준다
+   * @param existing 같은 요청자·기능·키의 기록
+   * @param fingerprint 이번 요청의 본문 지문
+   * @param authorize 현재 권한 재확인
+   * @returns 저장된 최초 응답
+   * @throws IdempotencyKeyReusedError 같은 키로 다른 내용을 보냈을 때
+   * @throws IdempotencyRequestInProgressError 최초 요청이 아직 처리 중일 때
+   */
+  private async replay<T>(
+    existing: IdempotencyRecord,
+    fingerprint: string,
+    authorize: () => Promise<void>,
+  ): Promise<IdempotentResult<T>> {
+    // 저장된 응답을 돌려주기 전에 현재 권한을 다시 확인한다
+    await authorize();
+
+    // 같은 키로 다른 내용을 보내면 거절한다
+    if (existing.requestFingerprint !== fingerprint) {
+      throw new IdempotencyKeyReusedError();
+    }
+
+    // 최초 요청이 아직 응답을 저장하지 않았으면 처리 중으로 거절한다
+    if (existing.status === RefundIdempotencyStatus.IN_PROGRESS) {
+      throw new IdempotencyRequestInProgressError();
+    }
+    return {
+      status: existing.responseStatus!,
+      body: existing.responseBody as T,
+    };
   }
 }
