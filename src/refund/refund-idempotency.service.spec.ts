@@ -153,4 +153,20 @@ describe('RefundIdempotencyService', () => {
       ),
     ).rejects.toBeInstanceOf(RefundForbiddenError);
   });
+
+  it('Redis 멱등 키 만료 시간(600초)이 지난 뒤에도 같은 키 재요청은 DB 기록의 최초 응답을 받는다', async () => {
+    const redisTtlSeconds = 600;
+    let calls = 0;
+    const handler = () =>
+      Promise.resolve({ status: 202, body: { refundId: `refund-${++calls}` } });
+    const command = { requesterId, operation, key, request, authorize: allow };
+    const first = await service.execute(command, handler);
+    for (const record of repository.records.values()) {
+      record.createdAt = new Date(Date.now() - (redisTtlSeconds + 1) * 1000);
+    }
+
+    const replay = await service.execute(command, handler);
+
+    expect(replay).toEqual(first);
+  });
 });
