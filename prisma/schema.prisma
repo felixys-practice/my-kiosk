@@ -785,6 +785,7 @@ model Refund {
   // - refunds_payment_id_accepted_key: (payment_id) WHERE decision_status='ACCEPTED' AND target_kind='PAYMENT'
   // NOTE: CHECK 제약 (raw migration으로 관리)
   // - refunds_amount_check: amount >= 0
+  // - refunds_paid_amount_check: paid_amount >= 0
 
   @@index([paymentId])
   @@index([orderItemId])

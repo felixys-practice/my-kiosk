@@ -214,5 +214,15 @@ describe('환불 저장 모델 DB 제약', () => {
 
       expect(refund.amount).toBe(0);
     });
+
+    it('환불금 지급 합계가 -1이면 저장이 실패한다', async () => {
+      const target = await createPaidItem();
+
+      await expect(
+        prisma.refund.create({
+          data: acceptedRefund(target, { paidAmount: -1 }),
+        }),
+      ).rejects.toThrow(/refunds_paid_amount_check/);
+    });
   });
 });
