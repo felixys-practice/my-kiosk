@@ -1,23 +1,6 @@
 import * as Joi from 'joi';
 
 /**
- * 같은 환경 변수 묶음의 다른 설정값 합 이상인지 검사하는 Joi custom 규칙을 만든다.
- * 같은 키에 `.min()`을 두 번 걸면 앞의 `.min(1)`이 대체되므로 custom으로 따로 붙인다.
- * @param keys 합계를 낼 다른 환경 변수 이름
- * @returns 값이 합계보다 작으면 `number.min` 오류를 내는 custom 검증 함수
- */
-const atLeastSumOf =
-  (...keys: string[]): Joi.CustomValidator<number> =>
-  (value, helpers) => {
-    // 검증 중인 환경 변수 객체에서 비교 대상 값을 더한다
-    const [env] = helpers.state.ancestors as Record<string, number>[];
-    const limit = keys.reduce((sum, key) => sum + env[key], 0);
-
-    // 합계 이상이면 통과, 작으면 하한 위반으로 보고한다
-    return value >= limit ? value : helpers.error('number.min', { limit });
-  };
-
-/**
  * 환불 설정 사이의 관계를 기본값이 모두 채워진 최종 설정으로 검사한다.
  * 키 단위 규칙은 값이 생략돼 기본값이 들어간 키에는 실행되지 않으므로,
  * 한쪽 설정만 바꿔도 관계가 깨지는 경우를 잡으려면 객체 단위로 검사해야 한다.
@@ -107,13 +90,12 @@ export const validationSchema = Joi.object({
   REFUND_RESULT_WAIT_SECONDS: Joi.number().integer().min(1).default(60), // 응답 없는 PG 취소 요청의 최초 조회 대기(초)
   REFUND_SWEEP_INTERVAL_SECONDS: Joi.number().integer().min(1).default(5), // 전송·조회 예정 작업 탐색 주기(초)
   REFUND_PG_TIMEOUT_SECONDS: Joi.number().integer().min(1).default(10), // PG 전송·조회 응답 제한(초)
-  // 정상 재조회 간격(초). 탐색 주기+PG 응답 제한 이상이어야 앞선 조회가 끝나기 전에 다음 조회가 잡히지 않는다.
-  // custom 검증은 앞에 선언된 키의 기본값만 볼 수 있으므로 비교 대상 두 설정을 이 키보다 먼저 선언한다
+  // 정상 재조회 간격(초). 탐색 주기+PG 응답 제한 이상이어야 한다(관계 검증은 아래 checkRefundRelations)
   REFUND_QUERY_INTERVAL_SECONDS: Joi.number().integer().min(1).default(15),
   // 작업자 처리 기한(초). PG 응답 제한보다 길어야 한다(관계 검증은 아래 checkRefundRelations)
   REFUND_WORK_LEASE_SECONDS: Joi.number().integer().min(1).default(30),
   REFUND_QUERY_BACKOFF_SECONDS: Joi.number().integer().min(1).default(15), // 조회 실패 후 첫 재조회 간격(초)
-  // 지수 증가 조회 간격 상한(초). 첫 재조회 간격 이상이어야 한다
+  // 지수 증가 조회 간격 상한(초). 첫 재조회 간격 이상이어야 한다(관계 검증은 아래 checkRefundRelations)
   REFUND_QUERY_BACKOFF_MAX_SECONDS: Joi.number().integer().min(1).default(300),
   REFUND_QUERY_FAILURE_THRESHOLD: Joi.number().integer().min(1).default(5), // 결과 확인 실패 전환 연속 오류 횟수
   REFUND_RECOVERY_PROBE_SECONDS: Joi.number().integer().min(1).default(900), // 장애 복구 확인용 1건 조회 간격(초)
