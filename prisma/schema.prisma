@@ -947,6 +947,9 @@ model RefundNotification {
   recipientUser      User?                       @relation("RefundNotificationRecipient", fields: [recipientUserId], references: [id], onDelete: Restrict)
   receipts           RefundNotificationReceipt[]
 
+  // NOTE: Unique Index (raw migration으로 관리, Prisma가 NULLS NOT DISTINCT를 표현하지 못함)
+  // - refund_notifications_event_audience_recipient_key: (event_key, audience, recipient_user_id) NULLS NOT DISTINCT
+
   @@index([refundId])
   @@index([audience, shopId, createdAt])
   @@index([recipientUserId, createdAt])
