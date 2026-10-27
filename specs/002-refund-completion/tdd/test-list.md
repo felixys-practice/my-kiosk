@@ -191,6 +191,12 @@ suite_baseline: green
 | U281 | decisionStatus=ACCEPTED 환불의 acceptedAt이 null이면 저장이 실패한다 | INV-2 | example | DONE | `src/prisma/refund-constraints.integration.spec.ts` |
 | U282 | PG 취소 요청의 횟수 필드(resendCount·manualResendCount·inquiryCount·inquiryFailureCount·sendAttemptCount)가 -1이면 저장이 실패한다 | INV-2 | example | DONE | `src/prisma/refund-constraints.integration.spec.ts` |
 | U283 | 별도 환불금 지급 금액이 0이면 저장이 실패한다(양수만 허용) | INV-2 | example | DONE | `src/prisma/refund-constraints.integration.spec.ts` |
+| U284 | PG 조회의 성공 응답에 거래 ID와 실제 취소액이 있으면 SUCCEEDED{pgTransactionId, cancelledAmount}로 분류된다 | FR-027 | example | PENDING | |
+| U285 | PG 조회의 실패 확정 응답은 FAILED{reason}로 분류된다 | FR-024 | example | PENDING | |
+| U286 | PG 조회의 처리 중 응답은 IN_PROGRESS로 분류된다 | FR-025 | example | PENDING | |
+| U287 | PG 취소 전송의 접수 응답은 ACCEPTED로 분류된다 | FR-021 | example | PENDING | |
+| U288 | PG 취소 전송의 즉시 성공 응답은 SUCCEEDED{pgTransactionId, cancelledAmount}로 분류된다 | FR-021 | example | PENDING | |
+| U289 | PG 취소 전송의 거절 응답은 REJECTED{reason}로 분류된다 | FR-021 | example | PENDING | |
 
 ### `src/refund/refund-idempotency.service.ts`
 

@@ -1,17 +1,48 @@
+import { ConfigService } from '@nestjs/config';
 import { TransactionLoggerService } from '../logger/transaction-logger.service';
 import { PgService } from './pg.service';
 import { PgCancelInquiryResult } from './pg.types';
+import { PgCancelClient, PgRawResponse } from './pg-cancel.client';
+
+/**
+ * 원래 응답을 미리 정해 두는 PG 전송 계층 대역
+ */
+class FakePgCancelClient implements PgCancelClient {
+  configured = true;
+  sendResponse: () => Promise<PgRawResponse> = () =>
+    Promise.resolve({ httpStatus: 202, body: { status: 'ACCEPTED' } });
+  inquireResponse: () => Promise<PgRawResponse> = () =>
+    Promise.resolve({ httpStatus: 200, body: { status: 'IN_PROGRESS' } });
+
+  send(): Promise<PgRawResponse> {
+    return this.sendResponse();
+  }
+
+  inquire(): Promise<PgRawResponse> {
+    return this.inquireResponse();
+  }
+}
 
 describe('PgService', () => {
+  /** PG 전송·조회 응답 제한(초) — 설정 기본값 */
+  const pgTimeoutSeconds = 10;
+  const cancelRequest = { paymentCancelId: 'payment-cancel-1' };
+
+  let client: FakePgCancelClient;
   let service: PgService;
 
   beforeEach(() => {
+    client = new FakePgCancelClient();
+    const configService = {
+      get: (path: string) =>
+        path === 'refund.pgTimeoutSeconds' ? pgTimeoutSeconds : undefined,
+    } as unknown as ConfigService;
     const transactionLogger = {
       logTransaction: jest.fn(),
       logPaymentRequest: jest.fn(),
       logRefundRequest: jest.fn(),
     } as unknown as TransactionLoggerService;
-    service = new PgService(transactionLogger);
+    service = new PgService(transactionLogger, client, configService);
   });
 
   describe('현재 동작 기록(특성화)', () => {
@@ -24,6 +55,21 @@ describe('PgService', () => {
       );
 
       expect(inquiry).toEqual({ result: PgCancelInquiryResult.NOT_FOUND });
+    });
+  });
+
+  describe('PG 취소 조회 결과 분류 (API 계약 §8)', () => {
+    it('authoritative=true인 미접수 응답만 NOT_FOUND로 분류된다', async () => {
+      client.inquireResponse = () =>
+        Promise.resolve({
+          httpStatus: 200,
+          body: { status: 'NOT_FOUND', authoritative: true },
+        });
+
+      await expect(service.inquireCancel(cancelRequest)).resolves.toEqual({
+        result: 'NOT_FOUND',
+        authoritative: true,
+      });
     });
   });
 });

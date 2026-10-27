@@ -1,12 +1,33 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { TransactionLoggerService } from '../logger/transaction-logger.service';
-import { PgCancelInquiry, PgCancelInquiryResult } from './pg.types';
+import {
+  PgCancelInquiry,
+  PgCancelInquiryResult,
+  PgCancelQueryResult,
+} from './pg.types';
+import { PG_CANCEL_CLIENT } from './pg-cancel.client';
+import type { PgCancelClient } from './pg-cancel.client';
 
 @Injectable()
 export class PgService {
   constructor(
     private readonly transactionLoggerService: TransactionLoggerService,
+    @Inject(PG_CANCEL_CLIENT) private readonly cancelClient: PgCancelClient,
+    private readonly configService: ConfigService,
   ) {}
+
+  /**
+   * 환불 PG 취소 결과를 조회한다 (API 계약 §8)
+   * @param request 조회할 PG 취소 요청 식별자
+   * @returns 계약 §8의 조회 결과
+   */
+  inquireCancel(request: {
+    paymentCancelId: string;
+  }): Promise<PgCancelQueryResult> {
+    void request;
+    return Promise.resolve({ result: 'NOT_FOUND', authoritative: true });
+  }
 
   // PG 결제 승인 요청
   async requestPaymentApproval(
