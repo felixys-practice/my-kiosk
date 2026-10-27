@@ -515,6 +515,20 @@ describe('환불 저장 모델 DB 제약', () => {
         }),
       ).rejects.toThrow(/payment_cancels_counts_check/);
     });
+
+    it('실패가 아닌 갱신(담당 토큰 지정)은 실패 시각(failedAt)을 바꾸지 않는다', async () => {
+      const refund = await createAcceptedRefund();
+      const attempt = await prisma.paymentCancel.create({
+        data: paymentCancelAttempt(refund),
+      });
+
+      const claimed = await prisma.paymentCancel.update({
+        where: { id: attempt.id },
+        data: { claimToken: 'worker-1', claimUntil: new Date() },
+      });
+
+      expect(claimed.failedAt).toBeNull();
+    });
   });
 
   describe('ManualRefundPayout', () => {

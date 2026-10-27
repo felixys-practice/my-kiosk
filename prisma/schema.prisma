@@ -493,7 +493,7 @@ model PaymentCancel {
   idempotencyKey  String?                   @map("idempotency_key") // 요청 시점의 Idempotency-Key(클라이언트가 보낸 헤더 값) - 낡은 락 정리 시 "이번 요청이 이 시도를 만들었던 그 요청인지" 판단하는 근거
   requestedAt     DateTime                  @map("requested_at") // 취소 요청 시각
   cancelledAt     DateTime?                 @map("cancelled_at") // 취소 완료 시각
-  failedAt        DateTime?                 @updatedAt @map("failed_at")
+  failedAt        DateTime?                 @map("failed_at") // 시도 실패 확정 시각(실패할 때만 기록, 일반 갱신 시각은 updatedAt)
 
   // ── 환불 확정 아래의 PG 취소 요청 (data-model §4) ──
   refundId            String?   @map("refund_id") // 소속 환불. 새 요청은 필수, 보존할 과거 거절 이력만 이관 기간 null
