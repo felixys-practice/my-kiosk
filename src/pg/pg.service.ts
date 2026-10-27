@@ -7,7 +7,10 @@ import {
   PgCancelQueryResult,
 } from './pg.types';
 import { PG_CANCEL_CLIENT } from './pg-cancel.client';
-import type { PgCancelClient } from './pg-cancel.client';
+import type { PgCancelClient, PgRawResponse } from './pg-cancel.client';
+
+/** PG 응답 제한 시간 초과 표시 */
+const timedOut = Symbol('PG 응답 시간 초과');
 
 @Injectable()
 export class PgService {
@@ -25,11 +28,13 @@ export class PgService {
   async inquireCancel(request: {
     paymentCancelId: string;
   }): Promise<PgCancelQueryResult> {
-    // PG 원래 응답을 받는다
-    const response = await this.cancelClient.inquire(
-      request,
-      new AbortController().signal,
+    // PG 원래 응답을 응답 제한 시간 안에 받는다. 시간 초과는 결과를 알 수 없으므로 조회 오류다
+    const response = await this.withinPgTimeout((signal) =>
+      this.cancelClient.inquire(request, signal),
     );
+    if (response === timedOut) {
+      return { result: 'QUERY_ERROR', reason: 'PG 조회 응답 시간 초과' };
+    }
 
     // PG가 미접수를 확정한 응답만 NOT_FOUND다. 일반 HTTP 404는 미접수 근거가 아니다
     if (
@@ -67,6 +72,32 @@ export class PgService {
       result: 'QUERY_ERROR',
       reason: `판단할 수 없는 PG 조회 응답(HTTP ${response.httpStatus})`,
     };
+  }
+
+  /**
+   * PG 호출을 응답 제한 시간(refund.pgTimeoutSeconds) 안에 끝낸다
+   * - 시간이 지나면 호출을 중단(abort)하고 timedOut을 돌려준다
+   * @param call 중단 신호를 받아 PG를 호출하는 함수
+   * @returns PG 원래 응답, 시간 초과면 timedOut
+   */
+  private async withinPgTimeout(
+    call: (signal: AbortSignal) => Promise<PgRawResponse>,
+  ): Promise<PgRawResponse | typeof timedOut> {
+    const controller = new AbortController();
+    const timeoutMs =
+      this.configService.get<number>('refund.pgTimeoutSeconds')! * 1000;
+    let timer: NodeJS.Timeout | undefined;
+    const timeout = new Promise<typeof timedOut>((resolve) => {
+      timer = setTimeout(() => {
+        controller.abort();
+        resolve(timedOut);
+      }, timeoutMs);
+    });
+    try {
+      return await Promise.race([call(controller.signal), timeout]);
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   // PG 결제 승인 요청

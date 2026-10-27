@@ -31,6 +31,10 @@ describe('PgService', () => {
   let client: FakePgCancelClient;
   let service: PgService;
 
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   beforeEach(() => {
     client = new FakePgCancelClient();
     const configService = {
@@ -148,6 +152,16 @@ describe('PgService', () => {
           result: 'QUERY_ERROR',
         },
       );
+    });
+
+    it('조회 응답이 제한 시간(REFUND_PG_TIMEOUT_SECONDS)을 넘으면 QUERY_ERROR로 분류된다', async () => {
+      jest.useFakeTimers();
+      client.inquireResponse = () => new Promise<PgRawResponse>(() => {});
+
+      const pending = service.inquireCancel(cancelRequest);
+      await jest.advanceTimersByTimeAsync(pgTimeoutSeconds * 1000);
+
+      await expect(pending).resolves.toMatchObject({ result: 'QUERY_ERROR' });
     });
   });
 });
