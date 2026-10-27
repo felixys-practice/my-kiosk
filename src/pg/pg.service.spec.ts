@@ -328,5 +328,25 @@ describe('PgService', () => {
         reason: 'PG 송신 응답 시간 초과',
       });
     });
+
+    it.each([
+      [{ status: 'ACCEPTED' }],
+      [
+        {
+          status: 'SUCCEEDED',
+          pgTransactionId: 'untrusted-id',
+          cancelledAmount: 100,
+        },
+      ],
+    ])(
+      '비정상 HTTP 상태(401) 응답은 본문이 %p여도 UNKNOWN이다',
+      async (body) => {
+        client.sendResponse = () => Promise.resolve({ httpStatus: 401, body });
+
+        await expect(service.sendCancel(sendRequest)).resolves.toMatchObject({
+          result: 'UNKNOWN',
+        });
+      },
+    );
   });
 });

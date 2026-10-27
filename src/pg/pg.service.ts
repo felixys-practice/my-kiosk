@@ -62,8 +62,16 @@ export class PgService {
       return { result: 'UNKNOWN', reason: 'PG 송신 응답 시간 초과' };
     }
 
-    // PG가 접수만 함(최종 결과는 조회로 확인)
+    // 정상 HTTP 상태(2xx)가 아니면 본문을 지급 근거로 쓰지 않고 결과 불명으로 둔다
     const body = response.body;
+    if (response.httpStatus < 200 || response.httpStatus >= 300) {
+      return {
+        result: 'UNKNOWN',
+        reason: `비정상 PG 송신 응답(HTTP ${response.httpStatus})`,
+      };
+    }
+
+    // PG가 접수만 함(최종 결과는 조회로 확인)
     if (body?.status === 'ACCEPTED') return { result: 'ACCEPTED' };
 
     // PG가 즉시 취소함. 실제 취소액·거래 ID가 없으면 결과를 모르는 것으로 둔다
@@ -80,7 +88,7 @@ export class PgService {
     }
 
     // PG가 해당 요청을 거절함
-    if (response.httpStatus === 200 && body?.status === 'REJECTED') {
+    if (body?.status === 'REJECTED') {
       return { result: 'REJECTED', reason: body.reason ?? '' };
     }
 
