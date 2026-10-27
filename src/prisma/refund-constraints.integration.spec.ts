@@ -657,5 +657,18 @@ describe('환불 저장 모델 DB 제약', () => {
         }),
       ).rejects.toMatchObject({ code: uniqueViolation });
     });
+
+    it('같은 사건·수신 범위·수신자 알림을 두 번째로 저장하면 고유 위반으로 실패한다', async () => {
+      const { refundId } = await createAcceptedRefund();
+      const personal = refundNotification(refundId, {
+        audience: RefundNotificationAudience.CUSTOMER,
+        recipientUserId: userId,
+      });
+      await prisma.refundNotification.create({ data: personal });
+
+      await expect(
+        prisma.refundNotification.create({ data: personal }),
+      ).rejects.toMatchObject({ code: uniqueViolation });
+    });
   });
 });
