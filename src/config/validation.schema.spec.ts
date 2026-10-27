@@ -234,5 +234,14 @@ describe('validationSchema', () => {
         'number.min',
       );
     });
+
+    it.each(positiveIntegerKeys)('%s=1이면 검증을 통과한다', (key) => {
+      const { error } = validationSchema.validate(
+        { ...validEnv, [key]: 1 },
+        { abortEarly: false },
+      );
+
+      expect(error).toBeUndefined();
+    });
   });
 });
