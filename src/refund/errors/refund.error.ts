@@ -1,4 +1,4 @@
-import { DomainConflictError } from 'src/common/errors';
+import { DomainConflictError, DomainForbiddenError } from 'src/common/errors';
 
 /**
  * 환불 도메인 오류 (API 계약 §10)
@@ -22,5 +22,15 @@ export class IdempotencyRequestInProgressError extends DomainConflictError {
   constructor() {
     super('같은 Idempotency-Key의 최초 요청이 아직 처리 중입니다');
     this.name = 'IdempotencyRequestInProgressError';
+  }
+}
+
+/** 역할·운영 권한 부족 (403) */
+export class RefundForbiddenError extends DomainForbiddenError {
+  readonly code = 'REFUND_FORBIDDEN';
+
+  constructor() {
+    super('이 환불 기능을 사용할 권한이 없습니다');
+    this.name = 'RefundForbiddenError';
   }
 }

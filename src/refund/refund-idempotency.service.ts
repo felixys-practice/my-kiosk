@@ -55,6 +55,9 @@ export class RefundIdempotencyService {
     if (!created) {
       const existing = await this.repository.find(scope);
 
+      // 저장된 응답을 돌려주기 전에 현재 권한을 다시 확인한다
+      await command.authorize();
+
       // 같은 키로 다른 내용을 보내면 거절한다
       if (existing!.requestFingerprint !== fingerprint) {
         throw new IdempotencyKeyReusedError();

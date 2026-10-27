@@ -3,6 +3,7 @@ import { RefundIdempotencyService } from './refund-idempotency.service';
 import {
   IdempotencyKeyReusedError,
   IdempotencyRequestInProgressError,
+  RefundForbiddenError,
 } from './errors';
 import {
   IdempotencyRecord,
@@ -135,5 +136,21 @@ describe('RefundIdempotencyService', () => {
 
     finishFirst();
     await first;
+  });
+
+  it('같은 키 재요청 시점에 권한이 없으면 최초 응답 대신 REFUND_FORBIDDEN을 받는다', async () => {
+    const handler = () => Promise.resolve({ status: 202, body: {} });
+    await service.execute(
+      { requesterId, operation, key, request, authorize: allow },
+      handler,
+    );
+    const deny = () => Promise.reject(new RefundForbiddenError());
+
+    await expect(
+      service.execute(
+        { requesterId, operation, key, request, authorize: deny },
+        handler,
+      ),
+    ).rejects.toBeInstanceOf(RefundForbiddenError);
   });
 });
