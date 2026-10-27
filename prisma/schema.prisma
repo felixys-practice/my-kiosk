@@ -782,6 +782,7 @@ model Refund {
 
   // NOTE: Partial Unique Index (raw migration으로 관리)
   // - refunds_order_item_id_accepted_key: (order_item_id) WHERE decision_status='ACCEPTED' AND target_kind='ORDER_ITEM'
+  // - refunds_payment_id_accepted_key: (payment_id) WHERE decision_status='ACCEPTED' AND target_kind='PAYMENT'
 
   @@index([paymentId])
   @@index([orderItemId])

@@ -174,5 +174,24 @@ describe('환불 저장 모델 DB 제약', () => {
 
       expect(legacy.decisionStatus).toBe(RefundDecisionStatus.LEGACY_REJECTED);
     });
+
+    it('같은 결제에 확정된 결제 전체 대상 환불을 두 번째로 저장하면 고유 위반으로 실패한다', async () => {
+      const { paymentId } = await createPaidItem();
+      const paymentRefund = acceptedRefund(
+        { paymentId, orderItemId: null },
+        {
+          targetKind: RefundTargetKind.PAYMENT,
+          source: RefundSource.SYSTEM,
+          requestedById: null,
+          terminatedAt: null,
+          terminationConsentedAt: null,
+        },
+      );
+      await prisma.refund.create({ data: paymentRefund });
+
+      await expect(
+        prisma.refund.create({ data: paymentRefund }),
+      ).rejects.toMatchObject({ code: uniqueViolation });
+    });
   });
 });
