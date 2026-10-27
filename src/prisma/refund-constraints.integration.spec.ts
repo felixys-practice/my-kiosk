@@ -391,5 +391,20 @@ describe('환불 저장 모델 DB 제약', () => {
         prisma.paymentCancel.create({ data: failedAttempt }),
       ).rejects.toMatchObject({ code: uniqueViolation });
     });
+
+    it('같은 PG 취소 거래 ID를 가진 PG 취소 요청을 두 번째로 저장하면 고유 위반으로 실패한다', async () => {
+      const pgTransactionId = `pg-cancel-${randomUUID()}`;
+      const first = await createAcceptedRefund();
+      const second = await createAcceptedRefund();
+      await prisma.paymentCancel.create({
+        data: paymentCancelAttempt(first, { pgTransactionId }),
+      });
+
+      await expect(
+        prisma.paymentCancel.create({
+          data: paymentCancelAttempt(second, { pgTransactionId }),
+        }),
+      ).rejects.toMatchObject({ code: uniqueViolation });
+    });
   });
 });
