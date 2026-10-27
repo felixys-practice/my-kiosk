@@ -18,6 +18,31 @@ const atLeastSumOf =
   };
 
 /**
+ * 환불 설정 사이의 관계를 기본값이 모두 채워진 최종 설정으로 검사한다.
+ * 키 단위 규칙은 값이 생략돼 기본값이 들어간 키에는 실행되지 않으므로,
+ * 한쪽 설정만 바꿔도 관계가 깨지는 경우를 잡으려면 객체 단위로 검사해야 한다.
+ * @param env 기본값과 숫자 변환이 적용된 환경 변수 객체
+ * @param helpers Joi custom 도우미
+ * @returns 관계를 만족하면 env 그대로, 아니면 위반한 키 경로의 오류
+ */
+function checkRefundRelations(
+  env: Record<string, number>,
+  helpers: Joi.CustomHelpers,
+) {
+  // 작업자 처리 기한은 PG 응답 제한보다 길어야 응답 대기 중 다른 작업자가 같은 작업을 가져가지 않는다
+  const lease = env.REFUND_WORK_LEASE_SECONDS;
+  const timeout = env.REFUND_PG_TIMEOUT_SECONDS;
+  if (!(lease > timeout)) {
+    return helpers.error(
+      'number.greater',
+      { label: 'REFUND_WORK_LEASE_SECONDS', limit: timeout, value: lease },
+      { ...helpers.state, path: ['REFUND_WORK_LEASE_SECONDS'] },
+    );
+  }
+  return env;
+}
+
+/**
  * 환경 변수 유효성 검사 스키마
  * - 필수 환경 변수 체크 (.required())
  * - 타입 및 형식 검증
@@ -66,12 +91,8 @@ export const validationSchema = Joi.object({
       ),
     )
     .default(15),
-  // 작업자 처리 기한(초). PG 응답 제한보다 길어야 응답 대기 중 다른 작업자가 같은 작업을 가져가지 않는다
-  REFUND_WORK_LEASE_SECONDS: Joi.number()
-    .integer()
-    .min(1)
-    .greater(Joi.ref('REFUND_PG_TIMEOUT_SECONDS'))
-    .default(30),
+  // 작업자 처리 기한(초). PG 응답 제한보다 길어야 한다(관계 검증은 아래 checkRefundRelations)
+  REFUND_WORK_LEASE_SECONDS: Joi.number().integer().min(1).default(30),
   REFUND_QUERY_BACKOFF_SECONDS: Joi.number().integer().min(1).default(15), // 조회 실패 후 첫 재조회 간격(초)
   // 지수 증가 조회 간격 상한(초). 첫 재조회 간격 이상이어야 한다
   REFUND_QUERY_BACKOFF_MAX_SECONDS: Joi.number()
@@ -91,4 +112,8 @@ export const validationSchema = Joi.object({
   // PG 콜백
   PG_CALLBACK_MAX_SKEW_SECONDS: Joi.number().integer().min(1).default(300), // 콜백 서명 시각 오차 허용(초)
   PG_CALLBACK_SECRET: Joi.string().min(32).required(), // 공유 서명 비밀값(최소 32자), 기본값 없음
-});
+})
+  .custom(checkRefundRelations)
+  .messages({
+    'number.greater': '{{#label}} must be greater than {{#limit}}',
+  });

@@ -387,5 +387,17 @@ describe('validationSchema', () => {
 
       expect(error).toBeUndefined();
     });
+
+    it('REFUND_PG_TIMEOUT_SECONDS=40만 설정하면 기본 처리 기한 30과 비교해 검증이 실패한다', () => {
+      const { error } = validationSchema.validate(
+        { ...validEnv, REFUND_PG_TIMEOUT_SECONDS: 40 },
+        { abortEarly: false },
+      );
+
+      expect(
+        error?.details.find((d) => d.path.includes('REFUND_WORK_LEASE_SECONDS'))
+          ?.type,
+      ).toBe('number.greater');
+    });
   });
 });
