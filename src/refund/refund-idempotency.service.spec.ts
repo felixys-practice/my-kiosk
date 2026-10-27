@@ -485,5 +485,36 @@ describe('RefundIdempotencyService', () => {
       );
       expect(handlerC).not.toHaveBeenCalled();
     });
+
+    it('처리 트랜잭션 안에서 처리 중인 요청의 기록은 기한이 지나도 다른 요청이 이어받지 못한다', async () => {
+      const command = {
+        requesterId,
+        operation,
+        key,
+        request,
+        authorize: allow,
+      };
+      let finishA!: () => void;
+      const requestA = service.execute(command, (tx) => {
+        (tx as unknown as FakeTx).writes.push('refund-A');
+        return new Promise<IdempotentResult<object>>((resolve) => {
+          finishA = () =>
+            resolve({ status: 202, body: { refundId: 'refund-A' } });
+        });
+      });
+      await flush();
+      expireClaims();
+
+      await expect(
+        service.execute(command, acceptRefund('refund-B')),
+      ).rejects.toBeInstanceOf(IdempotencyRequestInProgressError);
+      finishA();
+
+      await expect(requestA).resolves.toEqual({
+        status: 202,
+        body: { refundId: 'refund-A' },
+      });
+      expect(repository.committed).toEqual(['refund-A']);
+    });
   });
 });
