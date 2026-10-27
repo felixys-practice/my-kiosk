@@ -491,5 +491,15 @@ describe('환불 저장 모델 DB 제약', () => {
         }),
       ).rejects.toMatchObject({ code: uniqueViolation });
     });
+
+    it('별도 환불금 지급 금액이 0이면 저장이 실패한다', async () => {
+      const { refundId } = await createAcceptedRefund();
+
+      await expect(
+        prisma.manualRefundPayout.create({
+          data: manualPayout(refundId, { amount: 0 }),
+        }),
+      ).rejects.toThrow(/manual_refund_payouts_amount_check/);
+    });
   });
 });

@@ -887,6 +887,8 @@ model ManualRefundPayout {
 
   // NOTE: Partial Unique Index (raw migration으로 관리)
   // - manual_refund_payouts_refund_id_reserved_key: (refund_id) WHERE status='RESERVED'
+  // NOTE: CHECK 제약 (raw migration으로 관리)
+  // - manual_refund_payouts_amount_check: amount > 0
 
   @@index([refundId])
   @@index([status, reservedAt]) // 예약 후 미확인 알림 대상 탐색

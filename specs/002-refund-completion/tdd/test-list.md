@@ -190,6 +190,7 @@ suite_baseline: green
 | U280 | decisionStatus=ACCEPTED·source=STORE 환불의 terminationConsentedAt이 null이면 저장이 실패한다 | INV-2 | example | PENDING | |
 | U281 | decisionStatus=ACCEPTED 환불의 acceptedAt이 null이면 저장이 실패한다 | INV-2 | example | PENDING | |
 | U282 | PG 취소 요청의 횟수 필드(resendCount·manualResendCount·inquiryCount·inquiryFailureCount·sendAttemptCount)가 -1이면 저장이 실패한다 | INV-2 | example | PENDING | |
+| U283 | 별도 환불금 지급 금액이 0이면 저장이 실패한다(양수만 허용) | INV-2 | example | PENDING | |
 
 ### `src/refund/refund-idempotency.service.ts`
 
@@ -521,7 +522,7 @@ suite_baseline: green
 ## 불변식
 
 - **INV-1**: 데이터 전환은 결과가 미확정이거나 증거가 없는 과거 환불·PG 취소 요청의 결과를 추측해 바꾸지 않는다. 근거: `plan.md` 6절 "미확정 기존 PG 취소 요청이 있으면 전환을 멈추고 조회로 정리한다. 증거 있는 성공만 PAID로 이관한다", `data-model.md` 10절.
-- **INV-2**: 환불 저장 모델은 data-model §3·§6이 정한 값 제약(금액·합계 음수 금지, 대상 종류별 상품 ID 규칙, 신규 확정 환불의 실행자·종료 동의·확정 시각 필수, NOT_APPLICABLE은 과거 거절만)을 서비스 검증과 별개로 DB에서도 거부한다. 근거: `data-model.md` §3 필드 표, §6 "amount·actualAmount·paidAmount·횟수는 음수 금지. ORDER_ITEM은 상품 필수, PAYMENT는 상품 null·SYSTEM만. 신규 CUSTOMER/STORE는 실행자·종료 동의 필수다", `tasks.md` T007. 2026-10-28 Phase 2 진행 중 테스트 목록에 빠진 제약을 발견해 추가했다.
+- **INV-2**: 환불 저장 모델은 data-model §3·§6이 정한 값 제약(금액·합계 음수 금지, 별도 환불금 지급액 양수, 대상 종류별 상품 ID 규칙, 신규 확정 환불의 실행자·종료 동의·확정 시각 필수, NOT_APPLICABLE은 과거 거절만)을 서비스 검증과 별개로 DB에서도 거부한다. 근거: `data-model.md` §3 필드 표, §6 "amount·actualAmount·paidAmount·횟수는 음수 금지. ORDER_ITEM은 상품 필수, PAYMENT는 상품 null·SYSTEM만. 신규 CUSTOMER/STORE는 실행자·종료 동의 필수다", `tasks.md` T007. 2026-10-28 Phase 2 진행 중 테스트 목록에 빠진 제약을 발견해 추가했다.
 
 ## 아직 담당 파일을 정하지 않은 동작
 
