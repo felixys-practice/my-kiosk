@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { createHash } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import { TransactionClient } from 'src/prisma/prisma.service';
 import {
   IdempotencyRecord,
@@ -100,11 +100,14 @@ export class RefundIdempotencyService {
       key: command.key,
     };
     const fingerprint = fingerprintOf(command.request);
+    // 이번 실행의 담당 토큰. 완료·정리는 이 토큰이 아직 담당일 때만 한다
+    const claimToken = randomUUID();
     let created: IdempotencyRecord | null = null;
     for (let attempt = 0; attempt < maxAcquireAttempts; attempt++) {
       created = await this.repository.createInProgress(
         scope,
         fingerprint,
+        claimToken,
         this.nextClaimUntil(),
       );
       if (created) break;
@@ -112,7 +115,14 @@ export class RefundIdempotencyService {
       const existing = await this.repository.find(scope);
       if (existing) {
         // 처리 기한이 지난 처리 중 기록은 같은 본문이면 이어받아 처리한다
-        if (await this.tryTakeOver(existing, fingerprint, command.authorize)) {
+        if (
+          await this.tryTakeOver(
+            existing,
+            fingerprint,
+            claimToken,
+            command.authorize,
+          )
+        ) {
           created = existing;
           break;
         }
@@ -126,13 +136,28 @@ export class RefundIdempotencyService {
     // 처음 요청이면 처리한다. 처리와 최초 응답 저장을 한 트랜잭션으로 묶어 환불이 커밋되면 응답도 반드시 남긴다
     try {
       return await this.repository.runInTransaction(async (tx) => {
+        // 트랜잭션을 시작하자마자 기록을 잡는다. 그 사이 다른 요청이 이어받았으면 처리하지 않는다
+        if (
+          !(await this.repository.acquireInTransaction(
+            tx,
+            created.id,
+            claimToken,
+          ))
+        ) {
+          throw new IdempotencyRequestInProgressError();
+        }
         const result = await handler(tx);
-        await this.repository.completeInTransaction(tx, created.id, result);
+        await this.repository.completeInTransaction(
+          tx,
+          created.id,
+          claimToken,
+          result,
+        );
         return result;
       });
     } catch (error) {
-      // 거절·저장 실패면 처리도 커밋되지 않았으므로 기록을 지워 같은 키의 이후 요청을 막지 않는다
-      await this.repository.remove(created.id);
+      // 처리가 커밋되지 않았으므로 이 요청이 담당인 기록만 지워 같은 키의 이후 요청을 막지 않는다
+      await this.repository.remove(created.id, claimToken);
       throw error;
     }
   }
@@ -184,12 +209,14 @@ export class RefundIdempotencyService {
    * 처리 기한이 지난 처리 중 기록을 이어받는다
    * @param existing 같은 요청자·기능·키의 기록
    * @param fingerprint 이번 요청의 본문 지문
+   * @param claimToken 이번 요청의 담당 토큰
    * @param authorize 현재 권한 재확인
    * @returns 이어받았으면 true
    */
   private async tryTakeOver(
     existing: IdempotencyRecord,
     fingerprint: string,
+    claimToken: string,
     authorize: () => Promise<void>,
   ): Promise<boolean> {
     // 처리 중이고 처리 기한이 지났으며 같은 본문일 때만 이어받는다
@@ -207,6 +234,7 @@ export class RefundIdempotencyService {
     return this.repository.takeOver(
       existing.id,
       existing.claimUntil,
+      claimToken,
       this.nextClaimUntil(),
     );
   }

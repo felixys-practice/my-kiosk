@@ -18,79 +18,133 @@ import {
   RefundIdempotencyRepository,
 } from './refund-idempotency.repository';
 
+/** 처리와 같은 트랜잭션에서 쌓이는 쓰기(커밋되어야 반영된다) */
+type FakeTx = {
+  writes: string[];
+  afterCommit: (() => void)[];
+  afterEnd: (() => void)[];
+};
+
 /**
  * 멱등 기록 저장소의 메모리 대역
  * - (requesterId, operation, key) 고유성을 실제 DB 제약처럼 흉내 낸다
+ * - 담당 토큰 조건부 갱신·삭제를 흉내 낸다
+ * - 처리 트랜잭션이 기록을 잡으면(acquireInTransaction) 그 트랜잭션이 끝날 때까지 이어받기가 실패한다.
+ *   실제 DB에서는 이어받기가 행 잠금을 기다린 뒤 조건 불일치로 실패하는데, 대역은 기다림 없이 바로 실패로 흉내 낸다
  */
-/** 처리와 같은 트랜잭션에서 쌓이는 쓰기(커밋되어야 반영된다) */
-type FakeTx = { writes: string[]; afterCommit: (() => void)[] };
-
 class InMemoryIdempotencyRepository {
-  readonly records = new Map<string, IdempotencyRecord>();
+  readonly records = new Map<
+    string,
+    IdempotencyRecord & { claimToken: string | null }
+  >();
   /** 커밋된 처리 쓰기(예: 만든 환불) */
   readonly committed: string[] = [];
   /** true면 같은 트랜잭션의 최초 응답 저장이 실패한다 */
   failCompletion = false;
+  /** 다음 트랜잭션 시작을 이 Promise가 끝날 때까지 멈춘다(요청이 트랜잭션 전에 멈춘 상황) */
+  pauseNextTransaction?: Promise<void>;
+  private readonly lockedIds = new Set<string>();
   private nextId = 1;
-
-  async runInTransaction<R>(work: (tx: FakeTx) => Promise<R>): Promise<R> {
-    const tx: FakeTx = { writes: [], afterCommit: [] };
-    const result = await work(tx);
-    // 작업이 끝까지 성공해야 커밋된다
-    this.committed.push(...tx.writes);
-    tx.afterCommit.forEach((apply) => apply());
-    return result;
-  }
-
-  completeInTransaction(
-    tx: FakeTx,
-    id: string,
-    response: { status: number; body: unknown },
-  ): Promise<void> {
-    if (this.failCompletion) {
-      return Promise.reject(new Error('최초 응답 저장 실패'));
-    }
-    tx.afterCommit.push(() => {
-      void this.complete(id, response);
-    });
-    return Promise.resolve();
-  }
 
   private static keyOf(scope: IdempotencyScope): string {
     return `${scope.requesterId}|${scope.operation}|${scope.key}`;
   }
 
+  private byId(id: string) {
+    return [...this.records.values()].find((record) => record.id === id);
+  }
+
+  async runInTransaction<R>(work: (tx: FakeTx) => Promise<R>): Promise<R> {
+    const gate = this.pauseNextTransaction;
+    this.pauseNextTransaction = undefined;
+    if (gate) await gate;
+    const tx: FakeTx = { writes: [], afterCommit: [], afterEnd: [] };
+    try {
+      const result = await work(tx);
+      // 작업이 끝까지 성공해야 커밋된다
+      this.committed.push(...tx.writes);
+      tx.afterCommit.forEach((apply) => apply());
+      return result;
+    } finally {
+      tx.afterEnd.forEach((release) => release());
+    }
+  }
+
+  acquireInTransaction(
+    tx: FakeTx,
+    id: string,
+    claimToken: string,
+  ): Promise<boolean> {
+    const record = this.byId(id);
+    if (
+      record?.status !== RefundIdempotencyStatus.IN_PROGRESS ||
+      record.claimToken !== claimToken
+    ) {
+      return Promise.resolve(false);
+    }
+    this.lockedIds.add(id);
+    tx.afterEnd.push(() => this.lockedIds.delete(id));
+    return Promise.resolve(true);
+  }
+
+  completeInTransaction(
+    tx: FakeTx,
+    id: string,
+    claimToken: string,
+    response: { status: number; body: unknown },
+  ): Promise<void> {
+    const record = this.byId(id);
+    if (this.failCompletion) {
+      return Promise.reject(new Error('최초 응답 저장 실패'));
+    }
+    if (
+      record?.status !== RefundIdempotencyStatus.IN_PROGRESS ||
+      record.claimToken !== claimToken
+    ) {
+      return Promise.reject(new Error('담당이 아닌 완료'));
+    }
+    tx.afterCommit.push(() => {
+      record.status = RefundIdempotencyStatus.COMPLETED;
+      record.responseStatus = response.status;
+      record.responseBody = response.body;
+    });
+    return Promise.resolve();
+  }
+
   takeOver(
     id: string,
     expiredClaimUntil: Date,
+    claimToken: string,
     claimUntil: Date,
   ): Promise<boolean> {
-    for (const record of this.records.values()) {
-      if (
-        record.id === id &&
-        record.status === RefundIdempotencyStatus.IN_PROGRESS &&
-        record.claimUntil?.getTime() === expiredClaimUntil.getTime()
-      ) {
-        record.claimUntil = claimUntil;
-        return Promise.resolve(true);
-      }
+    const record = this.byId(id);
+    if (
+      this.lockedIds.has(id) ||
+      record?.status !== RefundIdempotencyStatus.IN_PROGRESS ||
+      record.claimUntil?.getTime() !== expiredClaimUntil.getTime()
+    ) {
+      return Promise.resolve(false);
     }
-    return Promise.resolve(false);
+    record.claimToken = claimToken;
+    record.claimUntil = claimUntil;
+    return Promise.resolve(true);
   }
 
   createInProgress(
     scope: IdempotencyScope,
     requestFingerprint: string,
+    claimToken: string,
     claimUntil: Date,
   ): Promise<IdempotencyRecord | null> {
     const key = InMemoryIdempotencyRepository.keyOf(scope);
     if (this.records.has(key)) return Promise.resolve(null);
-    const record: IdempotencyRecord = {
+    const record = {
       id: `record-${this.nextId++}`,
       requestFingerprint,
       status: RefundIdempotencyStatus.IN_PROGRESS,
       responseStatus: null,
       responseBody: null,
+      claimToken,
       claimUntil,
       createdAt: new Date(),
     };
@@ -104,23 +158,15 @@ class InMemoryIdempotencyRepository {
     );
   }
 
-  complete(
-    id: string,
-    response: { status: number; body: unknown },
-  ): Promise<void> {
-    for (const record of this.records.values()) {
-      if (record.id === id) {
-        record.status = RefundIdempotencyStatus.COMPLETED;
-        record.responseStatus = response.status;
-        record.responseBody = response.body;
-      }
-    }
-    return Promise.resolve();
-  }
-
-  remove(id: string): Promise<void> {
+  remove(id: string, claimToken: string): Promise<void> {
     for (const [key, record] of this.records) {
-      if (record.id === id) this.records.delete(key);
+      if (
+        record.id === id &&
+        record.status === RefundIdempotencyStatus.IN_PROGRESS &&
+        record.claimToken === claimToken
+      ) {
+        this.records.delete(key);
+      }
     }
     return Promise.resolve();
   }
@@ -366,12 +412,13 @@ describe('RefundIdempotencyService', () => {
 
   it('처리 기한이 지난 처리 중 기록은 같은 본문의 다음 요청이 이어받아 처리한다', async () => {
     const command = { requesterId, operation, key, request, authorize: allow };
-    // 최초 요청이 처리 중 기록만 남기고 멈춘 상황(처리 트랜잭션은 커밋되지 않음)
+    // 최초 요청이 처리 중 기록만 남기고 처리 트랜잭션을 시작하기 전에 멈춘 상황(서버 중단 등)
+    repository.pauseNextTransaction = new Promise<void>(() => {});
     void service.execute(
       command,
       () => new Promise<IdempotentResult<object>>(() => {}),
     );
-    await Promise.resolve();
+    await new Promise<void>((resolve) => setImmediate(resolve));
     for (const record of repository.records.values()) {
       record.claimUntil = new Date(Date.now() - 1000);
     }
@@ -381,5 +428,62 @@ describe('RefundIdempotencyService', () => {
     );
 
     expect(result).toEqual({ status: 202, body: { refundId: 'refund-1' } });
+  });
+
+  describe('담당 토큰으로 이어받은 뒤의 이전 요청', () => {
+    /**
+     * 처리 트랜잭션에서 환불을 만드는 처리를 만든다
+     * @param refundId 만들 환불
+     * @returns 처리 함수
+     */
+    function acceptRefund(refundId: string) {
+      return (tx: TransactionClient) => {
+        (tx as unknown as FakeTx).writes.push(refundId);
+        return Promise.resolve({ status: 202, body: { refundId } });
+      };
+    }
+
+    /** 기록들의 처리 기한을 지난 시각으로 바꾼다 */
+    function expireClaims() {
+      for (const record of repository.records.values()) {
+        record.claimUntil = new Date(Date.now() - 1000);
+      }
+    }
+
+    /** 대기 중인 Promise 작업이 진행되도록 한 번 양보한다 */
+    const flush = () => new Promise<void>((resolve) => setImmediate(resolve));
+
+    it('트랜잭션 전에 멈췄던 A를 B가 이어받아 성공하면 A의 처리는 커밋되지 않고 B의 최초 응답이 보존된다', async () => {
+      const command = {
+        requesterId,
+        operation,
+        key,
+        request,
+        authorize: allow,
+      };
+      let resumeA!: () => void;
+      repository.pauseNextTransaction = new Promise<void>((resolve) => {
+        resumeA = resolve;
+      });
+      const requestA = service.execute(command, acceptRefund('refund-A'));
+      await flush();
+      expireClaims();
+
+      const responseB = await service.execute(
+        command,
+        acceptRefund('refund-B'),
+      );
+      resumeA();
+
+      await expect(requestA).rejects.toBeInstanceOf(
+        IdempotencyRequestInProgressError,
+      );
+      expect(repository.committed).toEqual(['refund-B']);
+      const handlerC = jest.fn(acceptRefund('refund-C'));
+      await expect(service.execute(command, handlerC)).resolves.toEqual(
+        responseB,
+      );
+      expect(handlerC).not.toHaveBeenCalled();
+    });
   });
 });

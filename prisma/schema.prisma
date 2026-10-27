@@ -1004,6 +1004,7 @@ model RefundIdempotencyRecord {
   key                String // Idempotency-Key 헤더 값(1~128자 ASCII 비공백)
   requestFingerprint String                  @map("request_fingerprint") // 대상·금액·trim 사유·동의를 포함한 요청 해시
   status             RefundIdempotencyStatus
+  claimToken         String?                 @map("claim_token") // 처리 중 기록의 현재 담당 토큰. 완료·정리는 이 토큰일 때만 한다
   claimUntil         DateTime?               @map("claim_until") // 처리 중 기록의 처리 기한. 지나면 다음 요청이 이어받는다
   responseStatus     Int?                    @map("response_status") // 최초 응답 HTTP 상태
   responseBody       Json?                   @map("response_body") // 최초 응답 본문
