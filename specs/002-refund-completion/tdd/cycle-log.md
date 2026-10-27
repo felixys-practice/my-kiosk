@@ -348,3 +348,41 @@ U10~U15를 마친 뒤, 관계 검증의 비교 대상 설정을 생략하면 정
   - 재개 없이 닫은 정지 기록(`closedAt`)도 기존 부분 unique `unique_active_ticket_pause`(`resumed_at IS NULL`)에서는 "활성"으로 남는다. REVOKED 이용권에는 새 정지를 만들지 않으므로 제약 충돌은 없지만, "활성 정지"를 `resumedAt IS NULL`로 찾는 기존 조회는 닫힌 기록을 활성으로 볼 수 있다.
   - 0원 원장의 금액이 0이어야 한다는 조건은 DB 제약으로 두지 않았다(테스트 목록에 없음).
   - "이용권이 있는 신규 환불의 종료 시각 필수"는 다른 테이블을 봐야 해서 DB CHECK로 표현할 수 없다. 환불 확정 서비스(US1)에서 검증한다.
+
+## 사이클 60~75: Phase 2 멱등·오류 코드·권한 범위·PG 현재 동작 (U35~U50)
+
+공통:
+- red는 프로필 `single` 명령으로 확인했다.
+- 단위 테스트의 저장소는 두 가지로 만들었다.
+  - 멱등 서비스: (requesterId, operation, key) 고유성을 흉내 내는 메모리 대역
+  - 권한 서비스: `jest.Mocked` 저장소
+- 각 green 뒤 전체 실행 결과는 단위 252 → 271 passed, E2E 57 passed다.
+
+| 동작 | 테스트 | red | green | 커밋 |
+|---|---|---|---|---|
+| U35 | `refund-idempotency.service.spec.ts` 같은 키·같은 본문 재요청은 최초 응답 | 1 failed, `- Expected - 1 / + Received + 1`(refund-2 ≠ refund-1) | 처리 중 기록 생성이 실패하면 저장된 응답 반환 | `54aa8bb` |
+| U36 | 같은 키·다른 본문은 `IdempotencyKeyReusedError` | 1 failed, `Received promise resolved instead of rejected` | 본문 지문 비교 | `561f440` |
+| U37 | 최초 요청 처리 중이면 `IdempotencyRequestInProgressError` | 1 failed, 위와 같음 | IN_PROGRESS 기록이면 거절 | `63bf05a` |
+| U38 | 재요청 시점에 권한이 없으면 `RefundForbiddenError` | 1 failed, 위와 같음 | 저장된 응답을 돌려주기 전에 `authorize()` 호출 | `24f42c2` |
+| U39 | 600초(Redis 키 만료) 지난 뒤에도 DB 기록의 최초 응답 | 첫 실행 통과 → 뮤턴트(600초 지나면 처리 재실행) 1 failed | 구현 변경 없음 | `567908e` |
+| U40 | 동의 누락으로 거절된 키가 이후 유효 요청을 막지 않음 | 1 failed, `IdempotencyKeyReusedError` 발생 | 처리 실패 시 기록 삭제 후 오류 전달 | `b90f20d` |
+| U42 | 129자 키 거절 | 1 failed, `Received promise resolved instead of rejected` | 길이 128 초과면 `BadRequestException` | `8c34ed0` |
+| U41 | 128자 ASCII 키 허용 | 첫 실행 통과 → 뮤턴트(최대 127) 1 failed | 구현 변경 없음 | `9eea1e9` |
+| U43 | 공백이 든 키 거절 | 1 failed | `/^[\x21-\x7E]+$/` 검사 | `0a6eb23` |
+| U44 | 사유의 앞뒤 공백만 다르면 같은 본문 | 1 failed(`IdempotencyKeyReusedError`) | 지문 = 키 정렬·문자열 trim·SHA-256 | `6511f4a` |
+| U45 | 도메인 오류 5종에 지정한 `code`가 응답 `error.code`로 나감 | 5 failed, `Received: "DomainConflictError"` 등 클래스 이름 | 필터 `codeOf()` = `code ?? name` | `f94d014` |
+| U46 | `code` 없는 도메인 오류는 클래스 이름 | 첫 실행 통과 → 뮤턴트(코드 없으면 'UNKNOWN') `Received: "UNKNOWN"` 1 failed | 구현 변경 없음 | `ae4de58` |
+| U47 | 고객 역할의 점주·운영자 전용 기능 호출은 `RefundForbiddenError` | 1 failed, `Received function did not throw` | OWNER·MANAGER가 아니면 거절 | `3b02ebc` |
+| U48 | 점주의 소유 매장 밖 범위 조회는 `ShopNotFoundError`(404) | 1 failed, `Received promise resolved instead of rejected` | MANAGER 통과, 그 외는 `isCurrentShopOwner` 확인 | `963b8b4` |
+| U49 | 점주 관계 해제 후 같은 매장 조회는 404 | 첫 실행 통과 → 뮤턴트(점주 확인 결과 캐시) 1 failed | 구현 변경 없음 | `4ef9acc` |
+| U50 | (현재 동작 기록) PG 거래조회는 지금 항상 NOT_FOUND | 첫 실행 통과(현재 동작) → 뮤턴트(IN_PROGRESS 반환) 1 failed | 구현 변경 없음, 상태 BASELINE | `33c31b8` |
+
+- **순서 변경**: U41과 U42는 U12·U13과 같은 이유로 거절 쪽(U42)을 먼저 했다.
+- **U45 테스트 범위**: 처음에는 충돌 오류 1종으로 테스트를 썼다. 구현하기 전에 도메인 오류 5종 전부로 넓혔다(T014 "필터는 `error.code ?? error.name`"이 모든 도메인 오류에 적용되기 때문).
+- **판단한 것**:
+  - 멱등 키 형식 오류(129자 이상, 공백, 비ASCII, 빈 키)는 계약 §10에 전용 코드가 없다. 그래서 "DTO 형식 오류 → 400 `BadRequestException`" 행을 적용했다.
+  - 오류 클래스의 `code`는 계약 §10 코드다(`IDEMPOTENCY_KEY_REUSED`, `IDEMPOTENCY_REQUEST_IN_PROGRESS`, `REFUND_FORBIDDEN`, `SHOP_NOT_FOUND`).
+- **남은 위험**:
+  - 멱등 서비스는 처리 중 기록 생성에 실패한 직후 기록을 다시 찾는다. 그 사이에 최초 요청이 실패해 기록이 지워지면 `find`가 null을 돌려준다. 현재 코드는 이 경우를 처리하지 않는다(`existing!`). 다시 시도할지 오류로 돌려줄지 정해야 한다.
+  - Prisma 저장소(`RefundIdempotencyRepository`의 P2002 처리, `RefundRepository.isCurrentShopOwner`)는 단위 테스트가 없다. 고유 제약 자체는 U34에서 확인했다.
+- 기존 eslint 오류: `http-exception.filter.ts` 8건은 이번 변경 전 HEAD에도 있다.

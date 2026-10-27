@@ -196,32 +196,32 @@ suite_baseline: green
 
 | id | behavior | traces | kind | state | test |
 |---|---|---|---|---|---|
-| U35 | 같은 Idempotency-Key·같은 본문의 재요청은 최초 응답을 그대로 받는다 | FR-041, QS-10-1c | example | PENDING | |
-| U36 | 같은 키·다른 본문의 요청은 409 IDEMPOTENCY_KEY_REUSED로 거절된다 | QS-10-1c | example | PENDING | |
-| U37 | 최초 요청이 처리 중일 때 같은 키 요청은 409 IDEMPOTENCY_REQUEST_IN_PROGRESS로 거절된다 | FR-041 | example | PENDING | |
-| U38 | 같은 키 재요청 시점에 권한이 없으면 최초 응답 대신 403 REFUND_FORBIDDEN을 받는다 | QS-10-1d | example | PENDING | |
-| U39 | Redis의 키가 만료된 뒤에도 같은 키 재요청은 DB 기록의 최초 응답을 받는다 | FR-041 | example | PENDING | |
-| U40 | 동의 누락으로 거절된 요청의 키는 동의를 포함한 이후 요청의 처리를 막지 않는다 | FR-040 | example | PENDING | |
-| U41 | 128자 ASCII 키는 허용된다 | FR-041 | example | PENDING | |
-| U42 | 129자 키는 거절된다 | FR-041 | example | PENDING | |
-| U43 | 공백이 들어간 키는 거절된다 | FR-041 | example | PENDING | |
-| U44 | 사유의 앞뒤 공백만 다른 본문은 같은 본문으로 판단되어 최초 응답을 받는다 | FR-041 | example | PENDING | |
+| U35 | 같은 Idempotency-Key·같은 본문의 재요청은 최초 응답을 그대로 받는다 | FR-041, QS-10-1c | example | DONE | `src/refund/refund-idempotency.service.spec.ts` |
+| U36 | 같은 키·다른 본문의 요청은 409 IDEMPOTENCY_KEY_REUSED로 거절된다 | QS-10-1c | example | DONE | `src/refund/refund-idempotency.service.spec.ts` |
+| U37 | 최초 요청이 처리 중일 때 같은 키 요청은 409 IDEMPOTENCY_REQUEST_IN_PROGRESS로 거절된다 | FR-041 | example | DONE | `src/refund/refund-idempotency.service.spec.ts` |
+| U38 | 같은 키 재요청 시점에 권한이 없으면 최초 응답 대신 403 REFUND_FORBIDDEN을 받는다 | QS-10-1d | example | DONE | `src/refund/refund-idempotency.service.spec.ts` |
+| U39 | Redis의 키가 만료된 뒤에도 같은 키 재요청은 DB 기록의 최초 응답을 받는다 | FR-041 | example | DONE | `src/refund/refund-idempotency.service.spec.ts` |
+| U40 | 동의 누락으로 거절된 요청의 키는 동의를 포함한 이후 요청의 처리를 막지 않는다 | FR-040 | example | DONE | `src/refund/refund-idempotency.service.spec.ts` |
+| U41 | 128자 ASCII 키는 허용된다 | FR-041 | example | DONE | `src/refund/refund-idempotency.service.spec.ts` |
+| U42 | 129자 키는 거절된다 | FR-041 | example | DONE | `src/refund/refund-idempotency.service.spec.ts` |
+| U43 | 공백이 들어간 키는 거절된다 | FR-041 | example | DONE | `src/refund/refund-idempotency.service.spec.ts` |
+| U44 | 사유의 앞뒤 공백만 다른 본문은 같은 본문으로 판단되어 최초 응답을 받는다 | FR-041 | example | DONE | `src/refund/refund-idempotency.service.spec.ts` |
 
 ### `src/common/filters/http-exception.filter.ts, src/refund/refund-access.service.ts`
 
 | id | behavior | traces | kind | state | test |
 |---|---|---|---|---|---|
-| U45 | 도메인 오류에 지정한 code가 응답 error.code로 그대로 나간다 | FR-005 | example | PENDING | |
-| U46 | code가 없는 도메인 오류는 오류 클래스 이름이 error.code로 나간다 | FR-005 | example | PENDING | |
-| U47 | 고객 역할이 점주 전용 경로를 호출하면 403 REFUND_FORBIDDEN을 받는다 | QS-2-7a | example | PENDING | |
-| U48 | 점주가 소유하지 않은 매장 범위를 조회하면 404를 받는다 | FR-011, FR-033 | example | PENDING | |
-| U49 | 점주 관계가 해제된 뒤 같은 매장 범위를 조회하면 404를 받는다 | FR-033 | example | PENDING | |
+| U45 | 도메인 오류에 지정한 code가 응답 error.code로 그대로 나간다 | FR-005 | example | DONE | `src/common/filters/http-exception.filter.spec.ts` |
+| U46 | code가 없는 도메인 오류는 오류 클래스 이름이 error.code로 나간다 | FR-005 | example | DONE | `src/common/filters/http-exception.filter.spec.ts` |
+| U47 | 고객 역할이 점주 전용 경로를 호출하면 403 REFUND_FORBIDDEN을 받는다 | QS-2-7a | example | DONE | `src/refund/refund-access.service.spec.ts` |
+| U48 | 점주가 소유하지 않은 매장 범위를 조회하면 404를 받는다 | FR-011, FR-033 | example | DONE | `src/refund/refund-access.service.spec.ts` |
+| U49 | 점주 관계가 해제된 뒤 같은 매장 범위를 조회하면 404를 받는다 | FR-033 | example | DONE | `src/refund/refund-access.service.spec.ts` |
 
 ### `src/pg/pg.service.ts, src/pg/pg.types.ts`
 
 | id | behavior | traces | kind | state | test |
 |---|---|---|---|---|---|
-| U50 | (현재 동작 기록) PG 거래조회는 지금 어떤 입력이든 NOT_FOUND를 반환한다 | FR-024 | characterization | PENDING | |
+| U50 | (현재 동작 기록) PG 거래조회는 지금 어떤 입력이든 NOT_FOUND를 반환한다 | FR-024 | characterization | BASELINE | `src/pg/pg.service.spec.ts` › 현재 동작 기록(특성화) |
 | U51 | 일반 HTTP 404 응답은 NOT_FOUND가 아니라 QUERY_ERROR로 분류된다 | FR-024 | example | PENDING | |
 | U52 | authoritative=true인 미접수 응답만 NOT_FOUND로 분류된다 | FR-024 | example | PENDING | |
 | U53 | 조회 응답이 제한 시간을 넘으면 QUERY_ERROR로 분류된다 | FR-025 | example | PENDING | |
