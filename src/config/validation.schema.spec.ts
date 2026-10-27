@@ -172,5 +172,17 @@ describe('validationSchema', () => {
         error?.details.find((d) => d.path.includes('PG_CALLBACK_SECRET'))?.type,
       ).toBe('string.min');
     });
+
+    it('PG_CALLBACK_SECRET이 32자이면 검증을 통과한다', () => {
+      const { error } = validationSchema.validate(
+        {
+          ...validEnv,
+          PG_CALLBACK_SECRET: 'a'.repeat(pgCallbackSecretMinLength),
+        },
+        { abortEarly: false },
+      );
+
+      expect(error).toBeUndefined();
+    });
   });
 });
