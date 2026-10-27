@@ -14,6 +14,15 @@ import type {
   PgRawResponse,
 } from './pg-cancel.client';
 
+/**
+ * 오류 메시지를 꺼낸다
+ * @param error 잡은 오류
+ * @returns 메시지
+ */
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 /** PG 응답 제한 시간 초과 표시 */
 const timedOut = Symbol('PG 응답 시간 초과');
 
@@ -37,9 +46,18 @@ export class PgService {
     }
 
     // PG 원래 응답을 응답 제한 시간 안에 받는다. 시간 초과는 PG 도달 여부를 모르므로 결과 불명이다
-    const response = await this.withinPgTimeout((signal) =>
-      this.cancelClient.send(request, signal),
-    );
+    let response: PgRawResponse | typeof timedOut;
+    try {
+      response = await this.withinPgTimeout((signal) =>
+        this.cancelClient.send(request, signal),
+      );
+    } catch (error) {
+      // 전송 중 예외는 PG 도달 여부를 모르므로 결과 불명이다(보내기 전 실패가 확인된 경우만 NOT_SENT)
+      return {
+        result: 'UNKNOWN',
+        reason: `PG 송신 오류: ${errorMessage(error)}`,
+      };
+    }
     if (response === timedOut) {
       return { result: 'UNKNOWN', reason: 'PG 송신 응답 시간 초과' };
     }

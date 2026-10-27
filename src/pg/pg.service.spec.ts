@@ -245,5 +245,27 @@ describe('PgService', () => {
 
       await expect(pending).resolves.toMatchObject({ result: 'UNKNOWN' });
     });
+
+    it.each([
+      [
+        '비동기 거부',
+        (): Promise<PgRawResponse> => Promise.reject(new Error('socket reset')),
+      ],
+      [
+        '동기 throw',
+        (): Promise<PgRawResponse> => {
+          throw new Error('socket reset');
+        },
+      ],
+    ])(
+      '송신 중 전송 계층이 예외(%s)를 내면 보내졌는지 모르므로 UNKNOWN이다',
+      async (_kind, failure) => {
+        client.sendResponse = failure;
+
+        await expect(service.sendCancel(sendRequest)).resolves.toMatchObject({
+          result: 'UNKNOWN',
+        });
+      },
+    );
   });
 });

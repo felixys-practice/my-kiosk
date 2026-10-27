@@ -197,6 +197,14 @@ suite_baseline: green
 | U287 | PG 취소 전송의 접수 응답은 ACCEPTED로 분류된다 | FR-021 | example | DONE | `src/pg/pg.service.spec.ts` |
 | U288 | PG 취소 전송의 즉시 성공 응답은 SUCCEEDED{pgTransactionId, cancelledAmount}로 분류된다 | FR-021 | example | DONE | `src/pg/pg.service.spec.ts` |
 | U289 | PG 취소 전송의 거절 응답은 REJECTED{reason}로 분류된다 | FR-021 | example | DONE | `src/pg/pg.service.spec.ts` |
+| U290 | PG 취소 송신 중 전송 계층이 예외(비동기 거부·동기 throw)를 내면 보내졌는지 모르므로 UNKNOWN이다 (Phase 2 검수 R1) | FR-022 | example | PENDING | |
+| U291 | PG 취소 조회 중 전송 계층이 예외(비동기 거부·동기 throw)를 내면 QUERY_ERROR다 (Phase 2 검수 R1) | FR-025 | example | PENDING | |
+| U292 | 중단 신호에 반응해 거부하는 전송 계층이라도 송신 시간 초과는 UNKNOWN이다 (Phase 2 검수 R1) | FR-022 | example | PENDING | |
+| U293 | 중단 신호에 반응해 거부하는 전송 계층이라도 조회 시간 초과는 QUERY_ERROR다 (Phase 2 검수 R1) | FR-025 | example | PENDING | |
+| U294 | PG 취소 송신의 비정상 HTTP 상태(예: 401) 응답은 본문이 ACCEPTED·SUCCEEDED여도 UNKNOWN이다 (Phase 2 검수 R2) | FR-021 | example | PENDING | |
+| U295 | 같은 멱등 키 기록 생성이 실패한 뒤 기록이 사라져 있으면(최초 요청 거절로 삭제) 다시 기록을 만들어 처리한다 (Phase 2 검수 R3) | FR-041 | example | PENDING | |
+| U296 | 환불에 연결되고 두 지급 ID가 모두 null인 원장의 amount가 0이 아니면 저장이 실패한다 (Phase 2 검수 R5) | FR-016a | example | PENDING | |
+| U297 | PaymentCancel의 실패가 아닌 갱신(담당 토큰 등)은 failedAt을 바꾸지 않는다 (Phase 2 검수 의견) | FR-021 | example | PENDING | |
 
 ### `src/refund/refund-idempotency.service.ts`
 
