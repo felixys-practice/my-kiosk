@@ -201,5 +201,18 @@ describe('환불 저장 모델 DB 제약', () => {
         prisma.refund.create({ data: acceptedRefund(target, { amount: -1 }) }),
       ).rejects.toThrow(/refunds_amount_check/);
     });
+
+    it('확정된 환불 금액이 0이면 저장된다', async () => {
+      const target = await createPaidItem();
+
+      const refund = await prisma.refund.create({
+        data: acceptedRefund(target, {
+          amount: 0,
+          payoutStatus: RefundPayoutStatus.PAID,
+        }),
+      });
+
+      expect(refund.amount).toBe(0);
+    });
   });
 });
