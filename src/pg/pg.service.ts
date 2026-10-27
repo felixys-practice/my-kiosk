@@ -31,12 +31,25 @@ export class PgService {
    * @returns 계약 §8의 송신 결과
    */
   async sendCancel(request: PgCancelRequest): Promise<PgCancelSendResult> {
-    void request;
     // 실제 PG가 연결되지 않았으면 보내기 전 실패가 확실하다
     if (!this.cancelClient.configured) {
       return { result: 'NOT_SENT', reason: 'PG 미연동' };
     }
-    return Promise.reject(new Error('미구현'));
+
+    // PG 원래 응답을 받는다
+    const response = await this.cancelClient.send(
+      request,
+      new AbortController().signal,
+    );
+
+    // PG가 접수만 함(최종 결과는 조회로 확인)
+    if (response.body?.status === 'ACCEPTED') return { result: 'ACCEPTED' };
+
+    // 판단할 수 없는 응답은 보낸 뒤 결과를 모르는 것으로 보고 조회로 확인한다
+    return {
+      result: 'UNKNOWN',
+      reason: `판단할 수 없는 PG 송신 응답(HTTP ${response.httpStatus})`,
+    };
   }
 
   /**

@@ -195,5 +195,14 @@ describe('PgService', () => {
         { result: 'NOT_SENT' },
       );
     });
+
+    it('PG가 접수만 한 응답은 ACCEPTED로 분류된다', async () => {
+      client.sendResponse = () =>
+        Promise.resolve({ httpStatus: 202, body: { status: 'ACCEPTED' } });
+
+      await expect(service.sendCancel(sendRequest)).resolves.toEqual({
+        result: 'ACCEPTED',
+      });
+    });
   });
 });
