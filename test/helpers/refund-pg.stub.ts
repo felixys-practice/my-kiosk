@@ -3,25 +3,13 @@
  * - 실제 PG 대신 송신·조회 결과를 테스트가 미리 정한다
  * - 호출된 PG 취소 요청 식별자(PaymentCancel.id)와 금액을 기록해 테스트가 확인할 수 있게 한다
  * - 응답 지연과 응답 전 중단(연결 끊김·프로세스 중단 흉내)을 제어한다
- * - 결과 종류는 API 계약 §8을 따른다. 운영 PG 타입은 T016에서 src/pg/pg.types.ts에 정하며,
- *   그때 이 파일의 결과 타입을 운영 타입으로 바꾼다
+ * - 결과 타입은 운영 코드의 계약 §8 타입(src/pg/pg.types.ts)을 그대로 쓰고, RefundPgGateway를 구현한다
  */
-
-/** PG 취소 송신 결과 (API 계약 §8) */
-export type PgCancelSendResult =
-  | { result: 'NOT_SENT'; reason: string } // PG에 보내기 전에 실패함
-  | { result: 'ACCEPTED' } // PG가 접수함, 최종 결과는 조회로 확인
-  | { result: 'UNKNOWN' } // 보냈으나 응답을 받지 못함
-  | { result: 'SUCCEEDED'; pgTransactionId: string; cancelledAmount: number } // 즉시 취소 성공
-  | { result: 'REJECTED'; reason: string }; // PG가 거절함
-
-/** PG 취소 조회 결과 (API 계약 §8) */
-export type PgCancelInquiryResult =
-  | { result: 'SUCCEEDED'; pgTransactionId: string; cancelledAmount: number }
-  | { result: 'FAILED'; reason: string }
-  | { result: 'IN_PROGRESS' }
-  | { result: 'NOT_FOUND'; authoritative: true } // PG가 미접수를 확실히 확인함
-  | { result: 'QUERY_ERROR'; reason: string };
+import type {
+  PgCancelQueryResult,
+  PgCancelSendResult,
+} from '../../src/pg/pg.types';
+import type { RefundPgGateway } from '../../src/pg/refund-pg.gateway';
 
 /** 대역이 받은 송신 호출 기록 */
 export type PgCancelSendCall = {
@@ -49,14 +37,14 @@ type Operation = 'send' | 'inquiry';
 /** 다음 호출 하나에 적용할 동작: 결과를 돌려주거나 응답 전에 중단한다 */
 type Planned<T> = { kind: 'respond'; value: T } | { kind: 'interrupt' };
 
-export class RefundPgStub {
+export class RefundPgStub implements RefundPgGateway {
   /** 받은 송신 호출 (호출 순서대로) */
   readonly sendCalls: PgCancelSendCall[] = [];
   /** 받은 조회 호출 (호출 순서대로) */
   readonly inquiryCalls: PgCancelInquiryCall[] = [];
 
   private sendPlan: Planned<PgCancelSendResult>[] = [];
-  private inquiryPlan: Planned<PgCancelInquiryResult>[] = [];
+  private inquiryPlan: Planned<PgCancelQueryResult>[] = [];
   private delayMs = 0;
 
   /**
@@ -66,7 +54,7 @@ export class RefundPgStub {
    * 둘 다 환불금 지급을 확정하지 않는 결과라, 테스트가 성공을 정하지 않으면 지급 완료가 되지 않는다
    */
   private defaultSend: PgCancelSendResult = { result: 'ACCEPTED' };
-  private defaultInquiry: PgCancelInquiryResult = { result: 'IN_PROGRESS' };
+  private defaultInquiry: PgCancelQueryResult = { result: 'IN_PROGRESS' };
 
   /**
    * 다음 송신 호출들의 결과를 순서대로 정한다
@@ -86,7 +74,7 @@ export class RefundPgStub {
    * @param results 호출 순서대로 돌려줄 결과
    * @returns 이 대역(연쇄 호출용)
    */
-  respondToInquiry(...results: PgCancelInquiryResult[]): this {
+  respondToInquiry(...results: PgCancelQueryResult[]): this {
     // 결과마다 호출 하나를 소비하도록 계획에 추가한다
     this.inquiryPlan.push(
       ...results.map((value) => ({ kind: 'respond' as const, value })),
@@ -114,7 +102,7 @@ export class RefundPgStub {
    */
   respondByDefault(defaults: {
     send?: PgCancelSendResult;
-    inquiry?: PgCancelInquiryResult;
+    inquiry?: PgCancelQueryResult;
   }): this {
     if (defaults.send) this.defaultSend = defaults.send;
     if (defaults.inquiry) this.defaultInquiry = defaults.inquiry;
@@ -163,7 +151,7 @@ export class RefundPgStub {
    */
   async inquireCancel(request: {
     paymentCancelId: string;
-  }): Promise<PgCancelInquiryResult> {
+  }): Promise<PgCancelQueryResult> {
     // 호출을 기록한다
     this.inquiryCalls.push({ ...request, calledAt: new Date() });
 
