@@ -121,7 +121,7 @@ model Ledger {
   // 환불 지급 원장 연결 (data-model §8). PG 결제 취소와 별도 환불금 지급 중 하나만 연결하고, 0원 환불은 둘 다 null
   refundId             String?             @map("refund_id") // 이 원장이 기록한 환불
   refund               Refund?             @relation(fields: [refundId], references: [id], onDelete: Restrict)
-  manualRefundPayoutId String?             @map("manual_refund_payout_id") // 별도 환불금 지급으로 생긴 원장이면 그 지급
+  manualRefundPayoutId String?             @unique @map("manual_refund_payout_id") // 별도 환불금 지급으로 생긴 원장이면 그 지급(지급당 1건)
   manualRefundPayout   ManualRefundPayout? @relation(fields: [manualRefundPayoutId], references: [id], onDelete: Restrict)
 
   // 어느 정산 배치에서 SETTLED로 마감됐는지. 마감 전에는 null.

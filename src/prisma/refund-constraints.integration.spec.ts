@@ -557,5 +557,21 @@ describe('환불 저장 모델 DB 제약', () => {
         prisma.ledger.create({ data: pgLedger }),
       ).rejects.toMatchObject({ code: uniqueViolation });
     });
+
+    it('같은 별도 환불금 지급을 가리키는 원장을 두 번째로 저장하면 고유 위반으로 실패한다', async () => {
+      const refund = await createAcceptedRefund();
+      const payout = await prisma.manualRefundPayout.create({
+        data: manualPayout(refund.refundId),
+      });
+      const manualLedger = refundLedger(refund, {
+        manualRefundPayoutId: payout.id,
+        amount: -10000,
+      });
+      await prisma.ledger.create({ data: manualLedger });
+
+      await expect(
+        prisma.ledger.create({ data: manualLedger }),
+      ).rejects.toMatchObject({ code: uniqueViolation });
+    });
   });
 });

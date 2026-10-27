@@ -64,7 +64,7 @@ Table ledger {
   paymentCancel payment_cancels
   refundId String
   refund refunds
-  manualRefundPayoutId String
+  manualRefundPayoutId String [unique]
   manualRefundPayout manual_refund_payouts
   settlementBatchId String
   settlementBatch settlement_batches
