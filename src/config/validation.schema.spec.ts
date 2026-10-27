@@ -369,5 +369,14 @@ describe('validationSchema', () => {
 
       expect(error).toBeUndefined();
     });
+
+    it('SWEEP·TIMEOUT을 생략하고 REFUND_QUERY_INTERVAL_SECONDS=15만 설정하면 기본값 합 15와 비교해 통과한다', () => {
+      const { error } = validationSchema.validate(
+        { ...validEnv, REFUND_QUERY_INTERVAL_SECONDS: 15 },
+        { abortEarly: false },
+      );
+
+      expect(error).toBeUndefined();
+    });
   });
 });

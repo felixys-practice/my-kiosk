@@ -52,8 +52,10 @@ export const validationSchema = Joi.object({
 
   // 환불 PG 요청·조회·복구 (API 계약 §8 운영 설정)
   REFUND_RESULT_WAIT_SECONDS: Joi.number().integer().min(1), // 응답 없는 PG 취소 요청의 최초 조회 대기(초)
-  REFUND_SWEEP_INTERVAL_SECONDS: Joi.number().integer().min(1), // 전송·조회 예정 작업 탐색 주기(초)
-  // 정상 재조회 간격(초). 탐색 주기+PG 응답 제한 이상이어야 앞선 조회가 끝나기 전에 다음 조회가 잡히지 않는다
+  REFUND_SWEEP_INTERVAL_SECONDS: Joi.number().integer().min(1).default(5), // 전송·조회 예정 작업 탐색 주기(초)
+  REFUND_PG_TIMEOUT_SECONDS: Joi.number().integer().min(1).default(10), // PG 전송·조회 응답 제한(초)
+  // 정상 재조회 간격(초). 탐색 주기+PG 응답 제한 이상이어야 앞선 조회가 끝나기 전에 다음 조회가 잡히지 않는다.
+  // custom 검증은 앞에 선언된 키의 기본값만 볼 수 있으므로 비교 대상 두 설정을 이 키보다 먼저 선언한다
   REFUND_QUERY_INTERVAL_SECONDS: Joi.number()
     .integer()
     .min(1)
@@ -63,7 +65,6 @@ export const validationSchema = Joi.object({
         'REFUND_PG_TIMEOUT_SECONDS',
       ),
     ),
-  REFUND_PG_TIMEOUT_SECONDS: Joi.number().integer().min(1).default(10), // PG 전송·조회 응답 제한(초)
   // 작업자 처리 기한(초). PG 응답 제한보다 길어야 응답 대기 중 다른 작업자가 같은 작업을 가져가지 않는다
   REFUND_WORK_LEASE_SECONDS: Joi.number()
     .integer()
