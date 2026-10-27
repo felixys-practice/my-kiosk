@@ -70,7 +70,7 @@ export const validationSchema = Joi.object({
     .integer()
     .min(1)
     .greater(Joi.ref('REFUND_PG_TIMEOUT_SECONDS')),
-  REFUND_QUERY_BACKOFF_SECONDS: Joi.number().integer().min(1), // 조회 실패 후 첫 재조회 간격(초)
+  REFUND_QUERY_BACKOFF_SECONDS: Joi.number().integer().min(1).default(15), // 조회 실패 후 첫 재조회 간격(초)
   // 지수 증가 조회 간격 상한(초). 첫 재조회 간격 이상이어야 한다
   REFUND_QUERY_BACKOFF_MAX_SECONDS: Joi.number()
     .integer()
