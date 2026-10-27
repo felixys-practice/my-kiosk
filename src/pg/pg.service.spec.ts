@@ -235,5 +235,15 @@ describe('PgService', () => {
         reason: '취소 가능 기간 경과',
       });
     });
+
+    it('취소 전송 응답이 제한 시간을 넘으면 결과 불명(UNKNOWN)이다', async () => {
+      jest.useFakeTimers();
+      client.sendResponse = () => new Promise<PgRawResponse>(() => {});
+
+      const pending = service.sendCancel(sendRequest);
+      await jest.advanceTimersByTimeAsync(pgTimeoutSeconds * 1000);
+
+      await expect(pending).resolves.toMatchObject({ result: 'UNKNOWN' });
+    });
   });
 });

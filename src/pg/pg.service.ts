@@ -36,11 +36,13 @@ export class PgService {
       return { result: 'NOT_SENT', reason: 'PG 미연동' };
     }
 
-    // PG 원래 응답을 받는다
-    const response = await this.cancelClient.send(
-      request,
-      new AbortController().signal,
+    // PG 원래 응답을 응답 제한 시간 안에 받는다. 시간 초과는 PG 도달 여부를 모르므로 결과 불명이다
+    const response = await this.withinPgTimeout((signal) =>
+      this.cancelClient.send(request, signal),
     );
+    if (response === timedOut) {
+      return { result: 'UNKNOWN', reason: 'PG 송신 응답 시간 초과' };
+    }
 
     // PG가 접수만 함(최종 결과는 조회로 확인)
     const body = response.body;
