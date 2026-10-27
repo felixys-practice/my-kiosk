@@ -21,6 +21,9 @@ Table user {
   requestedPaymentCancels payment_cancels [not null]
   reservedManualPayouts manual_refund_payouts [not null]
   confirmedManualPayouts manual_refund_payouts [not null]
+  refundNotifications refund_notifications [not null]
+  refundNotificationReceipts refund_notification_receipts [not null]
+  refundIdempotencyRecords refund_idempotency_records [not null]
   createdAt DateTime [default: `now()`, not null]
   updatedAt DateTime [not null]
 }
@@ -59,6 +62,10 @@ Table ledger {
   settledAt DateTime
   paymentCancelId String [unique]
   paymentCancel payment_cancels
+  refundId String
+  refund refunds
+  manualRefundPayoutId String
+  manualRefundPayout manual_refund_payouts
   settlementBatchId String
   settlementBatch settlement_batches
   createdAt DateTime [default: `now()`, not null]
@@ -251,6 +258,7 @@ Table payment_cancels {
   orderItem order_items [not null]
   locks refund_locks [not null]
   ledger ledger
+  notifications refund_notifications [not null]
 
   indexes {
     (refundId, attemptNumber) [unique]
@@ -315,6 +323,7 @@ Table shops {
   updatedAt DateTime [not null]
   isActive Boolean [not null, default: true]
   deletedAt DateTime
+  refundNotifications refund_notifications [not null]
 }
 
 Table shop_settlement_accounts {
@@ -430,6 +439,9 @@ Table refunds {
   endedSession usage_sessions
   paymentCancels payment_cancels [not null]
   manualPayouts manual_refund_payouts [not null]
+  ledgers ledger [not null]
+  notifications refund_notifications [not null]
+  idempotencyRecords refund_idempotency_records [not null]
   createdAt DateTime [default: `now()`, not null]
   updatedAt DateTime [not null]
 }
@@ -449,9 +461,69 @@ Table manual_refund_payouts {
   evidenceReference String
   notPaidEvidence String
   failureReason String
+  ledgers ledger [not null]
+  notifications refund_notifications [not null]
   refund refunds [not null]
   reservedBy user [not null]
   confirmedBy user
+  createdAt DateTime [default: `now()`, not null]
+  updatedAt DateTime [not null]
+}
+
+Table refund_notifications {
+  id String [pk]
+  refundId String [not null]
+  paymentCancelId String
+  manualRefundPayoutId String
+  kind String [not null]
+  audience RefundNotificationAudience [not null]
+  shopId String [not null]
+  recipientUserId String
+  eventKey String [not null]
+  createdAt DateTime [default: `now()`, not null]
+  refund refunds [not null]
+  paymentCancel payment_cancels
+  manualRefundPayout manual_refund_payouts
+  shop shops [not null]
+  recipientUser user
+  receipts refund_notification_receipts [not null]
+}
+
+Table refund_notification_receipts {
+  notificationId String [not null]
+  userId String [not null]
+  readAt DateTime [not null]
+  notification refund_notifications [not null]
+  user user [not null]
+
+  indexes {
+    (notificationId, userId) [pk]
+  }
+}
+
+Table refund_recovery_controls {
+  id String [pk]
+  mode RefundRecoveryMode [not null, default: 'PROBE']
+  nextProbeAt DateTime
+  claimToken String
+  claimUntil DateTime
+  batchCutoffAt DateTime
+  updatedAt DateTime [not null]
+}
+
+Table refund_idempotency_records {
+  id String [pk]
+  requesterId String [not null]
+  operation String [not null]
+  key String [not null]
+  requestFingerprint String [not null]
+  status RefundIdempotencyStatus [not null]
+  responseStatus Int
+  responseBody Json
+  refundId String
+  completedAt DateTime
+  requester user [not null]
+  refund refunds
   createdAt DateTime [default: `now()`, not null]
   updatedAt DateTime [not null]
 }
@@ -614,6 +686,22 @@ Enum ManualRefundPayoutStatus {
   FAILED
 }
 
+Enum RefundNotificationAudience {
+  CUSTOMER
+  SHOP
+  OPERATOR
+}
+
+Enum RefundRecoveryMode {
+  PROBE
+  BATCH
+}
+
+Enum RefundIdempotencyStatus {
+  IN_PROGRESS
+  COMPLETED
+}
+
 Ref: oauth_accounts.userId > user.id
 
 Ref: refresh_tokens.userId > user.id
@@ -623,6 +711,10 @@ Ref: ledger.shopId > shops.id
 Ref: ledger.orderId > orders.id
 
 Ref: ledger.paymentCancelId - payment_cancels.id
+
+Ref: ledger.refundId > refunds.id [delete: Restrict]
+
+Ref: ledger.manualRefundPayoutId > manual_refund_payouts.id [delete: Restrict]
 
 Ref: ledger.settlementBatchId > settlement_batches.id
 
@@ -709,3 +801,21 @@ Ref: manual_refund_payouts.refundId > refunds.id [delete: Restrict]
 Ref: manual_refund_payouts.reservedById > user.id [delete: Restrict]
 
 Ref: manual_refund_payouts.confirmedById > user.id [delete: Restrict]
+
+Ref: refund_notifications.refundId > refunds.id [delete: Restrict]
+
+Ref: refund_notifications.paymentCancelId > payment_cancels.id [delete: Restrict]
+
+Ref: refund_notifications.manualRefundPayoutId > manual_refund_payouts.id [delete: Restrict]
+
+Ref: refund_notifications.shopId > shops.id [delete: Restrict]
+
+Ref: refund_notifications.recipientUserId > user.id [delete: Restrict]
+
+Ref: refund_notification_receipts.notificationId > refund_notifications.id [delete: Restrict]
+
+Ref: refund_notification_receipts.userId > user.id [delete: Restrict]
+
+Ref: refund_idempotency_records.requesterId > user.id [delete: Restrict]
+
+Ref: refund_idempotency_records.refundId > refunds.id [delete: Restrict]

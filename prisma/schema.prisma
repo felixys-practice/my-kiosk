@@ -32,19 +32,22 @@ model User {
   password String? // nullable: OAuth 전용 유저는 null, 로컬 로그인 유저는 bcrypt 해시 문자열
   isActive Boolean  @default(true) @map("is_active")
 
-  refreshTokens           RefreshToken[]
-  oauthAccounts           OAuthAccount[]
-  ownedShops              ShopOwner[]
-  tickets                 Ticket[]
-  orders                  Order[]
-  usageSessions           UsageSession[]
-  ProductHistories        ProductHistory[]
-  ticketSeatChanges       TicketSeatChange[] // 이 사용자가 점주로서 변경한 이용권 좌석 이력
-  requestedRefunds        Refund[]             @relation("RefundRequestedBy") // 이 사용자가 실행한 환불 확정
-  reviewedRefunds         Refund[]             @relation("RefundReviewedBy") // 이 사용자가 검토한 PG 금액 불일치
-  requestedPaymentCancels PaymentCancel[]      @relation("PaymentCancelRequestedBy") // 이 사용자가 실행한 PG 취소 재시도
-  reservedManualPayouts   ManualRefundPayout[] @relation("ManualPayoutReservedBy") // 이 운영자가 예약한 별도 환불금 지급
-  confirmedManualPayouts  ManualRefundPayout[] @relation("ManualPayoutConfirmedBy") // 이 운영자가 결과를 확정한 별도 환불금 지급
+  refreshTokens              RefreshToken[]
+  oauthAccounts              OAuthAccount[]
+  ownedShops                 ShopOwner[]
+  tickets                    Ticket[]
+  orders                     Order[]
+  usageSessions              UsageSession[]
+  ProductHistories           ProductHistory[]
+  ticketSeatChanges          TicketSeatChange[] // 이 사용자가 점주로서 변경한 이용권 좌석 이력
+  requestedRefunds           Refund[]                    @relation("RefundRequestedBy") // 이 사용자가 실행한 환불 확정
+  reviewedRefunds            Refund[]                    @relation("RefundReviewedBy") // 이 사용자가 검토한 PG 금액 불일치
+  requestedPaymentCancels    PaymentCancel[]             @relation("PaymentCancelRequestedBy") // 이 사용자가 실행한 PG 취소 재시도
+  reservedManualPayouts      ManualRefundPayout[]        @relation("ManualPayoutReservedBy") // 이 운영자가 예약한 별도 환불금 지급
+  confirmedManualPayouts     ManualRefundPayout[]        @relation("ManualPayoutConfirmedBy") // 이 운영자가 결과를 확정한 별도 환불금 지급
+  refundNotifications        RefundNotification[]        @relation("RefundNotificationRecipient") // 이 사용자 한 명에게 보낸 환불 알림
+  refundNotificationReceipts RefundNotificationReceipt[] // 이 사용자의 환불 알림 읽음 기록
+  refundIdempotencyRecords   RefundIdempotencyRecord[] // 이 사용자의 환불 요청 멱등 기록
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -115,6 +118,12 @@ model Ledger {
   paymentCancelId String?        @unique @map("payment_cancel_id")
   paymentCancel   PaymentCancel? @relation(fields: [paymentCancelId], references: [id])
 
+  // 환불 지급 원장 연결 (data-model §8). PG 결제 취소와 별도 환불금 지급 중 하나만 연결하고, 0원 환불은 둘 다 null
+  refundId             String?             @map("refund_id") // 이 원장이 기록한 환불
+  refund               Refund?             @relation(fields: [refundId], references: [id], onDelete: Restrict)
+  manualRefundPayoutId String?             @map("manual_refund_payout_id") // 별도 환불금 지급으로 생긴 원장이면 그 지급
+  manualRefundPayout   ManualRefundPayout? @relation(fields: [manualRefundPayoutId], references: [id], onDelete: Restrict)
+
   // 어느 정산 배치에서 SETTLED로 마감됐는지. 마감 전에는 null.
   settlementBatchId String?          @map("settlement_batch_id")
   settlementBatch   SettlementBatch? @relation(fields: [settlementBatchId], references: [id])
@@ -124,6 +133,7 @@ model Ledger {
   @@index([shopId])
   @@index([orderId, status]) // 정산 배치의 주 조회 패턴: orderId별 미마감 레코드 집계
   @@index([settlementBatchId])
+  @@index([refundId])
   @@map("ledger")
 }
 
@@ -501,13 +511,14 @@ model PaymentCancel {
   retryReason         String?   @map("retry_reason") // 재시도 사유(운영자 직접 재시도, 개별 확인 후 재시도 등)
   updatedAt           DateTime  @default(now()) @updatedAt @map("updated_at") // 최종 갱신
 
-  refund      Refund?      @relation(fields: [refundId], references: [id], onDelete: Restrict)
-  requestedBy User?        @relation("PaymentCancelRequestedBy", fields: [requestedById], references: [id], onDelete: Restrict)
-  payment     Payment      @relation(fields: [paymentId], references: [id])
-  orderItemId String       @map("order_item_id") // 이 취소 요청의 대상 상품(1:1 — 한 번의 취소는 상품 1건만 대상)
-  orderItem   OrderItem    @relation(fields: [orderItemId], references: [id])
-  locks       RefundLock[] // 이 취소 요청이 보유 중인 상품별 락(확정되면 삭제됨)
-  ledger      Ledger? // SUCCEEDED 확정 시 생성되는 원장 레코드(1:1 — 멱등키로 1건만 허용)
+  refund        Refund?              @relation(fields: [refundId], references: [id], onDelete: Restrict)
+  requestedBy   User?                @relation("PaymentCancelRequestedBy", fields: [requestedById], references: [id], onDelete: Restrict)
+  payment       Payment              @relation(fields: [paymentId], references: [id])
+  orderItemId   String               @map("order_item_id") // 이 취소 요청의 대상 상품(1:1 — 한 번의 취소는 상품 1건만 대상)
+  orderItem     OrderItem            @relation(fields: [orderItemId], references: [id])
+  locks         RefundLock[] // 이 취소 요청이 보유 중인 상품별 락(확정되면 삭제됨)
+  ledger        Ledger? // SUCCEEDED 확정 시 생성되는 원장 레코드(1:1 — 멱등키로 1건만 허용)
+  notifications RefundNotification[] // 이 PG 취소 요청과 관련된 알림
   // NOTE: Partial Unique Index (raw migration으로 관리)
   // - payment_cancels_refund_id_active_key: (refund_id) WHERE status IN ('REQUESTED','QUERY_FAILED')
   // NOTE: CHECK 제약 (raw migration으로 관리)
@@ -625,6 +636,8 @@ model Shop {
 
   isActive  Boolean   @default(true) @map("is_active") // 운영 중 여부
   deletedAt DateTime? @map("deleted_at") // 소프트 삭제
+
+  refundNotifications RefundNotification[] // 이 매장 대상 환불 알림
 
   @@index([name])
   @@map("shops")
@@ -824,8 +837,11 @@ model Refund {
   reviewedBy   User?         @relation("RefundReviewedBy", fields: [reviewedById], references: [id], onDelete: Restrict)
   endedSession UsageSession? @relation(fields: [endedSessionId], references: [id], onDelete: Restrict)
 
-  paymentCancels PaymentCancel[] // 이 환불 아래의 PG 취소 요청(시도) 기록
-  manualPayouts  ManualRefundPayout[] // 이 환불의 별도 환불금 지급 예약·결과
+  paymentCancels     PaymentCancel[] // 이 환불 아래의 PG 취소 요청(시도) 기록
+  manualPayouts      ManualRefundPayout[] // 이 환불의 별도 환불금 지급 예약·결과
+  ledgers            Ledger[] // 이 환불의 실제 지급 원장
+  notifications      RefundNotification[] // 이 환불의 사건 알림
+  idempotencyRecords RefundIdempotencyRecord[] // 이 환불을 만든 멱등 요청 기록
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -878,6 +894,9 @@ model ManualRefundPayout {
   notPaidEvidence       String?   @map("not_paid_evidence") // 확실한 미지급으로 예약을 종료할 근거
   failureReason         String?   @map("failure_reason") // 미지급 종료 사유
 
+  ledgers       Ledger[] // 이 지급의 실제 지급 원장(1건)
+  notifications RefundNotification[] // 이 지급과 관련된 알림
+
   refund      Refund @relation(fields: [refundId], references: [id], onDelete: Restrict)
   reservedBy  User   @relation("ManualPayoutReservedBy", fields: [reservedById], references: [id], onDelete: Restrict)
   confirmedBy User?  @relation("ManualPayoutConfirmedBy", fields: [confirmedById], references: [id], onDelete: Restrict)
@@ -893,4 +912,100 @@ model ManualRefundPayout {
   @@index([refundId])
   @@index([status, reservedAt]) // 예약 후 미확인 알림 대상 탐색
   @@map("manual_refund_payouts")
+}
+
+// ── 환불 알림·장애 복구 제어·멱등 요청 기록 (specs/002-refund-completion data-model §6·§8) ──
+
+// 알림을 받는 쪽
+enum RefundNotificationAudience {
+  CUSTOMER // 환불 대상 고객 본인
+  SHOP // 매장의 현재 점주들(공동 점주는 읽음을 사람별로 관리)
+  OPERATOR // 운영자(MANAGER)
+}
+
+// 환불 사건 알림. 같은 사건·수신 범위·수신자 조합은 한 번만 만든다
+model RefundNotification {
+  id                   String                     @id @default(uuid())
+  refundId             String                     @map("refund_id")
+  paymentCancelId      String?                    @map("payment_cancel_id") // 관련 PG 취소 요청
+  manualRefundPayoutId String?                    @map("manual_refund_payout_id") // 관련 별도 환불금 지급
+  kind                 String // 알림 종류(환불 확정, 지급 완료, 조치 필요 등)
+  audience             RefundNotificationAudience
+  shopId               String                     @map("shop_id") // 원래 주문의 매장
+  recipientUserId      String?                    @map("recipient_user_id") // 특정 사용자 한 명에게 보낸 경우, 범위 알림이면 null
+  eventKey             String                     @map("event_key") // 같은 사건의 중복 알림을 막는 키
+  createdAt            DateTime                   @default(now()) @map("created_at")
+
+  refund             Refund                      @relation(fields: [refundId], references: [id], onDelete: Restrict)
+  paymentCancel      PaymentCancel?              @relation(fields: [paymentCancelId], references: [id], onDelete: Restrict)
+  manualRefundPayout ManualRefundPayout?         @relation(fields: [manualRefundPayoutId], references: [id], onDelete: Restrict)
+  shop               Shop                        @relation(fields: [shopId], references: [id], onDelete: Restrict)
+  recipientUser      User?                       @relation("RefundNotificationRecipient", fields: [recipientUserId], references: [id], onDelete: Restrict)
+  receipts           RefundNotificationReceipt[]
+
+  @@index([refundId])
+  @@index([audience, shopId, createdAt])
+  @@index([recipientUserId, createdAt])
+  @@map("refund_notifications")
+}
+
+// 환불 알림의 사람별 읽음 기록
+model RefundNotificationReceipt {
+  notificationId String   @map("notification_id")
+  userId         String   @map("user_id")
+  readAt         DateTime @map("read_at")
+
+  notification RefundNotification @relation(fields: [notificationId], references: [id], onDelete: Restrict)
+  user         User               @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@id([notificationId, userId]) // 한 사람의 한 알림 읽음은 1건
+  @@map("refund_notification_receipts")
+}
+
+// PG 장애 복구 조회 방식
+enum RefundRecoveryMode {
+  PROBE // 장애 의심: 주기마다 가장 오래된 1건만 확인
+  BATCH // 정상 응답 확인 후: 처리 단위만큼 나눠 재조회
+}
+
+// 여러 서버가 공유하는 PG 장애 복구 조회 담당(단일 행)
+model RefundRecoveryControl {
+  id            String             @id // 단일 제어 행 식별자
+  mode          RefundRecoveryMode @default(PROBE)
+  nextProbeAt   DateTime?          @map("next_probe_at") // 다음 1건 확인 예정 시각
+  claimToken    String?            @map("claim_token") // 복구 작업 담당 토큰
+  claimUntil    DateTime?          @map("claim_until") // 복구 작업 처리 기한
+  batchCutoffAt DateTime?          @map("batch_cutoff_at") // BATCH 재조회 대상의 기준 시각(이 시각 이전 확인 실패 건)
+  updatedAt     DateTime           @updatedAt @map("updated_at")
+
+  @@map("refund_recovery_controls")
+}
+
+// 멱등 요청 처리 상태
+enum RefundIdempotencyStatus {
+  IN_PROGRESS // 최초 요청 처리 중(응답 저장 전)
+  COMPLETED // 최초 응답 저장 완료
+}
+
+// 환불 접수·운영 변경 요청의 DB 멱등 기록. Redis TTL이 지나도 같은 요청의 중복 환불을 막는다
+model RefundIdempotencyRecord {
+  id                 String                  @id @default(uuid())
+  requesterId        String                  @map("requester_id")
+  operation          String // 기능 구분(CUSTOMER_REFUND, STORE_REFUND, PAYOUT_RETRY 등)
+  key                String // Idempotency-Key 헤더 값(1~128자 ASCII 비공백)
+  requestFingerprint String                  @map("request_fingerprint") // 대상·금액·trim 사유·동의를 포함한 요청 해시
+  status             RefundIdempotencyStatus
+  responseStatus     Int?                    @map("response_status") // 최초 응답 HTTP 상태
+  responseBody       Json?                   @map("response_body") // 최초 응답 본문
+  refundId           String?                 @map("refund_id") // 최초 요청이 만든 환불
+  completedAt        DateTime?               @map("completed_at")
+
+  requester User    @relation(fields: [requesterId], references: [id], onDelete: Restrict)
+  refund    Refund? @relation(fields: [refundId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([requesterId])
+  @@map("refund_idempotency_records")
 }
