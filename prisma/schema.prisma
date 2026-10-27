@@ -502,6 +502,7 @@ model PaymentCancel {
   // - payment_cancels_refund_id_active_key: (refund_id) WHERE status IN ('REQUESTED','QUERY_FAILED')
   // NOTE: CHECK 제약 (raw migration으로 관리)
   // - payment_cancels_actual_amount_check: actual_amount >= 0
+  // - payment_cancels_counts_check: resend·manual_resend·inquiry·inquiry_failure·send_attempt 횟수 >= 0
 
   @@unique([refundId, attemptNumber]) // 환불 안의 시도 번호는 중복 불가
   @@index([paymentId])

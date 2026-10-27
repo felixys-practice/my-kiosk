@@ -416,5 +416,21 @@ describe('환불 저장 모델 DB 제약', () => {
         }),
       ).rejects.toThrow(/payment_cancels_actual_amount_check/);
     });
+
+    it.each([
+      'resendCount',
+      'manualResendCount',
+      'inquiryCount',
+      'inquiryFailureCount',
+      'sendAttemptCount',
+    ] as const)('PG 취소 요청의 %s가 -1이면 저장이 실패한다', async (field) => {
+      const refund = await createAcceptedRefund();
+
+      await expect(
+        prisma.paymentCancel.create({
+          data: paymentCancelAttempt(refund, { [field]: -1 }),
+        }),
+      ).rejects.toThrow(/payment_cancels_counts_check/);
+    });
   });
 });
