@@ -187,6 +187,22 @@ describe('validationSchema', () => {
   });
 
   describe('환불 PG 처리 설정(REFUND_*)', () => {
+    // 양의 정수여야 하는 시간·횟수 설정 (API 계약 §8). REFUND_RESEND_LIMIT은 0 이상이라 제외
+    const positiveIntegerKeys = [
+      'REFUND_RESULT_WAIT_SECONDS',
+      'REFUND_SWEEP_INTERVAL_SECONDS',
+      'REFUND_QUERY_INTERVAL_SECONDS',
+      'REFUND_PG_TIMEOUT_SECONDS',
+      'REFUND_WORK_LEASE_SECONDS',
+      'REFUND_QUERY_BACKOFF_SECONDS',
+      'REFUND_QUERY_BACKOFF_MAX_SECONDS',
+      'REFUND_QUERY_FAILURE_THRESHOLD',
+      'REFUND_RECOVERY_PROBE_SECONDS',
+      'REFUND_RECOVERY_BATCH_SIZE',
+      'REFUND_MANUAL_CONFIRM_ALERT_SECONDS',
+      'PG_CALLBACK_MAX_SKEW_SECONDS',
+    ];
+
     it('REFUND_RESEND_LIMIT=0이면 검증을 통과한다', () => {
       const { error } = validationSchema.validate(
         { ...validEnv, REFUND_RESEND_LIMIT: 0 },
@@ -206,6 +222,17 @@ describe('validationSchema', () => {
         error?.details.find((d) => d.path.includes('REFUND_RESEND_LIMIT'))
           ?.type,
       ).toBe('number.min');
+    });
+
+    it.each(positiveIntegerKeys)('%s=0이면 검증이 실패한다', (key) => {
+      const { error } = validationSchema.validate(
+        { ...validEnv, [key]: 0 },
+        { abortEarly: false },
+      );
+
+      expect(error?.details.find((d) => d.path.includes(key))?.type).toBe(
+        'number.min',
+      );
     });
   });
 });
