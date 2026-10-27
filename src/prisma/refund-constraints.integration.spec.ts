@@ -3,6 +3,7 @@ import 'dotenv/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import {
   LedgerStatus,
+  RefundIdempotencyStatus,
   RefundNotificationAudience,
   ManualRefundPayoutStatus,
   PaymentCancelStatus,
@@ -668,6 +669,23 @@ describe('환불 저장 모델 DB 제약', () => {
 
       await expect(
         prisma.refundNotification.create({ data: personal }),
+      ).rejects.toMatchObject({ code: uniqueViolation });
+    });
+  });
+
+  describe('RefundIdempotencyRecord', () => {
+    it('같은 요청자·기능·키의 멱등 요청 기록을 두 번째로 저장하면 고유 위반으로 실패한다', async () => {
+      const record = {
+        requesterId: userId,
+        operation: 'CUSTOMER_REFUND',
+        key: `key-${randomUUID()}`,
+        requestFingerprint: 'fingerprint',
+        status: RefundIdempotencyStatus.IN_PROGRESS,
+      };
+      await prisma.refundIdempotencyRecord.create({ data: record });
+
+      await expect(
+        prisma.refundIdempotencyRecord.create({ data: record }),
       ).rejects.toMatchObject({ code: uniqueViolation });
     });
   });

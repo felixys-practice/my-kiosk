@@ -1014,6 +1014,6 @@ model RefundIdempotencyRecord {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  @@index([requesterId])
+  @@unique([requesterId, operation, key]) // 같은 요청자·기능·키는 한 번만 처리
   @@map("refund_idempotency_records")
 }
