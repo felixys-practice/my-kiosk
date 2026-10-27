@@ -89,6 +89,50 @@ describe('configuration', () => {
     });
   });
 
+  describe('refund·pgCallback 섹션', () => {
+    // API 계약 §8 운영 설정 표의 환경 변수와 기본값
+    const refundEnvDefaults = {
+      REFUND_RESULT_WAIT_SECONDS: 60,
+      REFUND_SWEEP_INTERVAL_SECONDS: 5,
+      REFUND_QUERY_INTERVAL_SECONDS: 15,
+      REFUND_PG_TIMEOUT_SECONDS: 10,
+      REFUND_WORK_LEASE_SECONDS: 30,
+      REFUND_QUERY_BACKOFF_SECONDS: 15,
+      REFUND_QUERY_BACKOFF_MAX_SECONDS: 300,
+      REFUND_QUERY_FAILURE_THRESHOLD: 5,
+      REFUND_RECOVERY_PROBE_SECONDS: 900,
+      REFUND_RECOVERY_BATCH_SIZE: 20,
+      REFUND_RESEND_LIMIT: 3,
+      REFUND_MANUAL_CONFIRM_ALERT_SECONDS: 3600,
+      PG_CALLBACK_MAX_SKEW_SECONDS: 300,
+    };
+
+    it('PG_CALLBACK_SECRET 외 13개 환불 설정을 생략하면 API 계약 §8의 기본값으로 읽힌다', () => {
+      for (const name of Object.keys(refundEnvDefaults)) {
+        delete process.env[name];
+      }
+
+      const config = configuration();
+
+      expect({
+        REFUND_RESULT_WAIT_SECONDS: config.refund.resultWaitSeconds,
+        REFUND_SWEEP_INTERVAL_SECONDS: config.refund.sweepIntervalSeconds,
+        REFUND_QUERY_INTERVAL_SECONDS: config.refund.queryIntervalSeconds,
+        REFUND_PG_TIMEOUT_SECONDS: config.refund.pgTimeoutSeconds,
+        REFUND_WORK_LEASE_SECONDS: config.refund.workLeaseSeconds,
+        REFUND_QUERY_BACKOFF_SECONDS: config.refund.queryBackoffSeconds,
+        REFUND_QUERY_BACKOFF_MAX_SECONDS: config.refund.queryBackoffMaxSeconds,
+        REFUND_QUERY_FAILURE_THRESHOLD: config.refund.queryFailureThreshold,
+        REFUND_RECOVERY_PROBE_SECONDS: config.refund.recoveryProbeSeconds,
+        REFUND_RECOVERY_BATCH_SIZE: config.refund.recoveryBatchSize,
+        REFUND_RESEND_LIMIT: config.refund.resendLimit,
+        REFUND_MANUAL_CONFIRM_ALERT_SECONDS:
+          config.refund.manualConfirmAlertSeconds,
+        PG_CALLBACK_MAX_SKEW_SECONDS: config.pgCallback.maxSkewSeconds,
+      }).toEqual(refundEnvDefaults);
+    });
+  });
+
   describe('네임스페이스 구조', () => {
     it('app 네임스페이스 키가 모두 존재한다', () => {
       const config = configuration();
