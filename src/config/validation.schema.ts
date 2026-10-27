@@ -38,7 +38,11 @@ export const validationSchema = Joi.object({
   REFUND_SWEEP_INTERVAL_SECONDS: Joi.number().integer().min(1), // 전송·조회 예정 작업 탐색 주기(초)
   REFUND_QUERY_INTERVAL_SECONDS: Joi.number().integer().min(1), // 정상 재조회 간격(초)
   REFUND_PG_TIMEOUT_SECONDS: Joi.number().integer().min(1), // PG 전송·조회 응답 제한(초)
-  REFUND_WORK_LEASE_SECONDS: Joi.number().integer().min(1), // 작업자 처리 기한(초)
+  // 작업자 처리 기한(초). PG 응답 제한보다 길어야 응답 대기 중 다른 작업자가 같은 작업을 가져가지 않는다
+  REFUND_WORK_LEASE_SECONDS: Joi.number()
+    .integer()
+    .min(1)
+    .greater(Joi.ref('REFUND_PG_TIMEOUT_SECONDS')),
   REFUND_QUERY_BACKOFF_SECONDS: Joi.number().integer().min(1), // 조회 실패 후 첫 재조회 간격(초)
   REFUND_QUERY_BACKOFF_MAX_SECONDS: Joi.number().integer().min(1), // 지수 증가 조회 간격 상한(초)
   REFUND_QUERY_FAILURE_THRESHOLD: Joi.number().integer().min(1), // 결과 확인 실패 전환 연속 오류 횟수

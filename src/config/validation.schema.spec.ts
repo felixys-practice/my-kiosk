@@ -269,5 +269,21 @@ describe('validationSchema', () => {
         );
       },
     );
+
+    it('REFUND_WORK_LEASE_SECONDS가 REFUND_PG_TIMEOUT_SECONDS와 같으면 검증이 실패한다', () => {
+      const { error } = validationSchema.validate(
+        {
+          ...validEnv,
+          REFUND_PG_TIMEOUT_SECONDS: 10,
+          REFUND_WORK_LEASE_SECONDS: 10,
+        },
+        { abortEarly: false },
+      );
+
+      expect(
+        error?.details.find((d) => d.path.includes('REFUND_WORK_LEASE_SECONDS'))
+          ?.type,
+      ).toBe('number.greater');
+    });
   });
 });
