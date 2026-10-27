@@ -54,6 +54,11 @@ export class PgService {
         cancelledAmount: body.cancelledAmount,
       };
     }
+    // PG가 처리 중
+    if (response.httpStatus === 200 && body?.status === 'IN_PROGRESS') {
+      return { result: 'IN_PROGRESS' };
+    }
+
     // PG가 취소 실패를 확정함
     if (response.httpStatus === 200 && body?.status === 'FAILED') {
       return { result: 'FAILED', reason: body.reason ?? '' };

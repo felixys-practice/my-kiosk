@@ -126,5 +126,14 @@ describe('PgService', () => {
         reason: '이미 정산된 거래',
       });
     });
+
+    it('처리 중 응답은 IN_PROGRESS로 분류된다', async () => {
+      client.inquireResponse = () =>
+        Promise.resolve({ httpStatus: 200, body: { status: 'IN_PROGRESS' } });
+
+      await expect(service.inquireCancel(cancelRequest)).resolves.toEqual({
+        result: 'IN_PROGRESS',
+      });
+    });
   });
 });
