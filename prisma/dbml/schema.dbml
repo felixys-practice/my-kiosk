@@ -16,6 +16,8 @@ Table user {
   usageSessions usage_sessions [not null]
   ProductHistories product_histories [not null]
   ticketSeatChanges ticket_seat_changes [not null]
+  requestedRefunds refunds [not null]
+  reviewedRefunds refunds [not null]
   createdAt DateTime [default: `now()`, not null]
   updatedAt DateTime [not null]
 }
@@ -174,6 +176,7 @@ Table order_items {
   usableDays Int [not null]
   orderId String [not null]
   productId String [not null]
+  refunds refunds [not null]
   ticket tickets
   product products [not null]
   order orders [not null]
@@ -199,6 +202,7 @@ Table payments {
   updatedAt DateTime [not null]
   reason String
   paymentCancels payment_cancels [not null]
+  refunds refunds [not null]
 }
 
 Table payment_cancels {
@@ -249,6 +253,7 @@ Table usage_sessions {
   user user [not null]
   createdAt DateTime [default: `now()`, not null]
   updatedAt DateTime [not null]
+  endedByRefunds refunds [not null]
 }
 
 Table product_histories {
@@ -357,6 +362,43 @@ Table ticket_seat_changes {
   toSeat seats
   user user [not null]
   changedAt DateTime [default: `now()`, not null]
+}
+
+Table refunds {
+  id String [pk]
+  paymentId String [not null]
+  orderItemId String
+  targetKind RefundTargetKind [not null]
+  source RefundSource [not null]
+  decisionStatus RefundDecisionStatus [not null]
+  policyVersion String [not null]
+  amount Int [not null]
+  paidAmount Int [not null, default: 0]
+  payoutStatus RefundPayoutStatus [not null]
+  payoutMethod RefundPayoutMethod [not null, default: 'PG']
+  reviewRequired Boolean [not null, default: false]
+  reviewedById String
+  reviewedAt DateTime
+  reviewReason String
+  reviewEvidenceReference String
+  actionCode String
+  actionReason String
+  requestedAt DateTime [not null]
+  acceptedAt DateTime
+  terminatedAt DateTime
+  requestedById String
+  terminationConsentedAt DateTime
+  exitConsentedAt DateTime
+  reason String
+  endedSessionId String
+  paidAt DateTime
+  payment payments [not null]
+  orderItem order_items
+  requestedBy user
+  reviewedBy user
+  endedSession usage_sessions
+  createdAt DateTime [default: `now()`, not null]
+  updatedAt DateTime [not null]
 }
 
 Enum UserRole {
@@ -474,6 +516,35 @@ Enum SeatStatus {
   UNAVAILABLE
 }
 
+Enum RefundTargetKind {
+  ORDER_ITEM
+  PAYMENT
+}
+
+Enum RefundSource {
+  CUSTOMER
+  STORE
+  SYSTEM
+  LEGACY_UNKNOWN
+}
+
+Enum RefundDecisionStatus {
+  ACCEPTED
+  LEGACY_REJECTED
+}
+
+Enum RefundPayoutStatus {
+  PENDING
+  ACTION_REQUIRED
+  PAID
+  NOT_APPLICABLE
+}
+
+Enum RefundPayoutMethod {
+  PG
+  MANUAL
+}
+
 Ref: oauth_accounts.userId > user.id
 
 Ref: refresh_tokens.userId > user.id
@@ -549,3 +620,13 @@ Ref: ticket_seat_changes.fromSeatId > seats.id
 Ref: ticket_seat_changes.toSeatId > seats.id
 
 Ref: ticket_seat_changes.changedBy > user.id
+
+Ref: refunds.paymentId > payments.id
+
+Ref: refunds.orderItemId > order_items.id
+
+Ref: refunds.requestedById > user.id
+
+Ref: refunds.reviewedById > user.id
+
+Ref: refunds.endedSessionId > usage_sessions.id
