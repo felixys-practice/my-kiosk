@@ -153,6 +153,10 @@ suite_baseline: green
 | U267 | REFUND_PG_TIMEOUT_SECONDS를 생략하고 REFUND_WORK_LEASE_SECONDS=11만 설정하면 기본 응답 제한 10과 비교해 설정 검증을 통과한다 | FR-055 | example | DONE | `src/config/validation.schema.spec.ts` › 환불 PG 처리 설정(REFUND_*) › REFUND_PG_TIMEOUT_SECONDS를 생략하고 REFUND_WORK_LEASE_SECONDS=11만 설정하면 기본 응답 제한 10과 비교해 통과한다 |
 | U268 | REFUND_SWEEP_INTERVAL_SECONDS·REFUND_PG_TIMEOUT_SECONDS를 생략하고 REFUND_QUERY_INTERVAL_SECONDS=15만 설정하면 기본값 합 15와 비교해 설정 검증을 통과한다 | FR-055 | example | DONE | `src/config/validation.schema.spec.ts` › 환불 PG 처리 설정(REFUND_*) › SWEEP·TIMEOUT을 생략하고 REFUND_QUERY_INTERVAL_SECONDS=15만 설정하면 기본값 합 15와 비교해 통과한다 |
 | U269 | REFUND_QUERY_BACKOFF_SECONDS를 생략하고 REFUND_QUERY_BACKOFF_MAX_SECONDS=15만 설정하면 기본 첫 간격 15와 비교해 설정 검증을 통과한다 | FR-025 | example | DONE | `src/config/validation.schema.spec.ts` › 환불 PG 처리 설정(REFUND_*) › REFUND_QUERY_BACKOFF_SECONDS를 생략하고 REFUND_QUERY_BACKOFF_MAX_SECONDS=15만 설정하면 기본 첫 간격 15와 비교해 통과한다 |
+| U270 | REFUND_WORK_LEASE_SECONDS=3e1이면 설정 검증과 같은 숫자 해석으로 처리 기한 30초로 읽힌다 (Phase 1 Codex 검수 P2) | FR-055 | example | DONE | `src/config/configuration.spec.ts` › refund·pgCallback 섹션 › REFUND_WORK_LEASE_SECONDS=3e1이면 설정 검증과 같은 숫자 해석으로 30초로 읽힌다 |
+| U271 | REFUND_PG_TIMEOUT_SECONDS=40만 설정하면 기본 처리 기한 30과 비교해 설정 검증이 실패한다 (Phase 1 Codex 검수 P1) | FR-055 | example | DONE | `src/config/validation.schema.spec.ts` › 환불 PG 처리 설정(REFUND_*) › REFUND_PG_TIMEOUT_SECONDS=40만 설정하면 기본 처리 기한 30과 비교해 검증이 실패한다 |
+| U272 | REFUND_SWEEP_INTERVAL_SECONDS=20만 설정하면 기본 재조회 간격 15가 20+10보다 작아 설정 검증이 실패한다 (Phase 1 Codex 검수 P1) | FR-055 | example | DONE | `src/config/validation.schema.spec.ts` › 환불 PG 처리 설정(REFUND_*) › REFUND_SWEEP_INTERVAL_SECONDS=20만 설정하면 기본 재조회 간격 15가 20+10보다 작아 검증이 실패한다 |
+| U273 | REFUND_QUERY_BACKOFF_SECONDS=500만 설정하면 기본 간격 상한 300이 500보다 작아 설정 검증이 실패한다 (Phase 1 Codex 검수 P1) | FR-025 | example | DONE | `src/config/validation.schema.spec.ts` › 환불 PG 처리 설정(REFUND_*) › REFUND_QUERY_BACKOFF_SECONDS=500만 설정하면 기본 간격 상한 300이 500보다 작아 검증이 실패한다 |
 
 ### prisma/schema.prisma (검증용 DB 제약, src/prisma/refund-constraints.integration.spec.ts)
 
