@@ -792,6 +792,7 @@ model Refund {
   // - refunds_payment_target_source_check: target_kind='PAYMENT'이면 source='SYSTEM'만
   // - refunds_accepted_actor_check: ACCEPTED·CUSTOMER/STORE이면 requested_by_id 필수
   // - refunds_accepted_consent_check: ACCEPTED·CUSTOMER/STORE이면 termination_consented_at 필수
+  // - refunds_accepted_at_check: ACCEPTED이면 accepted_at 필수
 
   @@index([paymentId])
   @@index([orderItemId])

@@ -298,5 +298,15 @@ describe('환불 저장 모델 DB 제약', () => {
         }),
       ).rejects.toThrow(/refunds_accepted_consent_check/);
     });
+
+    it('확정된 환불의 확정 시각이 없으면 저장이 실패한다', async () => {
+      const target = await createPaidItem();
+
+      await expect(
+        prisma.refund.create({
+          data: acceptedRefund(target, { acceptedAt: null }),
+        }),
+      ).rejects.toThrow(/refunds_accepted_at_check/);
+    });
   });
 });
