@@ -193,5 +193,13 @@ describe('환불 저장 모델 DB 제약', () => {
         prisma.refund.create({ data: paymentRefund }),
       ).rejects.toMatchObject({ code: uniqueViolation });
     });
+
+    it('확정된 환불 금액이 -1이면 저장이 실패한다', async () => {
+      const target = await createPaidItem();
+
+      await expect(
+        prisma.refund.create({ data: acceptedRefund(target, { amount: -1 }) }),
+      ).rejects.toThrow(/refunds_amount_check/);
+    });
   });
 });
