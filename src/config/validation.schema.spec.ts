@@ -145,6 +145,9 @@ describe('validationSchema', () => {
   });
 
   describe('PG 콜백 서명 비밀값(PG_CALLBACK_SECRET)', () => {
+    // API 계약 §8: 공유 서명 비밀값은 최소 32자
+    const pgCallbackSecretMinLength = 32;
+
     it('PG_CALLBACK_SECRET이 없으면 필수값 누락으로 검증이 실패한다', () => {
       const env: Record<string, unknown> = { ...validEnv };
       delete env.PG_CALLBACK_SECRET;
@@ -154,6 +157,20 @@ describe('validationSchema', () => {
       expect(
         error?.details.find((d) => d.path.includes('PG_CALLBACK_SECRET'))?.type,
       ).toBe('any.required');
+    });
+
+    it('PG_CALLBACK_SECRET이 31자이면 검증이 실패한다', () => {
+      const { error } = validationSchema.validate(
+        {
+          ...validEnv,
+          PG_CALLBACK_SECRET: 'a'.repeat(pgCallbackSecretMinLength - 1),
+        },
+        { abortEarly: false },
+      );
+
+      expect(
+        error?.details.find((d) => d.path.includes('PG_CALLBACK_SECRET'))?.type,
+      ).toBe('string.min');
     });
   });
 });
