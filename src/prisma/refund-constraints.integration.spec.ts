@@ -364,5 +364,20 @@ describe('환불 저장 모델 DB 제약', () => {
         }),
       ).rejects.toMatchObject({ code: uniqueViolation });
     });
+
+    it('한 환불에 실패 확정된 PG 취소 요청이 있어도 새 미확정 요청 하나는 저장된다', async () => {
+      const refund = await createAcceptedRefund();
+      await prisma.paymentCancel.create({
+        data: paymentCancelAttempt(refund, {
+          status: PaymentCancelStatus.FAILED,
+        }),
+      });
+
+      const retry = await prisma.paymentCancel.create({
+        data: paymentCancelAttempt(refund, { attemptNumber: 2 }),
+      });
+
+      expect(retry.status).toBe(PaymentCancelStatus.REQUESTED);
+    });
   });
 });
