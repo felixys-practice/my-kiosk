@@ -468,5 +468,28 @@ describe('환불 저장 모델 DB 제약', () => {
         prisma.manualRefundPayout.create({ data: manualPayout(refundId) }),
       ).rejects.toMatchObject({ code: uniqueViolation });
     });
+
+    it('다른 환불에서 같은 실제 지급 거래 식별자로 별도 환불금 지급을 저장하면 고유 위반으로 실패한다', async () => {
+      const externalTransactionId = `bank-${randomUUID()}`;
+      const first = await createAcceptedRefund();
+      const second = await createAcceptedRefund();
+      const succeeded = {
+        status: ManualRefundPayoutStatus.SUCCEEDED,
+        externalTransactionId,
+        confirmedById: userId,
+        confirmedAt: new Date(),
+        paidAt: new Date(),
+        evidenceReference: '이체 확인증 E2E',
+      };
+      await prisma.manualRefundPayout.create({
+        data: manualPayout(first.refundId, succeeded),
+      });
+
+      await expect(
+        prisma.manualRefundPayout.create({
+          data: manualPayout(second.refundId, succeeded),
+        }),
+      ).rejects.toMatchObject({ code: uniqueViolation });
+    });
   });
 });

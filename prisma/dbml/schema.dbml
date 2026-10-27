@@ -445,7 +445,7 @@ Table manual_refund_payouts {
   confirmedById String
   confirmedAt DateTime
   paidAt DateTime
-  externalTransactionId String
+  externalTransactionId String [unique]
   evidenceReference String
   notPaidEvidence String
   failureReason String

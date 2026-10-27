@@ -873,7 +873,7 @@ model ManualRefundPayout {
   confirmedById         String?   @map("confirmed_by_id") // 결과를 확정한 운영자
   confirmedAt           DateTime? @map("confirmed_at") // 결과 확정 시각
   paidAt                DateTime? @map("paid_at") // 실제 지급 시각
-  externalTransactionId String?   @map("external_transaction_id") // 실제 지급 거래 식별자
+  externalTransactionId String?   @unique @map("external_transaction_id") // 실제 지급 거래 식별자, 전역 고유
   evidenceReference     String?   @map("evidence_reference") // 권한 있는 운영자가 확인할 수 있는 지급 증빙 참조
   notPaidEvidence       String?   @map("not_paid_evidence") // 확실한 미지급으로 예약을 종료할 근거
   failureReason         String?   @map("failure_reason") // 미지급 종료 사유
