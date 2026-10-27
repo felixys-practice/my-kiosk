@@ -214,6 +214,19 @@ describe('PgService', () => {
         ).resolves.toMatchObject({ result: 'QUERY_ERROR' });
       },
     );
+
+    it('중단 신호에 반응해 거부하는 전송 계층이라도 조회 시간 초과는 시간 초과 사유의 QUERY_ERROR다', async () => {
+      jest.useFakeTimers();
+      client.inquireResponse = rejectOnAbort;
+
+      const pending = service.inquireCancel(cancelRequest);
+      await jest.advanceTimersByTimeAsync(pgTimeoutSeconds * 1000);
+
+      await expect(pending).resolves.toEqual({
+        result: 'QUERY_ERROR',
+        reason: 'PG 조회 응답 시간 초과',
+      });
+    });
   });
 
   describe('PG 취소 송신 결과 분류 (API 계약 §8)', () => {
