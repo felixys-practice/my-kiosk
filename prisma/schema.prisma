@@ -40,9 +40,11 @@ model User {
   usageSessions           UsageSession[]
   ProductHistories        ProductHistory[]
   ticketSeatChanges       TicketSeatChange[] // 이 사용자가 점주로서 변경한 이용권 좌석 이력
-  requestedRefunds        Refund[]           @relation("RefundRequestedBy") // 이 사용자가 실행한 환불 확정
-  reviewedRefunds         Refund[]           @relation("RefundReviewedBy") // 이 사용자가 검토한 PG 금액 불일치
-  requestedPaymentCancels PaymentCancel[]    @relation("PaymentCancelRequestedBy") // 이 사용자가 실행한 PG 취소 재시도
+  requestedRefunds        Refund[]             @relation("RefundRequestedBy") // 이 사용자가 실행한 환불 확정
+  reviewedRefunds         Refund[]             @relation("RefundReviewedBy") // 이 사용자가 검토한 PG 금액 불일치
+  requestedPaymentCancels PaymentCancel[]      @relation("PaymentCancelRequestedBy") // 이 사용자가 실행한 PG 취소 재시도
+  reservedManualPayouts   ManualRefundPayout[] @relation("ManualPayoutReservedBy") // 이 운영자가 예약한 별도 환불금 지급
+  confirmedManualPayouts  ManualRefundPayout[] @relation("ManualPayoutConfirmedBy") // 이 운영자가 결과를 확정한 별도 환불금 지급
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -292,6 +294,11 @@ model Ticket {
   @@map("tickets")
 }
 
+// 정지 기록을 재개 없이 닫은 사유
+enum TicketPauseCloseReason {
+  REFUND_TERMINATED // 정지 중 환불이 확정되어 이용이 종료됨
+}
+
 model TicketPause {
   id       String @id @default(uuid())
   ticketId String @map("ticket_id")
@@ -303,6 +310,9 @@ model TicketPause {
   resumedAt     DateTime? @map("resumed_at") // 재개 시간(null 이면 현재 정지 중)
   resumedReason String?   @map("resumed_reason") // 재개 사유
   resumedBy     String?   @map("resumed_by") // 누가 재개 시켰는가
+
+  closedAt    DateTime?               @map("closed_at") // 재개 없이 정지 기록을 닫은 시각(환불 확정으로 이용 종료)
+  closeReason TicketPauseCloseReason? @map("close_reason") // 재개 없이 닫은 사유
 
   ticket Ticket @relation(fields: [ticketId], references: [id])
 
@@ -815,6 +825,7 @@ model Refund {
   endedSession UsageSession? @relation(fields: [endedSessionId], references: [id], onDelete: Restrict)
 
   paymentCancels PaymentCancel[] // 이 환불 아래의 PG 취소 요청(시도) 기록
+  manualPayouts  ManualRefundPayout[] // 이 환불의 별도 환불금 지급 예약·결과
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -837,4 +848,44 @@ model Refund {
   @@index([orderItemId])
   @@index([payoutStatus])
   @@map("refunds")
+}
+
+// ── 별도 환불금 지급 (specs/002-refund-completion data-model §5) ─────────
+
+// 별도 환불금 지급 상태
+enum ManualRefundPayoutStatus {
+  RESERVED // 운영자가 예약함. PG와 다른 지급을 막고, TTL로 자동 해제하지 않는다
+  SUCCEEDED // 증빙과 함께 실제 지급이 확정됨
+  FAILED // 확실한 미지급 증빙으로 예약을 종료함
+}
+
+// PG 결제 취소 대신 운영자가 PG 밖에서 지급하는 환불금의 예약·증빙·결과 기록
+model ManualRefundPayout {
+  id       String                   @id @default(uuid())
+  refundId String                   @map("refund_id")
+  status   ManualRefundPayoutStatus
+  amount   Int // 예약 시 Refund 미지급액과 같고 이후 불변, 양수
+
+  reservedById String   @map("reserved_by_id") // 예약한 운영자(MANAGER)
+  reservedAt   DateTime @map("reserved_at")
+  reason       String // 예약 사유
+
+  confirmedById         String?   @map("confirmed_by_id") // 결과를 확정한 운영자
+  confirmedAt           DateTime? @map("confirmed_at") // 결과 확정 시각
+  paidAt                DateTime? @map("paid_at") // 실제 지급 시각
+  externalTransactionId String?   @map("external_transaction_id") // 실제 지급 거래 식별자
+  evidenceReference     String?   @map("evidence_reference") // 권한 있는 운영자가 확인할 수 있는 지급 증빙 참조
+  notPaidEvidence       String?   @map("not_paid_evidence") // 확실한 미지급으로 예약을 종료할 근거
+  failureReason         String?   @map("failure_reason") // 미지급 종료 사유
+
+  refund      Refund @relation(fields: [refundId], references: [id], onDelete: Restrict)
+  reservedBy  User   @relation("ManualPayoutReservedBy", fields: [reservedById], references: [id], onDelete: Restrict)
+  confirmedBy User?  @relation("ManualPayoutConfirmedBy", fields: [confirmedById], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([refundId])
+  @@index([status, reservedAt]) // 예약 후 미확인 알림 대상 탐색
+  @@map("manual_refund_payouts")
 }

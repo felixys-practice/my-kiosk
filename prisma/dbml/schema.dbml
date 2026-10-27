@@ -19,6 +19,8 @@ Table user {
   requestedRefunds refunds [not null]
   reviewedRefunds refunds [not null]
   requestedPaymentCancels payment_cancels [not null]
+  reservedManualPayouts manual_refund_payouts [not null]
+  confirmedManualPayouts manual_refund_payouts [not null]
   createdAt DateTime [default: `now()`, not null]
   updatedAt DateTime [not null]
 }
@@ -125,6 +127,8 @@ Table ticket_pauses {
   resumedAt DateTime
   resumedReason String
   resumedBy String
+  closedAt DateTime
+  closeReason TicketPauseCloseReason
   ticket tickets [not null]
   createdAt DateTime [default: `now()`, not null]
   updatedAt DateTime [not null]
@@ -425,6 +429,29 @@ Table refunds {
   reviewedBy user
   endedSession usage_sessions
   paymentCancels payment_cancels [not null]
+  manualPayouts manual_refund_payouts [not null]
+  createdAt DateTime [default: `now()`, not null]
+  updatedAt DateTime [not null]
+}
+
+Table manual_refund_payouts {
+  id String [pk]
+  refundId String [not null]
+  status ManualRefundPayoutStatus [not null]
+  amount Int [not null]
+  reservedById String [not null]
+  reservedAt DateTime [not null]
+  reason String [not null]
+  confirmedById String
+  confirmedAt DateTime
+  paidAt DateTime
+  externalTransactionId String
+  evidenceReference String
+  notPaidEvidence String
+  failureReason String
+  refund refunds [not null]
+  reservedBy user [not null]
+  confirmedBy user
   createdAt DateTime [default: `now()`, not null]
   updatedAt DateTime [not null]
 }
@@ -498,6 +525,10 @@ Enum SeatReleaseReason {
 Enum TicketSeatChangeType {
   TYPE_CHANGE
   SEAT_MOVE
+}
+
+Enum TicketPauseCloseReason {
+  REFUND_TERMINATED
 }
 
 Enum PaymentType {
@@ -575,6 +606,12 @@ Enum RefundPayoutStatus {
 Enum RefundPayoutMethod {
   PG
   MANUAL
+}
+
+Enum ManualRefundPayoutStatus {
+  RESERVED
+  SUCCEEDED
+  FAILED
 }
 
 Ref: oauth_accounts.userId > user.id
@@ -666,3 +703,9 @@ Ref: refunds.requestedById > user.id [delete: Restrict]
 Ref: refunds.reviewedById > user.id [delete: Restrict]
 
 Ref: refunds.endedSessionId > usage_sessions.id [delete: Restrict]
+
+Ref: manual_refund_payouts.refundId > refunds.id [delete: Restrict]
+
+Ref: manual_refund_payouts.reservedById > user.id [delete: Restrict]
+
+Ref: manual_refund_payouts.confirmedById > user.id [delete: Restrict]
