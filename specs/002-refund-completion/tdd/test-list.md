@@ -191,12 +191,12 @@ suite_baseline: green
 | U281 | decisionStatus=ACCEPTED 환불의 acceptedAt이 null이면 저장이 실패한다 | INV-2 | example | DONE | `src/prisma/refund-constraints.integration.spec.ts` |
 | U282 | PG 취소 요청의 횟수 필드(resendCount·manualResendCount·inquiryCount·inquiryFailureCount·sendAttemptCount)가 -1이면 저장이 실패한다 | INV-2 | example | DONE | `src/prisma/refund-constraints.integration.spec.ts` |
 | U283 | 별도 환불금 지급 금액이 0이면 저장이 실패한다(양수만 허용) | INV-2 | example | DONE | `src/prisma/refund-constraints.integration.spec.ts` |
-| U284 | PG 조회의 성공 응답에 거래 ID와 실제 취소액이 있으면 SUCCEEDED{pgTransactionId, cancelledAmount}로 분류된다 | FR-027 | example | PENDING | |
-| U285 | PG 조회의 실패 확정 응답은 FAILED{reason}로 분류된다 | FR-024 | example | PENDING | |
-| U286 | PG 조회의 처리 중 응답은 IN_PROGRESS로 분류된다 | FR-025 | example | PENDING | |
-| U287 | PG 취소 전송의 접수 응답은 ACCEPTED로 분류된다 | FR-021 | example | PENDING | |
-| U288 | PG 취소 전송의 즉시 성공 응답은 SUCCEEDED{pgTransactionId, cancelledAmount}로 분류된다 | FR-021 | example | PENDING | |
-| U289 | PG 취소 전송의 거절 응답은 REJECTED{reason}로 분류된다 | FR-021 | example | PENDING | |
+| U284 | PG 조회의 성공 응답에 거래 ID와 실제 취소액이 있으면 SUCCEEDED{pgTransactionId, cancelledAmount}로 분류된다 | FR-027 | example | DONE | `src/pg/pg.service.spec.ts` |
+| U285 | PG 조회의 실패 확정 응답은 FAILED{reason}로 분류된다 | FR-024 | example | DONE | `src/pg/pg.service.spec.ts` |
+| U286 | PG 조회의 처리 중 응답은 IN_PROGRESS로 분류된다 | FR-025 | example | DONE | `src/pg/pg.service.spec.ts` |
+| U287 | PG 취소 전송의 접수 응답은 ACCEPTED로 분류된다 | FR-021 | example | DONE | `src/pg/pg.service.spec.ts` |
+| U288 | PG 취소 전송의 즉시 성공 응답은 SUCCEEDED{pgTransactionId, cancelledAmount}로 분류된다 | FR-021 | example | DONE | `src/pg/pg.service.spec.ts` |
+| U289 | PG 취소 전송의 거절 응답은 REJECTED{reason}로 분류된다 | FR-021 | example | DONE | `src/pg/pg.service.spec.ts` |
 
 ### `src/refund/refund-idempotency.service.ts`
 
@@ -228,22 +228,22 @@ suite_baseline: green
 | id | behavior | traces | kind | state | test |
 |---|---|---|---|---|---|
 | U50 | (현재 동작 기록) PG 거래조회는 지금 어떤 입력이든 NOT_FOUND를 반환한다 | FR-024 | characterization | BASELINE | `src/pg/pg.service.spec.ts` › 현재 동작 기록(특성화) |
-| U51 | 일반 HTTP 404 응답은 NOT_FOUND가 아니라 QUERY_ERROR로 분류된다 | FR-024 | example | PENDING | |
-| U52 | authoritative=true인 미접수 응답만 NOT_FOUND로 분류된다 | FR-024 | example | PENDING | |
-| U53 | 조회 응답이 제한 시간을 넘으면 QUERY_ERROR로 분류된다 | FR-025 | example | PENDING | |
-| U54 | PG 인증 오류 응답은 QUERY_ERROR로 분류된다 | FR-025 | example | PENDING | |
-| U55 | 성공 응답에 실제 취소 금액이 없으면 QUERY_ERROR로 분류된다 | FR-027 | example | PENDING | |
-| U56 | PG 미연동 상태의 취소 전송 결과는 NOT_SENT다 | FR-021 | example | PENDING | |
-| U57 | PG 미연동 상태의 조회 결과는 QUERY_ERROR다 | FR-025 | example | PENDING | |
-| U58 | 취소 전송 응답이 제한 시간을 넘으면 UNKNOWN이다 | FR-022 | example | PENDING | |
+| U51 | 일반 HTTP 404 응답은 NOT_FOUND가 아니라 QUERY_ERROR로 분류된다 | FR-024 | example | DONE | `src/pg/pg.service.spec.ts` |
+| U52 | authoritative=true인 미접수 응답만 NOT_FOUND로 분류된다 | FR-024 | example | DONE | `src/pg/pg.service.spec.ts` |
+| U53 | 조회 응답이 제한 시간을 넘으면 QUERY_ERROR로 분류된다 | FR-025 | example | DONE | `src/pg/pg.service.spec.ts` |
+| U54 | PG 인증 오류 응답은 QUERY_ERROR로 분류된다 | FR-025 | example | DONE | `src/pg/pg.service.spec.ts` |
+| U55 | 성공 응답에 실제 취소 금액이 없으면 QUERY_ERROR로 분류된다 | FR-027 | example | DONE | `src/pg/pg.service.spec.ts` |
+| U56 | PG 미연동 상태의 취소 전송 결과는 NOT_SENT다 | FR-021 | example | DONE | `src/pg/pg.service.spec.ts` |
+| U57 | PG 미연동 상태의 조회 결과는 QUERY_ERROR다 | FR-025 | example | DONE | `src/pg/pg.service.spec.ts` |
+| U58 | 취소 전송 응답이 제한 시간을 넘으면 UNKNOWN이다 | FR-022 | example | DONE | `src/pg/pg.service.spec.ts` |
 
 ### `src/refund/refund-locking.repository.ts`
 
 | id | behavior | traces | kind | state | test |
 |---|---|---|---|---|---|
-| U59 | 환불 확정 잠금은 Payment → Ticket → TicketPause → UsageSession → SeatAssignment 순서로 실행된다 | FR-041 | example | PENDING | |
-| U60 | 같은 종류의 행 여러 개는 ID 오름차순으로 잠긴다 | FR-041 | example | PENDING | |
-| U61 | 지급 경로 잠금은 Refund → PaymentCancel → ManualRefundPayout 순서로 실행된다 | FR-043 | example | PENDING | |
+| U59 | 환불 확정 잠금은 Payment → Ticket → TicketPause → UsageSession → SeatAssignment 순서로 실행된다 | FR-041 | example | DONE | `src/refund/refund-locking.repository.spec.ts` |
+| U60 | 같은 종류의 행 여러 개는 ID 오름차순으로 잠긴다 | FR-041 | example | DONE | `src/refund/refund-locking.repository.spec.ts` |
+| U61 | 지급 경로 잠금은 Refund → PaymentCancel → ManualRefundPayout 순서로 실행된다 | FR-043 | example | DONE | `src/refund/refund-locking.repository.spec.ts` |
 
 ### `src/refund/refund-policy.ts`
 

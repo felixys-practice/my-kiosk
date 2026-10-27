@@ -386,3 +386,48 @@ U10~U15를 마친 뒤, 관계 검증의 비교 대상 설정을 생략하면 정
   - 멱등 서비스는 처리 중 기록 생성에 실패한 직후 기록을 다시 찾는다. 그 사이에 최초 요청이 실패해 기록이 지워지면 `find`가 null을 돌려준다. 현재 코드는 이 경우를 처리하지 않는다(`existing!`). 다시 시도할지 오류로 돌려줄지 정해야 한다.
   - Prisma 저장소(`RefundIdempotencyRepository`의 P2002 처리, `RefundRepository.isCurrentShopOwner`)는 단위 테스트가 없다. 고유 제약 자체는 U34에서 확인했다.
 - 기존 eslint 오류: `http-exception.filter.ts` 8건은 이번 변경 전 HEAD에도 있다.
+
+## 사이클 76~93: Phase 2 PG 계약·잠금 순서 (U51~U61, U284~U289)와 T018
+
+**PG 계약 설계(사용자 결정 2026-10-28, "전송 계층 분리 + 가상 응답 형식")**
+- `src/pg/pg-cancel.client.ts`의 `PgCancelClient`(주입 토큰 `PG_CANCEL_CLIENT`)는 PG 원래 응답(HTTP 상태·본문)만 돌려준다.
+- `PgService.sendCancel` / `inquireCancel`이 원래 응답을 계약 §8 결과(`pg.types.ts`의 `PgCancelSendResult`·`PgCancelQueryResult`)로 분류하고, 응답 제한 시간(`refund.pgTimeoutSeconds`)을 적용한다.
+- 원래 응답 본문 형식(`status`·`authoritative`·`pgTransactionId`·`cancelledAmount`·`reason`)은 실제 PG가 없어 정한 **가상 형식**이다. 이 점을 코드 주석에 적었다.
+- 기본 전송 계층은 `UnconfiguredPgCancelClient`다. 그래서 송신은 NOT_SENT, 조회는 QUERY_ERROR가 된다.
+- 기존 `inquiryPaymentCancel`(항상 NOT_FOUND, U50 기록)은 기존 환불 흐름이 아직 쓰므로 그대로 두었다. 새 환불 흐름으로 바꿀 때 제거한다.
+
+**추가 동작**
+- U284~U289: 계약 §8의 정상 분류(조회 SUCCEEDED·FAILED·IN_PROGRESS, 송신 ACCEPTED·SUCCEEDED·REJECTED)가 테스트 목록에 없었다. U55("성공 응답에 실제 취소액이 없으면 QUERY_ERROR")를 의미 있게 검증하려면 정상 성공 분류가 먼저 있어야 하므로 추가했다.
+
+| 동작 | 테스트(`src/pg/pg.service.spec.ts`, 조회는 `PG 취소 조회 결과 분류`, 송신은 `PG 취소 송신 결과 분류`) | red | green | 커밋 |
+|---|---|---|---|---|
+| U52 | authoritative=true 미접수만 NOT_FOUND | `Rejected to value: [Error: 미구현]`(의도적 미구현 신호) | 상수 반환(fake it). 구조: 전송 계층·ConfigService 주입, U50 테스트 생성자 인자 갱신 | `7f6c73e` |
+| U51 | 일반 HTTP 404는 QUERY_ERROR | 1 failed(NOT_FOUND 반환) | 전송 계층 호출, 200·NOT_FOUND·authoritative만 NOT_FOUND | `2e6f3d5` |
+| U284 | 성공 응답(거래 ID·실제액)은 SUCCEEDED | 1 failed(QUERY_ERROR) | SUCCEEDED 분기 | `406ef3b` |
+| U55 | 실제 취소액 없는 성공 응답은 QUERY_ERROR | 1 failed(SUCCEEDED·cancelledAmount undefined) | 실제액·거래 ID 타입 검사(거래 ID 누락은 별도 테스트 없음) | `e4b9d88` |
+| U285 | 실패 확정 응답은 FAILED{reason} | 1 failed(QUERY_ERROR) | 200·FAILED 분기 | `3bef386` |
+| U286 | 처리 중 응답은 IN_PROGRESS | 1 failed(QUERY_ERROR) | 200·IN_PROGRESS 분기 | `e255ace` |
+| U54 | PG 인증 오류(401, 본문 FAILED)는 QUERY_ERROR | 첫 실행 통과 → 뮤턴트(FAILED 분기의 HTTP 200 조건 제거) 1 failed | 구현 변경 없음 | `be5bc42` |
+| U53 | 조회 응답 제한 시간 초과는 QUERY_ERROR | `Exceeded timeout of 5000 ms`(fake timers, 응답 없는 대역) | `withinPgTimeout`(Promise.race·AbortController) | `686eaae` |
+| U57 | PG 미연동 조회는 QUERY_ERROR | `Received promise rejected instead of resolved` | `configured=false`면 QUERY_ERROR | `8a67346` |
+| U56 | PG 미연동 송신은 NOT_SENT | `[Error: 미구현]` | `configured=false`면 NOT_SENT | `4977546` |
+| U287 | 접수 응답은 ACCEPTED | 미구현 reject | ACCEPTED 분기, 판단 불가 응답은 UNKNOWN | `9efb42e` |
+| U288 | 즉시 성공은 SUCCEEDED | 1 failed(UNKNOWN) | SUCCEEDED 분기(필수 값 없으면 UNKNOWN) | `31a2fcf` |
+| U289 | 거절은 REJECTED{reason} | 1 failed(UNKNOWN) | 200·REJECTED 분기 | `bc4b8eb` |
+| U58 | 송신 응답 제한 시간 초과는 UNKNOWN | `Exceeded timeout of 5000 ms` | 송신도 `withinPgTimeout` | `5ecd9e4` |
+| U59 | 환불 확정 잠금 Payment → Ticket → TicketPause → UsageSession → SeatAssignment | `- Expected - 7 / + Received + 1`(잠금 없음) | 행별 `SELECT id FROM "<table>" WHERE id = $1 FOR UPDATE` | `b896f64` |
+| U60 | 같은 종류 행은 ID 오름차순 | `- Expected - 1 / + Received + 1`(입력 순서) | `[...ids].sort()` | `8f70596` |
+| U61 | 지급 경로 Refund → PaymentCancel → ManualRefundPayout | `- Expected - 5 / + Received + 1` | `lockForPayout` | `e79c6fe` |
+
+- **잠금 테스트 방식**: 트랜잭션 대역이 실행된 `$queryRaw`의 테이블과 ID를 순서대로 기록한다. 잠금 순서 자체가 지켜야 할 동작이라 상호작용 기반 테스트로 했다. 대역은 SQL 문자열만 보기 때문에, 테이블 이름이 `@@map`과 같은지와 SQL이 PostgreSQL에서 실행되는지를 `psql`로 따로 확인했다.
+- **T017 범위**: `session-lifecycle.repository.ts`의 잠금은 아직 만들지 않았다. 세션 종료 흐름은 환불 확정(US1)에서 이 공유 순서를 쓰도록 연결한다.
+- **각 green 뒤 전체 실행**: 단위 272 → 288 passed, E2E 57 passed.
+  - U52 첫 실행에서는 ticket-pause E2E가 2건 실패했다(404·401, 로그 보존). 재실행 2회는 57 passed였다.
+
+**T018 모듈 연결(동작 표식 없음)**
+- `REFUND_PG_GATEWAY` 토큰(`src/pg/refund-pg.gateway.ts`, 기본 `useExisting: PgService`)을 환불 PG 취소 교체 지점으로 두었다. E2E는 이 토큰만 대역으로 바꾸므로 결제 승인용 `PgService`는 그대로다.
+- `RefundModule`에 공통 Provider 4개를 등록했다: `RefundIdempotencyRepository`, `RefundIdempotencyService`, `RefundAccessService`, `RefundLockingRepository`.
+- T003 PG 대역이 운영 타입과 `RefundPgGateway`를 쓰도록 맞췄다.
+- `test/refund-bootstrap.e2e-spec.ts` 2개가 통과했다. 뮤턴트(`RefundLockingRepository` 등록 제거)에서는 `Nest could not find RefundLockingRepository`로 실패하는 것을 확인했다.
+- 전체 결과: 단위 288 passed, E2E 59 passed (`7404e54`).
+- tasks.md 완료 표시: T016·T017·T018에 표시했다. T015는 현재 동작 기록인 U50(BASELINE)을 포함하므로 실행 규칙("BASELINE 동작이 있는 작업은 완료 표시하지 않음")에 따라 열어 두었다. T015의 나머지 동작(U51~U58)은 모두 DONE이다.
