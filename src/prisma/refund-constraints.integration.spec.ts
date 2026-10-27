@@ -155,5 +155,24 @@ describe('환불 저장 모델 DB 제약', () => {
         prisma.refund.create({ data: acceptedRefund(target) }),
       ).rejects.toMatchObject({ code: uniqueViolation });
     });
+
+    it('같은 주문 항목이라도 과거 거절 이력은 확정된 환불과 함께 저장된다', async () => {
+      const target = await createPaidItem();
+      await prisma.refund.create({ data: acceptedRefund(target) });
+
+      const legacy = await prisma.refund.create({
+        data: acceptedRefund(target, {
+          source: RefundSource.LEGACY_UNKNOWN,
+          decisionStatus: RefundDecisionStatus.LEGACY_REJECTED,
+          policyVersion: 'LEGACY',
+          payoutStatus: RefundPayoutStatus.NOT_APPLICABLE,
+          acceptedAt: null,
+          requestedById: null,
+          terminationConsentedAt: null,
+        }),
+      });
+
+      expect(legacy.decisionStatus).toBe(RefundDecisionStatus.LEGACY_REJECTED);
+    });
   });
 });
