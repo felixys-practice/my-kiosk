@@ -195,5 +195,17 @@ describe('validationSchema', () => {
 
       expect(error).toBeUndefined();
     });
+
+    it('REFUND_RESEND_LIMIT=-1이면 검증이 실패한다', () => {
+      const { error } = validationSchema.validate(
+        { ...validEnv, REFUND_RESEND_LIMIT: -1 },
+        { abortEarly: false },
+      );
+
+      expect(
+        error?.details.find((d) => d.path.includes('REFUND_RESEND_LIMIT'))
+          ?.type,
+      ).toBe('number.min');
+    });
   });
 });
