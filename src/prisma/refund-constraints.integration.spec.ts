@@ -262,5 +262,18 @@ describe('환불 저장 모델 DB 제약', () => {
         }),
       ).rejects.toThrow(/refunds_payment_target_item_check/);
     });
+
+    it('결제 전체 대상 환불의 경로가 SYSTEM이 아니면 저장이 실패한다', async () => {
+      const { paymentId } = await createPaidItem();
+
+      await expect(
+        prisma.refund.create({
+          data: acceptedRefund(
+            { paymentId, orderItemId: null },
+            { targetKind: RefundTargetKind.PAYMENT, terminatedAt: null },
+          ),
+        }),
+      ).rejects.toThrow(/refunds_payment_target_source_check/);
+    });
   });
 });
