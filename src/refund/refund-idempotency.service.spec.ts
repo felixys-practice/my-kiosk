@@ -1,5 +1,6 @@
 import { RefundIdempotencyStatus } from '@prisma/client';
 import { RefundIdempotencyService } from './refund-idempotency.service';
+import { IdempotencyKeyReusedError } from './errors';
 import {
   IdempotencyRecord,
   IdempotencyScope,
@@ -91,5 +92,26 @@ describe('RefundIdempotencyService', () => {
     const replay = await service.execute(command, handler);
 
     expect(replay).toEqual(first);
+  });
+
+  it('같은 키·다른 본문의 요청은 IDEMPOTENCY_KEY_REUSED로 거절된다', async () => {
+    const handler = () => Promise.resolve({ status: 202, body: {} });
+    await service.execute(
+      { requesterId, operation, key, request, authorize: allow },
+      handler,
+    );
+
+    await expect(
+      service.execute(
+        {
+          requesterId,
+          operation,
+          key,
+          request: { ...request, ticketId: 'ticket-2' },
+          authorize: allow,
+        },
+        handler,
+      ),
+    ).rejects.toBeInstanceOf(IdempotencyKeyReusedError);
   });
 });

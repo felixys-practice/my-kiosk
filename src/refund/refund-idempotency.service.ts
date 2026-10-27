@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { RefundIdempotencyRepository } from './refund-idempotency.repository';
+import { IdempotencyKeyReusedError } from './errors';
 
 /** 멱등 처리 대상 요청 */
 export type IdempotentCommand = {
@@ -29,6 +30,7 @@ export class RefundIdempotencyService {
    * @param command 요청자·기능·키·본문·권한 재확인
    * @param handler 처음 요청일 때 실행할 처리
    * @returns 최초 응답
+   * @throws IdempotencyKeyReusedError 같은 키로 다른 내용을 보냈을 때
    */
   async execute<T>(
     command: IdempotentCommand,
@@ -43,12 +45,15 @@ export class RefundIdempotencyService {
       operation: command.operation,
       key: command.key,
     };
-    const created = await this.repository.createInProgress(
-      scope,
-      JSON.stringify(command.request),
-    );
+    const fingerprint = JSON.stringify(command.request);
+    const created = await this.repository.createInProgress(scope, fingerprint);
     if (!created) {
       const existing = await this.repository.find(scope);
+
+      // 같은 키로 다른 내용을 보내면 거절한다
+      if (existing!.requestFingerprint !== fingerprint) {
+        throw new IdempotencyKeyReusedError();
+      }
       return {
         status: existing!.responseStatus!,
         body: existing!.responseBody as T,
