@@ -275,5 +275,15 @@ describe('환불 저장 모델 DB 제약', () => {
         }),
       ).rejects.toThrow(/refunds_payment_target_source_check/);
     });
+
+    it('확정된 고객 환불의 실행자가 없으면 저장이 실패한다', async () => {
+      const target = await createPaidItem();
+
+      await expect(
+        prisma.refund.create({
+          data: acceptedRefund(target, { requestedById: null }),
+        }),
+      ).rejects.toThrow(/refunds_accepted_actor_check/);
+    });
   });
 });
