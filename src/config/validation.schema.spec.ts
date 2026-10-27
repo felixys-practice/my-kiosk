@@ -243,5 +243,19 @@ describe('validationSchema', () => {
 
       expect(error).toBeUndefined();
     });
+
+    it.each([...positiveIntegerKeys, 'REFUND_RESEND_LIMIT'])(
+      '%s가 소수 1.5이면 검증이 실패한다',
+      (key) => {
+        const { error } = validationSchema.validate(
+          { ...validEnv, [key]: 1.5 },
+          { abortEarly: false },
+        );
+
+        expect(error?.details.find((d) => d.path.includes(key))?.type).toBe(
+          'number.integer',
+        );
+      },
+    );
   });
 });
