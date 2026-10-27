@@ -40,12 +40,18 @@ export class PgService {
       return { result: 'NOT_FOUND', authoritative: true };
     }
 
-    // 취소 성공
-    if (response.httpStatus === 200 && response.body?.status === 'SUCCEEDED') {
+    // 취소 성공. 실제 취소액·거래 ID가 없으면 지급액을 알 수 없으므로 조회 오류로 둔다
+    const body = response.body;
+    if (
+      response.httpStatus === 200 &&
+      body?.status === 'SUCCEEDED' &&
+      typeof body.cancelledAmount === 'number' &&
+      typeof body.pgTransactionId === 'string'
+    ) {
       return {
         result: 'SUCCEEDED',
-        pgTransactionId: response.body.pgTransactionId!,
-        cancelledAmount: response.body.cancelledAmount!,
+        pgTransactionId: body.pgTransactionId,
+        cancelledAmount: body.cancelledAmount,
       };
     }
     return {

@@ -99,5 +99,19 @@ describe('PgService', () => {
         cancelledAmount: 9000,
       });
     });
+
+    it('성공 응답에 실제 취소 금액이 없으면 QUERY_ERROR로 분류된다', async () => {
+      client.inquireResponse = () =>
+        Promise.resolve({
+          httpStatus: 200,
+          body: { status: 'SUCCEEDED', pgTransactionId: 'pg-cancel-tx-1' },
+        });
+
+      await expect(service.inquireCancel(cancelRequest)).resolves.toMatchObject(
+        {
+          result: 'QUERY_ERROR',
+        },
+      );
+    });
   });
 });
