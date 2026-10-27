@@ -31,4 +31,15 @@ describe('RefundAccessService', () => {
       ShopNotFoundError,
     );
   });
+
+  it('점주 관계가 해제된 뒤 같은 매장 범위를 조회하면 SHOP_NOT_FOUND(404)를 받는다', async () => {
+    repository.isCurrentShopOwner
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false);
+    await service.assertShopScope(owner, shopId);
+
+    await expect(service.assertShopScope(owner, shopId)).rejects.toBeInstanceOf(
+      ShopNotFoundError,
+    );
+  });
 });
