@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import { createHash } from 'crypto';
 import { RefundIdempotencyRepository } from './refund-idempotency.repository';
 import { RefundIdempotencyStatus } from '@prisma/client';
 import {
@@ -10,6 +11,23 @@ import {
 const maxKeyLength = 128;
 /** 공백 없는 출력 가능 ASCII(0x21~0x7E) 1자 이상 */
 const printableAsciiWithoutSpace = /^[\x21-\x7E]+$/;
+
+/**
+ * 같은 요청인지 판단할 본문 해시를 만든다
+ * - 문자열 값은 앞뒤 공백을 지운다(사유의 앞뒤 공백만 다른 요청은 같은 요청)
+ * - 키를 정렬해 필드 순서와 무관하게 같은 해시를 만든다
+ * @param request 대상·금액·사유·동의
+ * @returns SHA-256 16진수 해시
+ */
+function fingerprintOf(request: Record<string, unknown>): string {
+  const canonical = Object.keys(request)
+    .sort()
+    .map((field) => {
+      const value = request[field];
+      return [field, typeof value === 'string' ? value.trim() : value];
+    });
+  return createHash('sha256').update(JSON.stringify(canonical)).digest('hex');
+}
 
 /** 멱등 처리 대상 요청 */
 export type IdempotentCommand = {
@@ -68,7 +86,7 @@ export class RefundIdempotencyService {
       operation: command.operation,
       key: command.key,
     };
-    const fingerprint = JSON.stringify(command.request);
+    const fingerprint = fingerprintOf(command.request);
     const created = await this.repository.createInProgress(scope, fingerprint);
     if (!created) {
       const existing = await this.repository.find(scope);

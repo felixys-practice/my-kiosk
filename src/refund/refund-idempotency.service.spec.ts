@@ -246,4 +246,31 @@ describe('RefundIdempotencyService', () => {
       ).rejects.toBeInstanceOf(BadRequestException);
     });
   });
+
+  it('사유의 앞뒤 공백만 다른 본문은 같은 본문으로 판단되어 최초 응답을 받는다', async () => {
+    const storeOperation = 'STORE_REFUND';
+    const first = await service.execute(
+      {
+        requesterId,
+        operation: storeOperation,
+        key,
+        request: { ticketId: 'ticket-1', amount: 5000, reason: '  고객 요청 ' },
+        authorize: allow,
+      },
+      () => Promise.resolve({ status: 202, body: { refundId: 'refund-1' } }),
+    );
+
+    const replay = await service.execute(
+      {
+        requesterId,
+        operation: storeOperation,
+        key,
+        request: { ticketId: 'ticket-1', amount: 5000, reason: '고객 요청' },
+        authorize: allow,
+      },
+      () => Promise.resolve({ status: 202, body: { refundId: 'refund-2' } }),
+    );
+
+    expect(replay).toEqual(first);
+  });
 });
