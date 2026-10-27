@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
-import { RefundForbiddenError } from './errors';
+import { RefundForbiddenError, ShopNotFoundError } from './errors';
 import { RefundRepository } from './refund.repository';
 
 /** 환불 기능을 호출한 사용자 */
@@ -27,5 +27,23 @@ export class RefundAccessService {
     if (actor.role !== UserRole.OWNER && actor.role !== UserRole.MANAGER) {
       throw new RefundForbiddenError();
     }
+  }
+
+  /**
+   * 매장 범위 조회 권한을 확인한다
+   * @param actor 호출한 사용자
+   * @param shopId 조회할 매장
+   * @throws ShopNotFoundError 점주가 지금 이 매장의 ShopOwner가 아닐 때(범위 밖은 존재를 드러내지 않고 404)
+   */
+  async assertShopScope(actor: RefundActor, shopId: string): Promise<void> {
+    // 운영자는 전체 범위
+    if (actor.role === UserRole.MANAGER) return;
+
+    // 점주는 요청 시점의 ShopOwner 관계로 확인한다
+    const owns = await this.refundRepository.isCurrentShopOwner(
+      shopId,
+      actor.userId,
+    );
+    if (!owns) throw new ShopNotFoundError(shopId);
   }
 }
