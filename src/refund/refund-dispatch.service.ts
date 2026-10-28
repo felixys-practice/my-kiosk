@@ -89,6 +89,38 @@ export class RefundDispatchService {
   }
 
   /**
+   * 이미 맡은(조회 담당) PG 취소 요청을 같은 ID·금액으로 다시 보낸다 (API 계약 §8)
+   * - 재전송 횟수·전송 시도·새 처리 기한을 먼저 저장한 뒤 트랜잭션 밖에서 보낸다
+   * @param paymentCancelId PG 취소 요청
+   * @param amount 기존 PG 취소 요청 금액
+   * @param claimToken 조회를 맡은 담당 토큰
+   * @param now 재전송 시각
+   * @param counter 자동 재전송(resendCount) 또는 개별 확인 재전송(manualResendCount)
+   * @returns 실제로 보냈으면 true(담당이 바뀌었으면 false)
+   */
+  async resendClaimed(
+    paymentCancelId: string,
+    amount: number,
+    claimToken: string,
+    now: Date,
+    counter: 'resendCount' | 'manualResendCount',
+  ): Promise<boolean> {
+    const marked = await this.refundRepository.markResendStarted(
+      paymentCancelId,
+      {
+        claimToken,
+        claimUntil: new Date(now.getTime() + this.seconds('workLease')),
+        now,
+      },
+      counter,
+    );
+    if (!marked) return false;
+    const result = await this.pgGateway.sendCancel({ paymentCancelId, amount });
+    await this.recordSendResult(paymentCancelId, claimToken, now, result);
+    return true;
+  }
+
+  /**
    * 커밋 뒤 바로 보낼 PG 취소 요청의 담당을 만든다(확정 트랜잭션이 전송 직전 기록과 함께 저장한다)
    * @param now 전송 시도 시각
    * @returns 담당 토큰과 처리 기한

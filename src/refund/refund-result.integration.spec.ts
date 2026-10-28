@@ -31,6 +31,7 @@ import {
 import { RefundRepository } from './refund.repository';
 import { RefundResultService } from './refund-result.service';
 import { RefundDispatchService } from './refund-dispatch.service';
+import { RefundRecoveryService } from './refund-recovery.service';
 
 /**
  * 환불금 지급 결과 공통 처리를 실제 PostgreSQL에서 확인한다 (US4, tasks T068~T071)
@@ -174,6 +175,12 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       },
     });
     productId = product.id;
+  });
+
+  beforeEach(() => {
+    // 테스트마다 PG 응답과 호출 기록을 비운다
+    pgGateway.sendCancel.mockReset();
+    pgGateway.inquireCancel.mockReset();
   });
 
   afterAll(async () => {
@@ -1106,6 +1113,57 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       attempt: PaymentCancelStatus.SUCCEEDED,
       payoutStatus: RefundPayoutStatus.PAID,
       ledgers: [-refundAmount],
+    });
+  });
+
+  /** 다른 테스트 데이터와 겹치지 않는 먼 과거의 기준 시각 */
+  const pastBase = new Date('2001-01-01T00:00:00Z');
+
+  /**
+   * 응답 없이 전송된 뒤 첫 조회를 기다리는 PG 취소 요청을 만든다(먼 과거 시각 기준)
+   * @param resendCount 지금까지의 자동 재전송 횟수
+   * @returns 환불·PG 취소 요청과 첫 조회 예정 시각
+   */
+  async function createAwaitingInquiry(resendCount = 0) {
+    const pending = await createPendingRefund();
+    const dueAt = new Date(pastBase.getTime() + 60_000);
+    await prisma.paymentCancel.update({
+      where: { id: pending.paymentCancelId },
+      data: {
+        sendAttemptCount: 1,
+        lastSendAttemptAt: pastBase,
+        nextInquiryAt: dueAt,
+        resendCount,
+      },
+    });
+    return { ...pending, dueAt };
+  }
+
+  it('PG가 미접수를 확실히 확인했고 자동 재전송 횟수가 한도보다 1 적으면 같은 ID·금액으로 다시 보내고 횟수가 1 늘어난다', async () => {
+    const awaiting = await createAwaitingInquiry(2);
+    pgGateway.inquireCancel.mockResolvedValueOnce({
+      result: 'NOT_FOUND',
+      authoritative: true,
+    });
+    pgGateway.sendCancel.mockResolvedValueOnce({ result: 'ACCEPTED' });
+
+    await app
+      .get(RefundRecoveryService)
+      .inquireAttempt(awaiting.paymentCancelId, awaiting.dueAt);
+
+    const attempt = await prisma.paymentCancel.findUniqueOrThrow({
+      where: { id: awaiting.paymentCancelId },
+    });
+    expect({
+      sent: pgGateway.sendCancel.mock.calls,
+      resendCount: attempt.resendCount,
+      status: attempt.status,
+    }).toEqual({
+      sent: [
+        [{ paymentCancelId: awaiting.paymentCancelId, amount: refundAmount }],
+      ],
+      resendCount: 3,
+      status: PaymentCancelStatus.REQUESTED,
     });
   });
 });

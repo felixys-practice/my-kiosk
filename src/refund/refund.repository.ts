@@ -39,6 +39,7 @@ export type AttemptForResult = {
   claimToken: string | null;
   claimUntil: Date | null; // 담당 작업자의 처리 기한
   amount: number; // 이 PG 취소 요청으로 보낼 금액
+  resendCount: number; // 백그라운드 자동 재전송 횟수
   lastSendAttemptAt: Date | null; // 마지막 전송 시도 시각
   actualAmount: number | null; // 성공으로 확정됐으면 PG 실제 취소액
   pgTransactionId: string | null; // 성공으로 확정됐으면 PG 취소 거래 ID
@@ -309,6 +310,7 @@ export class RefundRepository {
         claimToken: true,
         claimUntil: true,
         amount: true,
+        resendCount: true,
         lastSendAttemptAt: true,
         actualAmount: true,
         pgTransactionId: true,
@@ -338,6 +340,7 @@ export class RefundRepository {
       claimToken: attempt.claimToken,
       claimUntil: attempt.claimUntil,
       amount: attempt.amount,
+      resendCount: attempt.resendCount,
       lastSendAttemptAt: attempt.lastSendAttemptAt,
       actualAmount: attempt.actualAmount,
       pgTransactionId: attempt.pgTransactionId,
@@ -410,6 +413,53 @@ export class RefundRepository {
         claimUntil: claim.claimUntil,
       },
     });
+  }
+
+  /**
+   * 조회 직전에 조회 시작 시각·횟수와 담당을 저장한다 (API 계약 §8)
+   * @param tx 조회 준비 트랜잭션
+   * @param id PG 취소 요청 ID
+   * @param claim 담당 토큰·처리 기한·조회 시각
+   */
+  async markInquiryStarted(
+    tx: TransactionClient,
+    id: string,
+    claim: { claimToken: string; claimUntil: Date; now: Date },
+  ): Promise<void> {
+    await tx.paymentCancel.update({
+      where: { id },
+      data: {
+        lastInquiryAt: claim.now,
+        inquiryCount: { increment: 1 },
+        claimToken: claim.claimToken,
+        claimUntil: claim.claimUntil,
+      },
+    });
+  }
+
+  /**
+   * 맡은 PG 취소 요청을 같은 ID·금액으로 다시 보내기 직전에 재전송 횟수·전송 시도를 저장한다
+   * - 담당 토큰이 그대로일 때만 바꾼다
+   * @param id PG 취소 요청 ID
+   * @param claim 담당 토큰·새 처리 기한·전송 시각
+   * @param counter 늘릴 재전송 횟수(자동 resendCount 또는 개별 확인 manualResendCount)
+   * @returns 저장했으면 true
+   */
+  async markResendStarted(
+    id: string,
+    claim: { claimToken: string; claimUntil: Date; now: Date },
+    counter: 'resendCount' | 'manualResendCount',
+  ): Promise<boolean> {
+    const { count } = await this.prisma.paymentCancel.updateMany({
+      where: { id, claimToken: claim.claimToken },
+      data: {
+        [counter]: { increment: 1 },
+        sendAttemptCount: { increment: 1 },
+        lastSendAttemptAt: claim.now,
+        claimUntil: claim.claimUntil,
+      },
+    });
+    return count === 1;
   }
 
   /**
