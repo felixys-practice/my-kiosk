@@ -217,11 +217,16 @@ export class RefundRetryService {
           tx,
           candidate.id,
           claimToken,
+          // 조회 오류는 결과 확인 불가로 남기고, 정상 응답은 이전 오류를 지운다
+          inquiry.result === 'QUERY_ERROR' ? inquiry.reason : null,
         ))
       ) {
         return;
       }
-      if (inquiry.result !== 'NOT_FOUND') return;
+      // 미접수 또는 거절 확정(취소가 실행되지 않았고 앞으로도 진행되지 않음)일 때만 새 요청을 만든다
+      if (inquiry.result !== 'NOT_FOUND' && inquiry.result !== 'FAILED') {
+        return;
+      }
       const target = (await this.refundRepository.findPayoutRetryTarget(
         refundId,
         tx,
@@ -247,7 +252,10 @@ export class RefundRetryService {
           attemptNumber: target.nextAttemptNumber,
           amount: target.state.amount,
           requestedById: actorId,
-          retryReason: '개별 확인에서 PG 미접수 확인 후 재시도',
+          retryReason:
+            inquiry.result === 'NOT_FOUND'
+              ? '개별 확인에서 PG 미접수 확인 후 재시도'
+              : '개별 확인에서 PG 거절 확정 후 재시도',
           now,
           sendClaim,
           lastInquiryAt: failed.lastInquiryAt,

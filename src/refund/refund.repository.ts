@@ -922,16 +922,18 @@ export class RefundRepository {
    * @param tx 트랜잭션
    * @param id PG 취소 요청 ID
    * @param claimToken 담당 토큰
+   * @param lastInquiryError 이번 조회의 오류(정상 응답이면 null로 지운다, 생략하면 그대로 둔다)
    * @returns 아직 자기 담당이어서 내려놓았으면 true
    */
   async releaseAttemptClaim(
     tx: TransactionClient,
     id: string,
     claimToken: string,
+    lastInquiryError?: string | null,
   ): Promise<boolean> {
     const { count } = await tx.paymentCancel.updateMany({
       where: { id, claimToken },
-      data: { claimToken: null, claimUntil: null },
+      data: { claimToken: null, claimUntil: null, lastInquiryError },
     });
     return count === 1;
   }

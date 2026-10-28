@@ -2338,6 +2338,40 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
   });
 
   describe('실패가 확정된 요청의 개별 확인', () => {
+    /**
+     * 정해진 사유로 실패한 환불을 개별 확인하고 결과·요청 수·전송 수를 모은다
+     * @param failureCode 실패 사유
+     * @param inquiry 재조회 결과
+     * @returns 확인 결과 요약
+     */
+    async function checkFailedWith(
+      failureCode: PaymentCancelFailureCode,
+      inquiry: unknown,
+    ) {
+      const failed = await createFailedRefund(failureCode);
+      pgGateway.inquireCancel.mockResolvedValueOnce(inquiry);
+      pgGateway.sendCancel.mockResolvedValueOnce({ result: 'ACCEPTED' });
+      const result = await app
+        .get(RefundPgCheckService)
+        .check(manager(), failed.refundId, new Date());
+      const attempts = await prisma.paymentCancel.findMany({
+        where: { refundId: failed.refundId },
+        orderBy: { attemptNumber: 'asc' },
+      });
+      return {
+        failed,
+        summary: {
+          checkStatus: result.checkStatus,
+          inquiryResult: result.inquiryResult,
+          resendResult: result.resendResult,
+          attempts: attempts.map((attempt) => attempt.status),
+          previousFailure: attempts[0].failureCode,
+          inquiries: pgGateway.inquireCancel.mock.calls.length,
+          sends: pgGateway.sendCancel.mock.calls.length,
+        },
+      };
+    }
+
     it('한도 소진으로 실패한 요청을 개별 확인해 PG 미접수가 확인되면 같은 금액의 새 PG 취소 요청을 즉시 보내고 이전 실패 기록은 그대로 둔다', async () => {
       const failed = await createFailedRefund(
         PaymentCancelFailureCode.RETRY_EXHAUSTED,
@@ -2394,6 +2428,101 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
         ],
         sent: [[{ paymentCancelId: attempts[1]?.id, amount: refundAmount }]],
         payoutStatus: RefundPayoutStatus.PENDING,
+      });
+    });
+
+    it('전송 전 실패로 실패한 요청을 개별 확인해 PG 미접수가 확인되면 새 PG 취소 요청을 즉시 보낸다', async () => {
+      const { summary } = await checkFailedWith(
+        PaymentCancelFailureCode.SEND_FAILED,
+        { result: 'NOT_FOUND', authoritative: true },
+      );
+
+      expect(summary).toEqual({
+        checkStatus: 'CHECKED',
+        inquiryResult: 'NOT_FOUND',
+        resendResult: 'ACCEPTED',
+        attempts: [PaymentCancelStatus.FAILED, PaymentCancelStatus.REQUESTED],
+        previousFailure: PaymentCancelFailureCode.SEND_FAILED,
+        inquiries: 1,
+        sends: 1,
+      });
+    });
+
+    it('PG 거절로 실패한 요청을 개별 확인해 거절 확정이면 새 PG 취소 요청을 즉시 보낸다', async () => {
+      const { summary } = await checkFailedWith(
+        PaymentCancelFailureCode.PG_REJECTED,
+        { result: 'FAILED', reason: '카드사 거절' },
+      );
+
+      expect(summary).toEqual({
+        checkStatus: 'CHECKED',
+        inquiryResult: 'FAILED',
+        resendResult: 'ACCEPTED',
+        attempts: [PaymentCancelStatus.FAILED, PaymentCancelStatus.REQUESTED],
+        previousFailure: PaymentCancelFailureCode.PG_REJECTED,
+        inquiries: 1,
+        sends: 1,
+      });
+    });
+
+    it('세 사유 외의 확정 실패(과거 구현의 PG 미도달)는 NO_PENDING_ATTEMPT를 받고 PG는 호출되지 않는다', async () => {
+      const { summary } = await checkFailedWith(
+        PaymentCancelFailureCode.PG_NOT_REACHED,
+        { result: 'NOT_FOUND', authoritative: true },
+      );
+
+      expect(summary).toEqual({
+        checkStatus: 'NO_PENDING_ATTEMPT',
+        inquiryResult: null,
+        resendResult: null,
+        attempts: [PaymentCancelStatus.FAILED],
+        previousFailure: PaymentCancelFailureCode.PG_NOT_REACHED,
+        inquiries: 0,
+        sends: 0,
+      });
+    });
+
+    it('실패한 요청의 재조회가 조회 오류이면 새 요청을 만들지 않고 기존 실패를 유지하며 결과 확인 불가를 안내한다', async () => {
+      const failed = await createFailedRefund(
+        PaymentCancelFailureCode.RETRY_EXHAUSTED,
+      );
+      pgGateway.inquireCancel.mockResolvedValueOnce({
+        result: 'QUERY_ERROR',
+        reason: 'PG 조회 지연',
+      });
+
+      const result = await app
+        .get(RefundPgCheckService)
+        .check(manager(), failed.refundId, new Date());
+
+      const attempts = await prisma.paymentCancel.findMany({
+        where: { refundId: failed.refundId },
+      });
+      const refund = await prisma.refund.findUniqueOrThrow({
+        where: { id: failed.refundId },
+      });
+      expect({
+        checkStatus: result.checkStatus,
+        inquiryResult: result.inquiryResult,
+        lastInquiryFailed: result.lastInquiryFailed,
+        attempts: attempts.map((attempt) => [
+          attempt.status,
+          attempt.failureCode,
+        ]),
+        payoutStatus: refund.payoutStatus,
+        sends: pgGateway.sendCancel.mock.calls.length,
+      }).toEqual({
+        checkStatus: 'CHECKED',
+        inquiryResult: 'QUERY_ERROR',
+        lastInquiryFailed: true,
+        attempts: [
+          [
+            PaymentCancelStatus.FAILED,
+            PaymentCancelFailureCode.RETRY_EXHAUSTED,
+          ],
+        ],
+        payoutStatus: RefundPayoutStatus.ACTION_REQUIRED,
+        sends: 0,
       });
     });
   });
