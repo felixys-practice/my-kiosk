@@ -6,6 +6,7 @@ import {
   IsUUID,
   MaxLength,
   Min,
+  MinLength,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
 
@@ -22,12 +23,13 @@ export class StoreRefundDto {
   @Min(0)
   amount!: number;
 
-  // 점주 사유(선택). 앞뒤 공백을 지운 뒤 500자 이하(공백만 있으면 사유 누락으로 서비스에서 판단)
+  // 점주 사유(선택). 보낸 경우 앞뒤 공백을 지운 뒤 1~500자(API 계약 §4). 공백만 보내면 형식 오류다
   @IsOptional()
   @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' ? value.trim() : value,
   )
   @IsString()
+  @MinLength(1)
   @MaxLength(500)
   reason?: string;
 

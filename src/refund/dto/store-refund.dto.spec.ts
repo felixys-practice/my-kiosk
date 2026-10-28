@@ -53,4 +53,9 @@ describe('매장 환불 요청 DTO(StoreRefundDto)', () => {
 
     expect(Object.keys(constraints)).toEqual(['reason']);
   });
+  it('공백만 있는 사유를 보내면 형식 오류(400)다', async () => {
+    const constraints = await constraintsOf({ ...validBody, reason: '   ' });
+
+    expect(Object.keys(constraints)).toEqual(['reason']);
+  });
 });
