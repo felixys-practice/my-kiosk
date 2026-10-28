@@ -1749,4 +1749,23 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       inquired: [[{ paymentCancelId: target.paymentCancelId }]],
     });
   });
+
+  it('최근 조회 후 14초에 개별 확인하면 RECENT_RESULT와 최근 조회 시각을 받고 PG는 호출되지 않는다', async () => {
+    const target = await createInquiredBefore(14);
+    pgGateway.inquireCancel.mockResolvedValue({ result: 'IN_PROGRESS' });
+
+    const result = await app
+      .get(RefundPgCheckService)
+      .check(operator, target.refundId, target.now);
+
+    expect({
+      checkStatus: result.checkStatus,
+      lastInquiryAt: result.lastInquiryAt,
+      inquired: pgGateway.inquireCancel.mock.calls.length,
+    }).toEqual({
+      checkStatus: 'RECENT_RESULT',
+      lastInquiryAt: new Date(target.now.getTime() - 14_000).toISOString(),
+      inquired: 0,
+    });
+  });
 });

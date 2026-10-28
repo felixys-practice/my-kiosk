@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { RefundActor } from './refund-access.service';
 import { RefundRepository } from './refund.repository';
 import { RefundRecoveryService } from './refund-recovery.service';
@@ -22,6 +23,7 @@ export class RefundPgCheckService {
   constructor(
     private readonly refundRepository: RefundRepository,
     private readonly recoveryService: RefundRecoveryService,
+    private readonly configService: ConfigService,
   ) {}
 
   /**
@@ -43,6 +45,15 @@ export class RefundPgCheckService {
     if (!pending) {
       return Promise.reject(new Error('구현 전'));
     }
+    // 최근 조회 간격 안의 반복 실행은 PG를 다시 부르지 않고 저장된 결과를 안내한다
+    const intervalMs =
+      this.configService.get<number>('refund.queryIntervalSeconds')! * 1000;
+    if (
+      pending.lastInquiryAt &&
+      now.getTime() - pending.lastInquiryAt.getTime() < intervalMs
+    ) {
+      return this.storedResult('RECENT_RESULT', pending);
+    }
     const inquiryResult = await this.recoveryService.inquireAttempt(
       pending.id,
       now,
@@ -50,11 +61,30 @@ export class RefundPgCheckService {
     const after =
       await this.refundRepository.findPendingAttemptOfRefund(refundId);
     return {
-      checkStatus: 'CHECKED',
+      ...this.storedResult('CHECKED', after),
       inquiryResult,
+    };
+  }
+
+  /**
+   * 저장된 조회 기록으로 응답을 만든다
+   * @param checkStatus 확인 결과 구분
+   * @param attempt 조회 기록(최근 조회 시각·마지막 오류)
+   * @returns 조회·재전송을 하지 않은 응답
+   */
+  private storedResult(
+    checkStatus: PgCheckResult['checkStatus'],
+    attempt: {
+      lastInquiryAt: Date | null;
+      lastInquiryError: string | null;
+    } | null,
+  ): PgCheckResult {
+    return {
+      checkStatus,
+      inquiryResult: null,
       resendResult: null,
-      lastInquiryAt: after?.lastInquiryAt?.toISOString() ?? null,
-      lastInquiryFailed: Boolean(after?.lastInquiryError),
+      lastInquiryAt: attempt?.lastInquiryAt?.toISOString() ?? null,
+      lastInquiryFailed: Boolean(attempt?.lastInquiryError),
     };
   }
 }
