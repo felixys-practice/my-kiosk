@@ -483,4 +483,40 @@ describe('매장 환불 확정 저장 (실제 DB)', () => {
       exitConsentedAt: true,
     });
   });
+
+  it('이용 중에 퇴실 동의가 있어도 금액이 실결제액을 넘으면 거절되고 세션은 퇴실되지 않은 채 남는다', async () => {
+    const issued = await createUsedTimeTicket();
+    const sessionId = await startSession(issued.ticketId);
+
+    const rejection = service.acceptStoreRefund(
+      { userId: ownerId, role: UserRole.OWNER },
+      shopId,
+      {
+        ticketId: issued.ticketId,
+        amount: paidAmount + 1,
+        reason: '보상',
+        consentToTerminateTicket: true,
+        consentToEndSession: true,
+      },
+    );
+
+    await expect(rejection).rejects.toMatchObject({
+      code: 'REFUND_AMOUNT_EXCEEDED',
+    });
+    const session = await prisma.usageSession.findUniqueOrThrow({
+      where: { id: sessionId },
+    });
+    const ticket = await prisma.ticket.findUniqueOrThrow({
+      where: { id: issued.ticketId },
+    });
+    expect({
+      session: session.status,
+      endedAt: session.endedAt,
+      remainingMinutes: ticket.remainingMinutes,
+    }).toEqual({
+      session: UsageSessionStatus.ACTIVE,
+      endedAt: null,
+      remainingMinutes: 500,
+    });
+  });
 });
