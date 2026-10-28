@@ -1053,3 +1053,35 @@ U10~U15를 마친 뒤, 관계 검증의 비교 대상 설정을 생략하면 정
 ## US10 공통 PG 재요청 Codex 검수 2차 (2026-10-29)
 
 - 범위 `b8a3cfd..f7272c1`. 판정 **통과**. 다음 단계는 "US5 개별 확인 완료"(T130·T102, U195~U204, A78·A79, A53·A54)다.
+
+## US5 개별 확인 완료 (실패 확정 시도의 새 요청) 사이클 (2026-10-29)
+
+- 범위: T130·T102(실패 시도 부분), U195~U204, A78(QS-10-1a)·A79(QS-10-1b), 7a에서 남긴 A53(QS-5-18)·A54(QS-5-19)의 실패 시도 경로.
+- 구현 흐름(`RefundRetryService.checkFailedAttempt`, pg-check에서 미확정 시도가 없을 때 호출):
+  1. `findFailedRetryCandidate`: 최근 시도가 RETRY_EXHAUSTED·SEND_FAILED·PG_REJECTED로 FAILED이고, 환불이 확정·PG 방식·검토 아님일 때만 대상이다.
+  2. Refund 잠금 안에서 대상·담당·최근 조회 간격·`evaluatePayoutRetry`를 다시 확인한 뒤 실패 시도의 조회 담당을 맡는다.
+  3. 트랜잭션 밖에서 조회한다.
+  4. 결과 반영(Refund 잠금): 담당 토큰을 확인하며 해제하고, 조회 오류면 lastInquiryError를 저장한다.
+     - 취소 성공·처리 중이면 `recordFailedAttemptConflict`(PG_RESULT_CONFLICT·검토 필요·운영자 알림)로 남긴다.
+     - 미접수·거절 확정이면 재판정 뒤 `createRetryAttempt`로 새 요청을 만든다(실행자·개별 확인 재시도 사유·lastInquiryAt 승계).
+  5. 커밋 뒤 `sendPrepared`. 반환값에 전송 결과 종류를 추가했다.
+
+| 동작 | red(결정적 줄) 또는 뮤턴트 | green | 커밋 |
+|---|---|---|---|
+| U195 | `-t '실패가 확정된 요청의 개별 확인'` → NO_PENDING_ATTEMPT·새 요청 없음 | 위 흐름(미접수만) | `7eea428` |
+| U196 | 첫 통과 → 뮤턴트(SEND_FAILED 제외) 1 failed | — | `dbefc49` |
+| U197 | `- "resendResult": "ACCEPTED"`, `+ "sends": 0` | 거절 확정(FAILED)도 새 요청, 사유 문구 구분 | `dbefc49` |
+| U198 | 첫 통과 → 뮤턴트(PG_NOT_REACHED 허용) 1 failed | — | `dbefc49` |
+| U199 | `+ "lastInquiryFailed": false` | 담당 해제 때 조회 오류 사유 저장(정상 응답은 지움) | `dbefc49` |
+| U200·U201 | `+ "actionCode": "RETRY_EXHAUSTED"`, `+ "operatorConflicts": 0` | 결과 서비스의 모순 기록을 트랜잭션 안에서 재사용, 거래 로그는 커밋 뒤 | `904a3bc` |
+| U202 | `src/pg/pg.service.spec.ts` 첫 통과 → 뮤턴트(HTTP 200이면 모두 FAILED) 1 failed | — | `5c98453` |
+| U203·U204 | 첫 통과 → 뮤턴트(PG 방식 조건 제거 / 조회 시각 승계 제거) 각 1 failed | — | `5c98453` |
+| A78·A79·A53·A54 | 첫 통과 → 뮤턴트(처리 중 모순 기록 제거 / 한도 소진 개별 확인 제외 / 활성 예약 판정 제거 / 새 요청 전송 생략) 각 1 failed | — | `2ae5439` |
+
+- 이탈·메모:
+  - U202는 계약 §8에 따라 PG 응답 분류 단계에서 검증했다. 서비스의 QUERY_ERROR 처리는 U199다(검수 1차 Codex 의견 반영).
+  - A53·A54는 기존 7a 테스트를 바꾸지 않고 같은 QS 번호의 테스트를 하나씩 더 두어 실패 시도 경로를 검증했다.
+  - 테스트 도우미 `createFailedRefund`·`manager`를 최상위 범위로 옮겼다(이번 세션에서 만든 도우미이고 단언 변경은 없다).
+  - T183은 A38·A47(US6) 때문에 아직 체크하지 않았다.
+- 결과: 단위 520 passed, E2E 133 passed(`2ae5439`).
+
