@@ -9,6 +9,7 @@ import {
   PaymentStatus,
   PaymentType,
   RefundDecisionStatus,
+  RefundNotificationAudience,
   RefundPayoutStatus,
   RefundSource,
   RefundTargetKind,
@@ -344,5 +345,42 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       paidAmount: refund.paidAmount,
       ledgers: refund.ledgers.length,
     }).toEqual({ paidAmount: refundAmount, ledgers: 1 });
+  });
+
+  it('이미 실패로 확정된 PG 취소 요청에 성공 통보가 오면 검토 필요·운영자 알림을 기록하고 지급액을 더하지 않는다', async () => {
+    const pending = await createPendingRefund();
+    await service.applyPgResult({
+      paymentCancelId: pending.paymentCancelId,
+      outcome: { kind: 'FAILED', reason: '취소 가능 기간 경과' },
+    });
+
+    await succeed(pending.paymentCancelId, refundAmount);
+
+    const refund = await prisma.refund.findUniqueOrThrow({
+      where: { id: pending.refundId },
+      include: { paymentCancels: true, ledgers: true, notifications: true },
+    });
+    expect({
+      attemptStatus: refund.paymentCancels[0].status,
+      paidAmount: refund.paidAmount,
+      ledgers: refund.ledgers.length,
+      reviewRequired: refund.reviewRequired,
+      actionCode: refund.actionCode,
+      operatorNotifications: refund.notifications
+        .filter((n) => n.audience === RefundNotificationAudience.OPERATOR)
+        .map((n) => ({ kind: n.kind, paymentCancelId: n.paymentCancelId })),
+    }).toEqual({
+      attemptStatus: PaymentCancelStatus.FAILED,
+      paidAmount: 0,
+      ledgers: 0,
+      reviewRequired: true,
+      actionCode: 'PG_RESULT_CONFLICT',
+      operatorNotifications: [
+        {
+          kind: 'PG_RESULT_CONFLICT',
+          paymentCancelId: pending.paymentCancelId,
+        },
+      ],
+    });
   });
 });

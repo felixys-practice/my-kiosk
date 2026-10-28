@@ -2,10 +2,13 @@ import { Injectable } from '@nestjs/common';
 import {
   PaymentCancelFailureCode,
   PaymentCancelStatus,
+  RefundNotificationAudience,
   RefundPayoutStatus,
 } from '@prisma/client';
+import { TransactionClient } from 'src/prisma/prisma.service';
 import { RefundLedgerRepository } from 'src/ledger/refund-ledger.repository';
-import { RefundRepository } from './refund.repository';
+import { AttemptForResult, RefundRepository } from './refund.repository';
+import { RefundEventRepository } from './refund-event.repository';
 import { RefundLockingRepository } from './refund-locking.repository';
 
 /** PG가 확정한 PG 취소 요청 결과 */
@@ -37,6 +40,7 @@ export class RefundResultService {
     private readonly refundRepository: RefundRepository,
     private readonly lockingRepository: RefundLockingRepository,
     private readonly ledgerRepository: RefundLedgerRepository,
+    private readonly eventRepository: RefundEventRepository,
   ) {}
 
   /**
@@ -60,10 +64,16 @@ export class RefundResultService {
         command.paymentCancelId,
         tx,
       ))!;
-      // 결과는 미확정 시도에만 한 번 반영한다(이미 확정된 시도는 저장된 결과를 유지)
-      if (!unresolvedAttemptStatuses.includes(attempt.status)) return;
       const now = new Date();
       const { outcome } = command;
+      // 결과는 미확정 시도에만 한 번 반영한다(이미 확정된 시도는 저장된 결과를 유지)
+      if (!unresolvedAttemptStatuses.includes(attempt.status)) {
+        // 확정된 결과와 모순되는 늦은 통보는 덮어쓰지 않고 검토 필요·운영자 알림으로 남긴다(API 계약 §7)
+        if (attempt.status !== outcome.kind) {
+          await this.recordResultConflict(tx, attempt);
+        }
+        return;
+      }
       // PG 거절: 그 시도만 실패로 끝내고 환불은 미지급 조치 필요로 둔다(원장 없음, 이용 종료 유지)
       if (outcome.kind === 'FAILED') {
         await this.refundRepository.markAttemptFailed(tx, attempt.id, {
@@ -106,6 +116,30 @@ export class RefundResultService {
               actionCode: 'AMOUNT_MISMATCH',
             },
       );
+    });
+  }
+
+  /**
+   * 확정된 시도와 모순되는 PG 결과를 검토 필요·운영자 알림으로 기록한다
+   * - 지급 합계·원장·시도 상태는 바꾸지 않는다
+   * @param tx 지급 결과 반영 트랜잭션
+   * @param attempt 이미 확정된 PG 취소 요청과 그 환불
+   */
+  private async recordResultConflict(
+    tx: TransactionClient,
+    attempt: AttemptForResult,
+  ): Promise<void> {
+    await this.refundRepository.updateRefundPayout(tx, attempt.refund.id, {
+      reviewRequired: true,
+      actionCode: 'PG_RESULT_CONFLICT',
+    });
+    await this.eventRepository.recordNotification(tx, {
+      refundId: attempt.refund.id,
+      paymentCancelId: attempt.id,
+      kind: 'PG_RESULT_CONFLICT',
+      audience: RefundNotificationAudience.OPERATOR,
+      shopId: attempt.refund.shopId,
+      eventKey: `pg-result-conflict:${attempt.id}`,
     });
   }
 }

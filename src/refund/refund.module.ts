@@ -11,6 +11,7 @@ import { RefundAccessService } from './refund-access.service';
 import { RefundLockingRepository } from './refund-locking.repository';
 import { RefundAcceptanceService } from './refund-acceptance.service';
 import { RefundResultService } from './refund-result.service';
+import { RefundEventRepository } from './refund-event.repository';
 import { RefundLedgerRepository } from 'src/ledger/refund-ledger.repository';
 
 @Module({
@@ -28,6 +29,7 @@ import { RefundLedgerRepository } from 'src/ledger/refund-ledger.repository';
     // 환불금 지급 결과 공통 처리(US4~)
     RefundResultService,
     RefundLedgerRepository,
+    RefundEventRepository,
   ],
   controllers: [RefundController],
   exports: [RefundService],
