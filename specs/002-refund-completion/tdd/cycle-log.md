@@ -765,3 +765,63 @@ U10~U15를 마친 뒤, 관계 검증의 비교 대상 설정을 생략하면 정
 ## Phase 6 완료
 
 - T064~T072·T182 완료, Codex 재검수 2차 통과. 권장 구현 순서(US4 공통 결과 → US2·US3)에 따라 다음은 Phase 4(US2 점주의 매장 환불, T035~T056·T180)다.
+
+## Phase 4 (US2 점주의 매장 환불) 사이클 (2026-10-28)
+
+- 바깥 루프: A11(QS-2-1)을 먼저 작성해 red를 확인하고(`expected 202 "Accepted", got 404 "Not Found"`, 경로 없음) scratchpad에 보관한 뒤 안쪽 루프를 진행했다.
+- 테스트 위치:
+  - 판정 규칙: `src/refund/refund-policy.spec.ts`(`evaluateStoreRefund`). tasks T051은 `refund-store.service.spec.ts`로 적었지만 판정을 순수 함수로 분리해 그쪽에서 확인했다.
+  - 요청 형식: `src/refund/dto/store-refund.dto.spec.ts`
+  - 저장·퇴실·작업 제거: `src/refund/refund-store.integration.spec.ts`(실제 DB)
+  - 역할·오류 매핑: `src/refund/refund-store.service.spec.ts`
+- 진행 중 추가한 동작: U332~U335(매장 판정의 대상 여부 규칙. 명세 2-7·2-9가 요구하지만 단위 목록에 없었음), U336~U338(매장 범위·현재 점주·거절 코드 매핑).
+
+| 동작 | red | green·검증 | 커밋 |
+|---|---|---|---|
+| U98 0원·사유 허용 | NOT_IMPLEMENTED | 입력 그대로 허용(가짜 구현) | `276d9cf` |
+| U100 실결제액+1 → REFUND_AMOUNT_EXCEEDED | eligible true | amount > paidAmount 거절 | `a8c6e0d` |
+| U99 실결제액과 같으면 허용 | 첫 통과 → 뮤턴트(`>=`) 1 failed | — | `4f224fa` |
+| U103 사유 없음 → REFUND_REASON_REQUIRED | eligible true | 사유 필수 | `09dbbe4` |
+| U104 공백 사유 = 누락 | eligible true reason '   ' | trim 후 빈 값은 null | `fba4258` |
+| U107 기한 안 미사용 1원 적음 → UNUSED_TICKET_FULL_REFUND_REQUIRED | eligible true | 고객 판정의 위반 수집을 `unusedRuleViolations`로 추출해 재사용 | `a81a612` |
+| U108 기한 안 미사용 전액·사유 없음 확정 | REFUND_REASON_REQUIRED | 기한 안 미사용이면 사유 선택 | `426fc6a` |
+| U109·U110 기한 경과 미사용: 사유 필수, 적은 금액 허용 | 각각 첫 통과 → 뮤턴트(기한 경과 무시) 1 failed | — | `9238ffc`·`36f83b5` |
+| U111 남은 시간 0인 시간권 확정 | 첫 통과 → 뮤턴트(소진 거절) 1 failed | — | `40d6185` |
+| U101 금액 -1 → 400 | 오류 필드 [] | `StoreRefundDto` 추가, `@Min(0)` | `266172c` |
+| U102 소수 금액 → 400 | 오류 필드 [] | `@IsInt` | `98cc7c7` |
+| U105·U106 trim 뒤 500자 허용 / 501자 400 (경계 쌍) | U106 오류 필드 [] | `@Transform(trim)`·`@MaxLength(500)`, 뮤턴트(trim 제거)에서 U105 실패 | `58dbcf3` |
+| U332 매장 범위 밖 → TICKET_NOT_FOUND | eligible true | 후보 null 판정 | `9a109c4` |
+| U333 지급 완료 환불 → ALREADY_REFUNDED | eligible true | 고객 판정 2~4단계를 `targetRuleRejection`으로 추출해 공용 | `444cdfd` |
+| U334·U335 REFUND_IN_PROGRESS·PAYMENT_NOT_COMPLETED | 첫 통과 → 뮤턴트(분기 제거) 각 1 failed | — | `74ea7b1`·`6829d48` |
+| U114 MANAGER → REFUND_FORBIDDEN | Received constructor: Error | OWNER가 아니면 거절 | `5317b8a` |
+| 리팩터 | — | 확정 저장 단계를 `RefundAcceptanceService.confirmAcceptedRefund`로 추출(고객 동작 동일), 매장 서비스 등록 | `caa5b4f` |
+| U115 점주·시각·사유·금액·종료 동의 저장 | '구현 전' | STORE_REFUND 멱등 처리 안에서 잠금 → 판정 → 종료 동의 → 공용 확정, 커밋 뒤 PG 전송 | `b22af83` |
+| U336 다른 매장 이용권 → TICKET_NOT_FOUND | resolved instead of rejected | 대상 shopId ≠ 요청 shopId면 후보 null | `56b1205` |
+| U337 현재 점주 아님 → SHOP_NOT_FOUND | resolved instead of rejected | 멱등 처리 전 `assertShopScope`(재응답에도) | `45fc8a8` |
+| U338 거절 코드 매핑(400·409·404) | it.each 6 failed | `storeRejectionError`, `RefundInputRejectedError`(400) 추가 | `30de83c` |
+| U116~U118 0원 매장 환불: PG 미요청·PAID+0원 원장·200 | 첫 통과(공용 확정) → 뮤턴트 3종 각 1 failed | — | `b47a35f` |
+| U112 이용 중 퇴실 동의 없음 → TICKET_IN_USE | resolved instead of rejected | `TicketInUseError`(409) | `c821519` |
+| U119 이용 중 시간권: 퇴실 시각까지만 차감, 종료 세션·퇴실 동의 기록 | 첫 실행 TypeError(무효) → 단언 실패로 정정 → session ACTIVE·remaining 500 | `SessionLifecycleService.endSession`(기존 퇴실 규칙) 호출, RefundModule에 SessionLifecycleModule | `a454d5c` |
+| U113 금액 오류 거절은 퇴실 안 함 | 첫 통과 → 뮤턴트(금액 상한 제거) 1 failed | 검증 뒤 퇴실 + 거절 시 롤백 | `d12a3a1` |
+| U120 동의 사이 이미 퇴실한 세션 재차감 없음 | 첫 통과 → 뮤턴트(세션 필터 제거 + endSession 멱등 제거) 이중 차감 1 failed | — | `0756545` |
+| U121 커밋 뒤 자동 종료 작업 제거, 실패해도 복구 없음 | removalCalls [] | session-lifecycle에 `SessionEndJobQueue` 추가, 실패는 경고 로그 | `aa7bce1` |
+| A11 (QS-2-1) | 위 바깥 루프 red | `POST /refund/shop/:shopId` 연결 | `cc2cdcf` |
+| A12~A26 (QS-2-2~2-13) | 사후 작성, 20개 첫 통과 → 뮤턴트 14종 모두 대상 테스트 실패 | — | `79f49ad` |
+
+- 사용자 결정(E2E 간헐 실패): "127.0.0.1로 명시해 고침".
+  - 원인 가설: 앱 코드에는 426이 없다. supertest가 `::` 임시 포트로 띄운 앱에 `127.0.0.1:같은 번호`로 요청하면, 그 번호를 127.0.0.1로 쓰는 다른 프로그램(codex·Orca 등)이 응답한다.
+  - 수정: `test/helpers/listen-on-loopback.ts`로 app·ticket-pause·seat-type·refund-test-context의 앱을 `127.0.0.1`로 띄운다. 준비 코드만 바꿨다.
+  - 결과: 수정 뒤 E2E 5회 연속 76/76 통과(`1450faf`). 이후 모든 스위트에서 E2E 실패가 없었다.
+- 이탈:
+  - [실패 상태 커밋] U333 첫 스위트가 E2E 간헐 실패로 커밋되지 않았는데, 반복 스크립트가 멈추지 않고 U334(`74ea7b1`)·U335(`6829d48`)를 spec 파일만으로 커밋했다. 두 커밋에는 U333 테스트가 들어갔지만 구현이 빠져 커밋 시점 기준으로는 실패 상태다. 작업 트리에는 구현이 있어 스위트는 통과했다. 구현은 `444cdfd`로 이어서 커밋했고 기존 커밋은 고쳐 쓰지 않았다.
+  - U105·U106은 경계 쌍이라 한 사이클로 처리했다.
+  - U119의 첫 red는 TypeError(무효)라 같은 사이클에서 테스트를 단언 실패로 정정했다.
+  - A12~A26은 사후 작성이다.
+  - 한 번은 단위 스위트의 jest 워커 1개가 10분 넘게 멈춰 종료했고, 재실행에서는 정상이었다(원인 미확인).
+- 남긴 것:
+  - `SessionEndJobQueue.remove`가 `UsageSessionService.removeJob`과 3줄 겹친다. 기존 usage-session spec 변경을 피하려고 그대로 뒀다.
+  - T053의 `session-lifecycle.repository.ts`는 만들지 않고 기존 `SessionLifecycleService.endSession`을 재사용했다.
+  - T055의 0원 원장은 Phase 3의 `refund.repository.ts`에서 저장한다.
+  - T056의 "남은 작업의 안전한 종료"는 처리기의 endSession 멱등으로 보장되며, 처리기 코드는 바꾸지 않았다.
+  - 정상 PG 결과 반영은 US4(A12·A26)와 결합해 확인했다.
+- 결과: 단위 427 passed, E2E 95 passed(`79f49ad`).

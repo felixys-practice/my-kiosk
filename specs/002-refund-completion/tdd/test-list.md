@@ -44,22 +44,22 @@ suite_baseline: green
 | A8 | Given 지금 이용 중인 이용권일 때, When 환불을 신청하면, Then `USED_TICKET`으로 거절된다. | QS-1-7 | example | DONE | `test/refund-customer.e2e-spec.ts` |
 | A9 | Given 이용 기한(정기권은 활성화 기한, 시간권은 소진 기한)이 지난 미사용 이용권일 때, When 환불을 신청하면, | QS-1-8 | example | DONE | `test/refund-customer.e2e-spec.ts` |
 | A10 | Given 확정된 미지급 환불과 사용 이력이 함께 있는 이용권일 때, When 환불을 신청하면, | QS-1-9 | example | DONE | `test/refund-customer.e2e-spec.ts` |
-| A11 | Given 사용 이력이 있는 이용권이 있을 때, When 그 매장 점주가 0원보다 크고 실결제액 이하인 금액과 사유를 입력해 환불하면, | QS-2-1 | example | PENDING | |
-| A12 | Given 1번으로 이용은 종료됐고 환불금 지급 처리 중일 때, When PG가 확정된 환불 금액의 취소를 확정하면, Then 환불금 지급 완료로 바뀌며 이용 종료·좌석 해제는 반복하지 않는다. | QS-2-2 | example | PENDING | |
-| A13 | Given 이용 기한이 지난 미사용 이용권이 있을 때, When 그 매장 점주가 0원부터 실결제액까지의 금액과 사유를 입력하고 이용 종료에 동의해 환불하면, | QS-2-3 | example | PENDING | |
-| A14 | Given 시간을 다 써서 소진된 시간권이 있을 때, When 점주가 금액과 사유를 입력해 매장 환불을 하면, Then 양수 금액은 1번, 0원은 4번과 같이 처리된다. | QS-2-3a | example | PENDING | |
-| A15 | Given 사용 이력이 있는 이용권이 있을 때, When 점주가 금액 0원과 사유로 환불하면, | QS-2-4 | example | PENDING | |
-| A16 | Given 사용 이력이 있는 이용권이 있을 때, When 점주가 실결제액보다 큰 금액을 입력하면, | QS-2-5 | example | PENDING | |
-| A17 | Given 사용 이력이 있는 이용권이 있을 때, When 점주가 사유 없이 환불하면, Then 환불이 거부된다. | QS-2-6 | example | PENDING | |
-| A18 | Given 다른 매장의 이용권일 때, When 점주가 자기 매장에서 그 이용권을 매장 환불하려 하면, | QS-2-7 | example | PENDING | |
-| A19 | Given 사용 이력이 있는 이용권이 있을 때, When 고객지원 계정이 매장 환불을 하면, Then 권한이 없어 거부된다. | QS-2-7a | example | PENDING | |
-| A20 | Given 어긴 규칙이 없는 이용권(이용 기한 안의 미사용 이용권)일 때, When 점주가 실결제액 전액으로 매장 환불을 하면, | QS-2-8 | example | PENDING | |
-| A21 | Given 어긴 규칙이 없는 이용권일 때, When 점주가 실결제액과 다른 금액으로 매장 환불을 하면, | QS-2-8a | example | PENDING | |
-| A22 | Given 환불금 지급 완료됐거나 확정된 미지급 환불이 있는 이용권일 때, When 점주가 매장 환불을 하면, | QS-2-9 | example | PENDING | |
-| A23 | Given 고객이 그 이용권으로 지금 이용 중일 때, When 점주가 퇴실 동의 없이 매장 환불을 하면, | QS-2-10 | example | PENDING | |
-| A24 | Given 고객이 그 이용권으로 지금 이용 중일 때, When 점주가 퇴실 동의를 담아 다시 요청하면, | QS-2-11 | example | PENDING | |
-| A25 | Given 고객이 이용 중일 때, When 점주가 퇴실 동의를 담았지만 실결제액보다 큰 금액으로 요청하면, | QS-2-12 | example | PENDING | |
-| A26 | Given 11번으로 이용 종료·환불이 확정된 뒤 환불금 지급 처리 중일 때, When PG가 취소 실패를 확정하면, | QS-2-13 | example | PENDING | |
+| A11 | Given 사용 이력이 있는 이용권이 있을 때, When 그 매장 점주가 0원보다 크고 실결제액 이하인 금액과 사유를 입력해 환불하면, | QS-2-1 | example | DONE | `test/refund-store.e2e-spec.ts` |
+| A12 | Given 1번으로 이용은 종료됐고 환불금 지급 처리 중일 때, When PG가 확정된 환불 금액의 취소를 확정하면, Then 환불금 지급 완료로 바뀌며 이용 종료·좌석 해제는 반복하지 않는다. | QS-2-2 | example | DONE | `test/refund-store.e2e-spec.ts` |
+| A13 | Given 이용 기한이 지난 미사용 이용권이 있을 때, When 그 매장 점주가 0원부터 실결제액까지의 금액과 사유를 입력하고 이용 종료에 동의해 환불하면, | QS-2-3 | example | DONE | `test/refund-store.e2e-spec.ts` |
+| A14 | Given 시간을 다 써서 소진된 시간권이 있을 때, When 점주가 금액과 사유를 입력해 매장 환불을 하면, Then 양수 금액은 1번, 0원은 4번과 같이 처리된다. | QS-2-3a | example | DONE | `test/refund-store.e2e-spec.ts` |
+| A15 | Given 사용 이력이 있는 이용권이 있을 때, When 점주가 금액 0원과 사유로 환불하면, | QS-2-4 | example | DONE | `test/refund-store.e2e-spec.ts` |
+| A16 | Given 사용 이력이 있는 이용권이 있을 때, When 점주가 실결제액보다 큰 금액을 입력하면, | QS-2-5 | example | DONE | `test/refund-store.e2e-spec.ts` |
+| A17 | Given 사용 이력이 있는 이용권이 있을 때, When 점주가 사유 없이 환불하면, Then 환불이 거부된다. | QS-2-6 | example | DONE | `test/refund-store.e2e-spec.ts` |
+| A18 | Given 다른 매장의 이용권일 때, When 점주가 자기 매장에서 그 이용권을 매장 환불하려 하면, | QS-2-7 | example | DONE | `test/refund-store.e2e-spec.ts` |
+| A19 | Given 사용 이력이 있는 이용권이 있을 때, When 고객지원 계정이 매장 환불을 하면, Then 권한이 없어 거부된다. | QS-2-7a | example | DONE | `test/refund-store.e2e-spec.ts` |
+| A20 | Given 어긴 규칙이 없는 이용권(이용 기한 안의 미사용 이용권)일 때, When 점주가 실결제액 전액으로 매장 환불을 하면, | QS-2-8 | example | DONE | `test/refund-store.e2e-spec.ts` |
+| A21 | Given 어긴 규칙이 없는 이용권일 때, When 점주가 실결제액과 다른 금액으로 매장 환불을 하면, | QS-2-8a | example | DONE | `test/refund-store.e2e-spec.ts` |
+| A22 | Given 환불금 지급 완료됐거나 확정된 미지급 환불이 있는 이용권일 때, When 점주가 매장 환불을 하면, | QS-2-9 | example | DONE | `test/refund-store.e2e-spec.ts` |
+| A23 | Given 고객이 그 이용권으로 지금 이용 중일 때, When 점주가 퇴실 동의 없이 매장 환불을 하면, | QS-2-10 | example | DONE | `test/refund-store.e2e-spec.ts` |
+| A24 | Given 고객이 그 이용권으로 지금 이용 중일 때, When 점주가 퇴실 동의를 담아 다시 요청하면, | QS-2-11 | example | DONE | `test/refund-store.e2e-spec.ts` |
+| A25 | Given 고객이 이용 중일 때, When 점주가 퇴실 동의를 담았지만 실결제액보다 큰 금액으로 요청하면, | QS-2-12 | example | DONE | `test/refund-store.e2e-spec.ts` |
+| A26 | Given 11번으로 이용 종료·환불이 확정된 뒤 환불금 지급 처리 중일 때, When PG가 취소 실패를 확정하면, | QS-2-13 | example | DONE | `test/refund-store.e2e-spec.ts` |
 | A27 | Given 환불 확정으로 이용이 종료됐고 지급도 완료된 이용권일 때, When 입실하려 하면, Then 이용 종료 오류로 거부된다. | QS-3-1 | example | PENDING | |
 | A28 | Given 환불 확정으로 이용이 종료됐고 환불금 지급 처리 중이거나 PG 취소 결과 확인 실패인 이용권일 때, When 입실하려 하면, Then 환불금 지급 완료 여부와 관계없이 이용 종료 오류로 거부된다. | QS-3-2 | example | PENDING | |
 | A29 | Given 환불 확정 후 PG 취소 요청이 실패한 이용권일 때, When 입실하려 하면, Then 이용 종료 오류로 거부된다. 환불금 지급 실패를 이유로 이용권·고정석을 복구하지 않는다. | QS-3-3 | example | PENDING | |
@@ -239,6 +239,13 @@ suite_baseline: green
 | U329 | 다른 요청과 같은 PG 취소 거래 ID가 동시에 저장돼 DB unique 위반이 나면 503이 아니라 PG_CALLBACK_TARGET_MISMATCH(409)로 거절된다 (Phase 6 재검수 P2) | FR-032 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
 | U330 | 모순 결과 처리의 반환 상태는 처리 후 저장된 환불 상태(ACTION_REQUIRED)와 같다 (Phase 6 재검수 P2) | FR-032 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
 | U331 | 모순 결과의 거래 로그에는 기존 결과와 새 통보의 종류·실제액·거래 ID가 함께 남는다 (Phase 6 재검수 권고) | FR-032 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
+| U332 | 매장 환불 판정: 매장 범위에서 찾지 못한 이용권(null)은 TICKET_NOT_FOUND다 (US2 진행 중 추가, A18 단위) | FR-011 | example | DONE | `src/refund/refund-policy.spec.ts` |
+| U333 | 매장 환불 판정: 지급 완료된 확정 환불이 있으면 ALREADY_REFUNDED다 (US2 진행 중 추가, A22 단위) | FR-029 | example | DONE | `src/refund/refund-policy.spec.ts` |
+| U334 | 매장 환불 판정: 지급이 끝나지 않은 확정 환불이 있으면 REFUND_IN_PROGRESS다 (US2 진행 중 추가, A22 단위) | FR-029 | example | DONE | `src/refund/refund-policy.spec.ts` |
+| U335 | 매장 환불 판정: 결제가 SUCCESS가 아니면 PAYMENT_NOT_COMPLETED다 (US2 진행 중 추가, 고객 판정과 같은 대상 여부 규칙) | FR-011 | example | DONE | `src/refund/refund-policy.spec.ts` |
+| U336 | 다른 매장 이용권을 자기 매장 환불로 요청하면 TICKET_NOT_FOUND(404)로 거절되고 아무것도 저장하지 않는다 (US2 진행 중 추가, A18 단위) | FR-011 | example | DONE | `src/refund/refund-store.integration.spec.ts`(실제 DB) |
+| U337 | 요청 매장의 현재 점주가 아닌 OWNER는 SHOP_NOT_FOUND(404)로 거절된다 (US2 진행 중 추가, 계약 §2 현재 소유 매장) | FR-050 | example | DONE | `src/refund/refund-store.integration.spec.ts`(실제 DB) |
+| U338 | 매장 환불 판정 거절은 계약 오류로 응답한다: 금액 상한·전액 원칙·사유 누락은 400, 대상 여부 규칙은 409 (US2 진행 중 추가) | FR-012 | example | DONE | `src/refund/refund-store.service.spec.ts` |
 
 ### `src/refund/refund-idempotency.service.ts`
 
@@ -342,35 +349,35 @@ suite_baseline: green
 
 | id | behavior | traces | kind | state | test |
 |---|---|---|---|---|---|
-| U98 | 사용 이력이 있는 이용권의 매장 환불 금액 0원은 허용된다 | FR-012 | example | PENDING | |
-| U99 | 사용 이력이 있는 이용권의 매장 환불 금액이 실결제액과 같으면 허용된다 | FR-012 | example | PENDING | |
-| U100 | 매장 환불 금액이 실결제액보다 1원 많으면 REFUND_AMOUNT_EXCEEDED로 거절된다 | FR-012 | example | PENDING | |
-| U101 | 매장 환불 금액이 -1이면 400을 받는다 | FR-012 | example | PENDING | |
-| U102 | 매장 환불 금액이 소수이면 400을 받는다 | FR-012 | example | PENDING | |
-| U103 | 사용 이력이 있는 이용권에 사유가 없으면 REFUND_REASON_REQUIRED로 거절된다 | FR-012 | example | PENDING | |
-| U104 | 공백만 있는 사유는 사유 누락으로 처리된다 | FR-012 | example | PENDING | |
-| U105 | trim 후 500자 사유는 허용된다 | FR-013 | example | PENDING | |
-| U106 | trim 후 501자 사유는 400을 받는다 | FR-013 | example | PENDING | |
-| U107 | 기한 안 미사용 이용권에 실결제액보다 1원 적은 금액이면 UNUSED_TICKET_FULL_REFUND_REQUIRED로 거절된다 | FR-010 | example | PENDING | |
-| U108 | 기한 안 미사용 이용권은 전액·사유 없음으로 확정된다 | FR-010 | example | PENDING | |
-| U109 | 기한이 지난 미사용 이용권에 사유가 없으면 REFUND_REASON_REQUIRED로 거절된다 | FR-012 | example | PENDING | |
-| U110 | 기한이 지난 미사용 이용권은 실결제액보다 적은 입력 금액으로 확정된다 | FR-012 | example | PENDING | |
-| U111 | 남은 시간이 0인 시간권도 매장 환불로 확정된다 | FR-008 | example | PENDING | |
-| U112 | 이용 중인 이용권에 퇴실 동의가 없으면 TICKET_IN_USE로 거절된다 | FR-014 | example | PENDING | |
-| U113 | 금액 오류로 거절되면 이용 중 세션은 퇴실되지 않은 채 남는다 | FR-015 | example | PENDING | |
-| U114 | MANAGER가 새 매장 환불을 요청하면 REFUND_FORBIDDEN으로 거절된다 | FR-050 | example | PENDING | |
-| U115 | 매장 환불 확정 시 점주·확정 시각·사유·금액·동의가 저장된다 | FR-013 | example | PENDING | |
-| U116 | 0원 매장 환불은 PG 취소 요청 기록을 만들지 않는다 | FR-016a | example | PENDING | |
-| U117 | 0원 매장 환불은 Refund PAID와 0원 원장 1건을 같은 트랜잭션에 저장한다 | FR-016a | example | PENDING | |
-| U118 | 0원 매장 환불 응답은 200과 지급 완료 상태다 | FR-035 | example | PENDING | |
+| U98 | 사용 이력이 있는 이용권의 매장 환불 금액 0원은 허용된다 | FR-012 | example | DONE | `src/refund/refund-policy.spec.ts` |
+| U99 | 사용 이력이 있는 이용권의 매장 환불 금액이 실결제액과 같으면 허용된다 | FR-012 | example | DONE | `src/refund/refund-policy.spec.ts` |
+| U100 | 매장 환불 금액이 실결제액보다 1원 많으면 REFUND_AMOUNT_EXCEEDED로 거절된다 | FR-012 | example | DONE | `src/refund/refund-policy.spec.ts` |
+| U101 | 매장 환불 금액이 -1이면 400을 받는다 | FR-012 | example | DONE | `src/refund/dto/store-refund.dto.spec.ts` |
+| U102 | 매장 환불 금액이 소수이면 400을 받는다 | FR-012 | example | DONE | `src/refund/dto/store-refund.dto.spec.ts` |
+| U103 | 사용 이력이 있는 이용권에 사유가 없으면 REFUND_REASON_REQUIRED로 거절된다 | FR-012 | example | DONE | `src/refund/refund-policy.spec.ts` |
+| U104 | 공백만 있는 사유는 사유 누락으로 처리된다 | FR-012 | example | DONE | `src/refund/refund-policy.spec.ts` |
+| U105 | trim 후 500자 사유는 허용된다 | FR-013 | example | DONE | `src/refund/dto/store-refund.dto.spec.ts` |
+| U106 | trim 후 501자 사유는 400을 받는다 | FR-013 | example | DONE | `src/refund/dto/store-refund.dto.spec.ts` |
+| U107 | 기한 안 미사용 이용권에 실결제액보다 1원 적은 금액이면 UNUSED_TICKET_FULL_REFUND_REQUIRED로 거절된다 | FR-010 | example | DONE | `src/refund/refund-policy.spec.ts` |
+| U108 | 기한 안 미사용 이용권은 전액·사유 없음으로 확정된다 | FR-010 | example | DONE | `src/refund/refund-policy.spec.ts` |
+| U109 | 기한이 지난 미사용 이용권에 사유가 없으면 REFUND_REASON_REQUIRED로 거절된다 | FR-012 | example | DONE | `src/refund/refund-policy.spec.ts` |
+| U110 | 기한이 지난 미사용 이용권은 실결제액보다 적은 입력 금액으로 확정된다 | FR-012 | example | DONE | `src/refund/refund-policy.spec.ts` |
+| U111 | 남은 시간이 0인 시간권도 매장 환불로 확정된다 | FR-008 | example | DONE | `src/refund/refund-policy.spec.ts` |
+| U112 | 이용 중인 이용권에 퇴실 동의가 없으면 TICKET_IN_USE로 거절된다 | FR-014 | example | DONE | `src/refund/refund-store.integration.spec.ts`(실제 DB) |
+| U113 | 금액 오류로 거절되면 이용 중 세션은 퇴실되지 않은 채 남는다 | FR-015 | example | DONE | `src/refund/refund-store.integration.spec.ts`(실제 DB) |
+| U114 | MANAGER가 새 매장 환불을 요청하면 REFUND_FORBIDDEN으로 거절된다 | FR-050 | example | DONE | `src/refund/refund-store.service.spec.ts` |
+| U115 | 매장 환불 확정 시 점주·확정 시각·사유·금액·동의가 저장된다 | FR-013 | example | DONE | `src/refund/refund-store.integration.spec.ts`(실제 DB) |
+| U116 | 0원 매장 환불은 PG 취소 요청 기록을 만들지 않는다 | FR-016a | example | DONE | `src/refund/refund-store.integration.spec.ts`(실제 DB) |
+| U117 | 0원 매장 환불은 Refund PAID와 0원 원장 1건을 같은 트랜잭션에 저장한다 | FR-016a | example | DONE | `src/refund/refund-store.integration.spec.ts`(실제 DB) |
+| U118 | 0원 매장 환불 응답은 200과 지급 완료 상태다 | FR-035 | example | DONE | `src/refund/refund-store.integration.spec.ts`(실제 DB) |
 
 ### `src/session-lifecycle/session-lifecycle.service.ts`
 
 | id | behavior | traces | kind | state | test |
 |---|---|---|---|---|---|
-| U119 | 이용 중 시간권을 매장 환불하면 퇴실 시각까지의 사용 시간만 차감된다 | FR-015 | example | PENDING | |
-| U120 | 동의 사이에 이미 퇴실한 세션은 사용 시간을 다시 차감하지 않는다 | FR-015 | example | PENDING | |
-| U121 | 커밋 뒤 세션 종료 작업 제거가 실패해도 이용권·좌석 배정이 복구되지 않는다 | FR-016 | example | PENDING | |
+| U119 | 이용 중 시간권을 매장 환불하면 퇴실 시각까지의 사용 시간만 차감된다 | FR-015 | example | DONE | `src/refund/refund-store.integration.spec.ts`(실제 DB) |
+| U120 | 동의 사이에 이미 퇴실한 세션은 사용 시간을 다시 차감하지 않는다 | FR-015 | example | DONE | `src/refund/refund-store.integration.spec.ts`(실제 DB) |
+| U121 | 커밋 뒤 세션 종료 작업 제거가 실패해도 이용권·좌석 배정이 복구되지 않는다 | FR-016 | example | DONE | `src/refund/refund-store.integration.spec.ts`(실제 DB) |
 
 ### `src/usage-session/usage-session.service.ts, src/ticket/ticket-pause/ticket-pause.service.ts, src/ticket/ticket-seat/ticket-seat.service.ts`
 

@@ -96,33 +96,33 @@
 
 ### HTTP 인수 테스트
 
-- [ ] T035 [US2] [A11] E2E: `test/refund-store.e2e-spec.ts`에 명세 2-1의 Given/When으로 요청하고 다음 결과를 검증한다: 이용 종료·고정석 해제·그 금액의 환불이 함께 확정되고 점주·시각·사유·금액이 기록되며, PG 결제 취소를 시작하고 "이용 종료 완료·환불금 지급 처리 중"으로 응답한다. 테스트 이름 끝에 `(QS-2-1)`를 붙인다.
-- [ ] T036 [US2] [A12] E2E: `test/refund-store.e2e-spec.ts`에 명세 2-2의 Given/When으로 요청하고 다음 결과를 검증한다: 환불금 지급 완료로 바뀌며 이용 종료·좌석 해제는 반복하지 않는다. 테스트 이름 끝에 `(QS-2-2)`를 붙인다.
-- [ ] T037 [US2] [A13] E2E: `test/refund-store.e2e-spec.ts`에 명세 2-3의 Given/When으로 요청하고 다음 결과를 검증한다: 기한이 지난 미사용권은 전액을 강제하지 않고 입력액으로 환불 확정·이용 종료·좌석 해제한다. 양수는 PG 취소 결과를 기다리는 중, 0원은 PG 없이 환불금 지급 완료·원장 0원 기록이다. 실결제액 10,000원에 환불액 0원·7,000원·10,000원을 각각 검증한다. 테스트 이름 끝에 `(QS-2-3)`를 붙인다.
-- [ ] T038 [US2] [A14] E2E: `test/refund-store.e2e-spec.ts`에 명세 2-3a의 Given/When으로 요청하고 다음 결과를 검증한다: 양수 금액은 1번, 0원은 4번과 같이 처리된다. 테스트 이름 끝에 `(QS-2-3a)`를 붙인다.
-- [ ] T039 [US2] [A15] E2E: `test/refund-store.e2e-spec.ts`에 명세 2-4의 Given/When으로 요청하고 다음 결과를 검증한다: PG에 요청하지 않고 환불 확정·이용 종료·좌석 해제·환불금 지급 완료·원장 0원 기록을 함께 처리한다. 테스트 이름 끝에 `(QS-2-4)`를 붙인다.
-- [ ] T040 [US2] [A16] E2E: `test/refund-store.e2e-spec.ts`에 명세 2-5의 Given/When으로 요청하고 다음 결과를 검증한다: 환불이 거부되고 이용권과 결제에는 변화가 없다. 테스트 이름 끝에 `(QS-2-5)`를 붙인다.
-- [ ] T041 [US2] [A17] E2E: `test/refund-store.e2e-spec.ts`에 명세 2-6의 Given/When으로 요청하고 다음 결과를 검증한다: 환불이 거부된다. 테스트 이름 끝에 `(QS-2-6)`를 붙인다.
-- [ ] T042 [US2] [A18] E2E: `test/refund-store.e2e-spec.ts`에 명세 2-7의 Given/When으로 요청하고 다음 결과를 검증한다: 자기 매장에서 찾을 수 없는 이용권으로 거부되고, 그 이용권이 다른 매장에 있다는 사실은 드러나지 않는다. 테스트 이름 끝에 `(QS-2-7)`를 붙인다.
-- [ ] T043 [US2] [A19] E2E: `test/refund-store.e2e-spec.ts`에 명세 2-7a의 Given/When으로 요청하고 다음 결과를 검증한다: 권한이 없어 거부된다. 테스트 이름 끝에 `(QS-2-7a)`를 붙인다.
-- [ ] T044 [US2] [A20] E2E: `test/refund-store.e2e-spec.ts`에 명세 2-8의 Given/When으로 요청하고 다음 결과를 검증한다: 사유가 없어도 전액 환불·이용 종료·좌석 해제가 확정되고 점주·시각이 기록된다. PG 결제 취소를 시작하며 "이용 종료 완료·환불금 지급 처리 중"으로 응답한다. 테스트 이름 끝에 `(QS-2-8)`를 붙인다.
-- [ ] T045 [US2] [A21] E2E: `test/refund-store.e2e-spec.ts`에 명세 2-8a의 Given/When으로 요청하고 다음 결과를 검증한다: 사용하지 않은 이용권은 전액만 환불할 수 있다는 사유로 거부되고 이용권과 결제에는 변화가 없다. 테스트 이름 끝에 `(QS-2-8a)`를 붙인다.
-- [ ] T046 [US2] [A22] E2E: `test/refund-store.e2e-spec.ts`에 명세 2-9의 Given/When으로 요청하고 다음 결과를 검증한다: 고객 환불과 같은 대상 여부 규칙의 오류 코드(`ALREADY_REFUNDED`, `REFUND_IN_PROGRESS`)로 거부된다. 테스트 이름 끝에 `(QS-2-9)`를 붙인다.
-- [ ] T047 [US2] [A23] E2E: `test/refund-store.e2e-spec.ts`에 명세 2-10의 Given/When으로 요청하고 다음 결과를 검증한다: "이용 중" 오류로 거부되고 이용과 이용권에는 변화가 없다. 테스트 이름 끝에 `(QS-2-10)`를 붙인다.
-- [ ] T048 [US2] [A24] E2E: `test/refund-store.e2e-spec.ts`에 명세 2-11의 Given/When으로 요청하고 다음 결과를 검증한다: 퇴실·시간권 사용 시간 차감·이용권 소멸·고정석 해제·환불 확정을 함께 처리한 뒤 PG 결제 취소를 시작한다. 응답은 "이용 종료 완료·환불금 지급 처리 중"이다. 테스트 이름 끝에 `(QS-2-11)`를 붙인다.
-- [ ] T049 [US2] [A25] E2E: `test/refund-store.e2e-spec.ts`에 명세 2-12의 Given/When으로 요청하고 다음 결과를 검증한다: 환불이 거부되고 퇴실도 되지 않는다. 테스트 이름 끝에 `(QS-2-12)`를 붙인다.
-- [ ] T050 [US2] [A26] E2E: `test/refund-store.e2e-spec.ts`에 명세 2-13의 Given/When으로 요청하고 다음 결과를 검증한다: PG 취소 요청 실패와 미지급 조치 필요를 기록하고 알린다. 이용 종료·퇴실·사용 시간 차감·고정석 해제는 유지한다. 이용권을 복구하거나 새 환불을 받지 않고 같은 환불 건의 지급을 재처리한다. 테스트 이름 끝에 `(QS-2-13)`를 붙인다.
+- [X] T035 [US2] [A11] E2E: `test/refund-store.e2e-spec.ts`에 명세 2-1의 Given/When으로 요청하고 다음 결과를 검증한다: 이용 종료·고정석 해제·그 금액의 환불이 함께 확정되고 점주·시각·사유·금액이 기록되며, PG 결제 취소를 시작하고 "이용 종료 완료·환불금 지급 처리 중"으로 응답한다. 테스트 이름 끝에 `(QS-2-1)`를 붙인다.
+- [X] T036 [US2] [A12] E2E: `test/refund-store.e2e-spec.ts`에 명세 2-2의 Given/When으로 요청하고 다음 결과를 검증한다: 환불금 지급 완료로 바뀌며 이용 종료·좌석 해제는 반복하지 않는다. 테스트 이름 끝에 `(QS-2-2)`를 붙인다.
+- [X] T037 [US2] [A13] E2E: `test/refund-store.e2e-spec.ts`에 명세 2-3의 Given/When으로 요청하고 다음 결과를 검증한다: 기한이 지난 미사용권은 전액을 강제하지 않고 입력액으로 환불 확정·이용 종료·좌석 해제한다. 양수는 PG 취소 결과를 기다리는 중, 0원은 PG 없이 환불금 지급 완료·원장 0원 기록이다. 실결제액 10,000원에 환불액 0원·7,000원·10,000원을 각각 검증한다. 테스트 이름 끝에 `(QS-2-3)`를 붙인다.
+- [X] T038 [US2] [A14] E2E: `test/refund-store.e2e-spec.ts`에 명세 2-3a의 Given/When으로 요청하고 다음 결과를 검증한다: 양수 금액은 1번, 0원은 4번과 같이 처리된다. 테스트 이름 끝에 `(QS-2-3a)`를 붙인다.
+- [X] T039 [US2] [A15] E2E: `test/refund-store.e2e-spec.ts`에 명세 2-4의 Given/When으로 요청하고 다음 결과를 검증한다: PG에 요청하지 않고 환불 확정·이용 종료·좌석 해제·환불금 지급 완료·원장 0원 기록을 함께 처리한다. 테스트 이름 끝에 `(QS-2-4)`를 붙인다.
+- [X] T040 [US2] [A16] E2E: `test/refund-store.e2e-spec.ts`에 명세 2-5의 Given/When으로 요청하고 다음 결과를 검증한다: 환불이 거부되고 이용권과 결제에는 변화가 없다. 테스트 이름 끝에 `(QS-2-5)`를 붙인다.
+- [X] T041 [US2] [A17] E2E: `test/refund-store.e2e-spec.ts`에 명세 2-6의 Given/When으로 요청하고 다음 결과를 검증한다: 환불이 거부된다. 테스트 이름 끝에 `(QS-2-6)`를 붙인다.
+- [X] T042 [US2] [A18] E2E: `test/refund-store.e2e-spec.ts`에 명세 2-7의 Given/When으로 요청하고 다음 결과를 검증한다: 자기 매장에서 찾을 수 없는 이용권으로 거부되고, 그 이용권이 다른 매장에 있다는 사실은 드러나지 않는다. 테스트 이름 끝에 `(QS-2-7)`를 붙인다.
+- [X] T043 [US2] [A19] E2E: `test/refund-store.e2e-spec.ts`에 명세 2-7a의 Given/When으로 요청하고 다음 결과를 검증한다: 권한이 없어 거부된다. 테스트 이름 끝에 `(QS-2-7a)`를 붙인다.
+- [X] T044 [US2] [A20] E2E: `test/refund-store.e2e-spec.ts`에 명세 2-8의 Given/When으로 요청하고 다음 결과를 검증한다: 사유가 없어도 전액 환불·이용 종료·좌석 해제가 확정되고 점주·시각이 기록된다. PG 결제 취소를 시작하며 "이용 종료 완료·환불금 지급 처리 중"으로 응답한다. 테스트 이름 끝에 `(QS-2-8)`를 붙인다.
+- [X] T045 [US2] [A21] E2E: `test/refund-store.e2e-spec.ts`에 명세 2-8a의 Given/When으로 요청하고 다음 결과를 검증한다: 사용하지 않은 이용권은 전액만 환불할 수 있다는 사유로 거부되고 이용권과 결제에는 변화가 없다. 테스트 이름 끝에 `(QS-2-8a)`를 붙인다.
+- [X] T046 [US2] [A22] E2E: `test/refund-store.e2e-spec.ts`에 명세 2-9의 Given/When으로 요청하고 다음 결과를 검증한다: 고객 환불과 같은 대상 여부 규칙의 오류 코드(`ALREADY_REFUNDED`, `REFUND_IN_PROGRESS`)로 거부된다. 테스트 이름 끝에 `(QS-2-9)`를 붙인다.
+- [X] T047 [US2] [A23] E2E: `test/refund-store.e2e-spec.ts`에 명세 2-10의 Given/When으로 요청하고 다음 결과를 검증한다: "이용 중" 오류로 거부되고 이용과 이용권에는 변화가 없다. 테스트 이름 끝에 `(QS-2-10)`를 붙인다.
+- [X] T048 [US2] [A24] E2E: `test/refund-store.e2e-spec.ts`에 명세 2-11의 Given/When으로 요청하고 다음 결과를 검증한다: 퇴실·시간권 사용 시간 차감·이용권 소멸·고정석 해제·환불 확정을 함께 처리한 뒤 PG 결제 취소를 시작한다. 응답은 "이용 종료 완료·환불금 지급 처리 중"이다. 테스트 이름 끝에 `(QS-2-11)`를 붙인다.
+- [X] T049 [US2] [A25] E2E: `test/refund-store.e2e-spec.ts`에 명세 2-12의 Given/When으로 요청하고 다음 결과를 검증한다: 환불이 거부되고 퇴실도 되지 않는다. 테스트 이름 끝에 `(QS-2-12)`를 붙인다.
+- [X] T050 [US2] [A26] E2E: `test/refund-store.e2e-spec.ts`에 명세 2-13의 Given/When으로 요청하고 다음 결과를 검증한다: PG 취소 요청 실패와 미지급 조치 필요를 기록하고 알린다. 이용 종료·퇴실·사용 시간 차감·고정석 해제는 유지한다. 이용권을 복구하거나 새 환불을 받지 않고 같은 환불 건의 지급을 재처리한다. 테스트 이름 끝에 `(QS-2-13)`를 붙인다.
 
 ### 단위 테스트와 구현
 
-- [ ] T051 [US2] [U98] [U99] [U100] [U101] [U102] [U103] [U104] [U105] [U106] [U107] [U108] [U109] [U110] [U111] [U112] [U113] [U114] [U115] [U116] [U117] [U118] [U119] [U120] [U121] `src/refund/refund-store.service.spec.ts`, `src/session-lifecycle/session-lifecycle.service.spec.ts`에 금액 0/상한/상한 초과·사유 누락·미사용 기한 경계·동의 사이 퇴실·기존 정지 종료 테스트를 작성한다.
-- [ ] T052 [US2] [U98] [U99] [U100] [U101] [U102] [U103] [U104] [U105] [U106] [U107] [U109] `src/refund/dto/store-refund.dto.ts`, `src/refund/refund-policy.ts`에 금액은 원 단위 정수이고 “0 <= amount <= 실결제액”, 사유 제공 시 “trim 후 1~500자”를 적용한다. 사용 또는 기한 초과는 사유 필수, 미사용 기한 안은 전액만·사유 선택이다.
-- [ ] T053 [US2] [U119] [U120] `src/session-lifecycle/session-lifecycle.service.ts`, `src/session-lifecycle/session-lifecycle.repository.ts`에 모든 환불 검증 후 퇴실·기존 규칙의 시간 차감·정지 기록 종료·고정석 배정 해제를 실행한다. 이미 퇴실한 세션을 다시 차감하지 않고 정기권 기한을 늘리지 않는다.
-- [ ] T054 [US2] [U108] [U110] [U111] [U112] [U113] [U114] [U115] `src/refund/refund-store.service.ts`, `src/refund/refund.controller.ts`에 OWNER 현재 매장 POST /refund/shop/:shopId를 구현한다. 이용 중 퇴실 동의 누락은 TICKET_IN_USE, 잘못된 금액/사유는 퇴실 전에 거절한다. 점주·금액·사유·동의 시각을 저장하고 MANAGER의 새 매장 환불은 거부한다.
-- [ ] T055 [US2] [U116] [U117] [U118] `src/refund/refund-acceptance.service.ts`, `src/ledger/refund-ledger.repository.ts`에 0원 매장 환불의 이용 종료·PAID·원장 0원 1건을 함께 저장한다. PG 요청을 생성하거나 호출하지 않고 200을 반환한다.
-- [ ] T056 [US2] [U121] `src/refund/refund-store.service.ts`, `src/usage-session/usage-session-processor.ts`에 커밋 뒤 종료 작업 제거와 남은 작업의 안전한 종료를 연결한다. PG 실패와 작업 제거 실패로 이용권·배정·시간을 복구하지 않는다. 정상 PG 결과 반영 검증은 US4와 결합한다.
+- [X] T051 [US2] [U98] [U99] [U100] [U101] [U102] [U103] [U104] [U105] [U106] [U107] [U108] [U109] [U110] [U111] [U112] [U113] [U114] [U115] [U116] [U117] [U118] [U119] [U120] [U121] `src/refund/refund-store.service.spec.ts`, `src/session-lifecycle/session-lifecycle.service.spec.ts`에 금액 0/상한/상한 초과·사유 누락·미사용 기한 경계·동의 사이 퇴실·기존 정지 종료 테스트를 작성한다.
+- [X] T052 [US2] [U98] [U99] [U100] [U101] [U102] [U103] [U104] [U105] [U106] [U107] [U109] `src/refund/dto/store-refund.dto.ts`, `src/refund/refund-policy.ts`에 금액은 원 단위 정수이고 “0 <= amount <= 실결제액”, 사유 제공 시 “trim 후 1~500자”를 적용한다. 사용 또는 기한 초과는 사유 필수, 미사용 기한 안은 전액만·사유 선택이다.
+- [X] T053 [US2] [U119] [U120] `src/session-lifecycle/session-lifecycle.service.ts`, `src/session-lifecycle/session-lifecycle.repository.ts`에 모든 환불 검증 후 퇴실·기존 규칙의 시간 차감·정지 기록 종료·고정석 배정 해제를 실행한다. 이미 퇴실한 세션을 다시 차감하지 않고 정기권 기한을 늘리지 않는다.
+- [X] T054 [US2] [U108] [U110] [U111] [U112] [U113] [U114] [U115] `src/refund/refund-store.service.ts`, `src/refund/refund.controller.ts`에 OWNER 현재 매장 POST /refund/shop/:shopId를 구현한다. 이용 중 퇴실 동의 누락은 TICKET_IN_USE, 잘못된 금액/사유는 퇴실 전에 거절한다. 점주·금액·사유·동의 시각을 저장하고 MANAGER의 새 매장 환불은 거부한다.
+- [X] T055 [US2] [U116] [U117] [U118] `src/refund/refund-acceptance.service.ts`, `src/ledger/refund-ledger.repository.ts`에 0원 매장 환불의 이용 종료·PAID·원장 0원 1건을 함께 저장한다. PG 요청을 생성하거나 호출하지 않고 200을 반환한다.
+- [X] T056 [US2] [U121] `src/refund/refund-store.service.ts`, `src/usage-session/usage-session-processor.ts`에 커밋 뒤 종료 작업 제거와 남은 작업의 안전한 종료를 연결한다. PG 실패와 작업 제거 실패로 이용권·배정·시간을 복구하지 않는다. 정상 PG 결과 반영 검증은 US4와 결합한다.
 
-- [ ] T180 [US2] [A11] [A12] [A13] [A14] [A15] [A16] [A17] [A18] [A19] [A20] [A21] [A22] [A23] [A24] [A25] [A26] `test/refund-store.e2e-spec.ts`의 사용자 스토리 2 인수 테스트 A11부터 A26까지 16개가 모두 통과하는지 실행해 확인한 뒤에만 이 스토리를 완료로 표시한다.
+- [X] T180 [US2] [A11] [A12] [A13] [A14] [A15] [A16] [A17] [A18] [A19] [A20] [A21] [A22] [A23] [A24] [A25] [A26] `test/refund-store.e2e-spec.ts`의 사용자 스토리 2 인수 테스트 A11부터 A26까지 16개가 모두 통과하는지 실행해 확인한 뒤에만 이 스토리를 완료로 표시한다.
 
 **검수 관문**: T035부터 T056까지의 작업과 T180 작업을 마치면 실행 규칙의 Phase 검수 절차에 따라 Codex 검수를 받는다. "통과" 판정 전에는 다음 Phase로 넘어가지 않는다.
 
