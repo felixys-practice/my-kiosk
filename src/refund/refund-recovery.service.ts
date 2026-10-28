@@ -59,9 +59,12 @@ export class RefundRecoveryService {
       now,
       this.config('recoveryBatchSize'),
     );
-    // 예정 시각 순으로 한 건씩 조회한다(각 건은 담당 토큰으로 중복 실행을 막는다)
+    // 예정 시각 순으로 한 건씩 조회한다(각 건은 담당 토큰으로 중복 실행을 막는다).
+    // 건마다 경과 시간을 반영한 시각을 써서 뒤쪽 건이 이미 지난 담당 기한으로 시작하지 않게 한다
+    const startedAt = Date.now();
     for (const paymentCancelId of due) {
-      await this.inquireAttempt(paymentCancelId, now);
+      const itemNow = new Date(now.getTime() + (Date.now() - startedAt));
+      await this.inquireAttempt(paymentCancelId, itemNow);
     }
   }
 

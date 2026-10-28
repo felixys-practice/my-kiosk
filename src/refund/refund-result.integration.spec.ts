@@ -2156,4 +2156,28 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       }),
     );
   });
+
+  it('일반 정기 탐색의 뒤쪽 건은 앞 건 조회에 걸린 시간을 반영한 시각으로 조회 담당을 정한다', async () => {
+    const base = isolatedSweepBase();
+    await createAwaitingInquiry(0, base);
+    const later = await createAwaitingInquiry(0, new Date(base.getTime() + 1));
+    // 앞 건의 PG 조회가 1.1초 걸린다
+    pgGateway.inquireCancel
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) =>
+            setTimeout(() => resolve({ result: 'IN_PROGRESS' }), 1_100),
+          ),
+      )
+      .mockResolvedValue({ result: 'IN_PROGRESS' });
+
+    await app.get(RefundRecoveryService).sweep(later.dueAt);
+
+    const attempt = await prisma.paymentCancel.findUniqueOrThrow({
+      where: { id: later.paymentCancelId },
+    });
+    expect(attempt.lastInquiryAt!.getTime()).toBeGreaterThanOrEqual(
+      later.dueAt.getTime() + 1_000,
+    );
+  });
 });

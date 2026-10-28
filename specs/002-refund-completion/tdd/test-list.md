@@ -268,7 +268,8 @@ suite_baseline: green
 | U358 | 환불 접수 멱등 기록은 PG 전송 결과 반영 뒤 최종 응답으로 완료하고, 전송 중 같은 키는 IDEMPOTENCY_REQUEST_IN_PROGRESS, 중단 뒤에는 저장된 환불로 응답을 만든다 (Phase 7a 검수 1, 사용자 결정 A) | FR-035 | example | DONE | `src/refund/refund-acceptance.integration.spec.ts` › PG 전송 중에 같은 키로…, 확정은 커밋됐지만 PG 전송 단계 전에 중단되면… |
 | U359 | 커밋 뒤 단계가 있는 처리를 이어받으면, 이어받기 전에 읽은 기록이 아니라 이어받은 뒤의 최신 기록으로 처리 커밋 여부를 판단한다(이어받기가 기다리는 동안 처리가 커밋된 경우 재처리하지 않음) (Phase 7a 검수 2차 1) | FR-035 | example | PENDING | |
 | U360 | 담당을 잃은 요청은 자기 최종 응답을 확정하지 않고, 이어받은 요청이 저장한 최초 응답을 돌려준다 (Phase 7a 검수 2차 2) | FR-035 | example | PENDING | |
-| U361 | 일반 정기 탐색은 건마다 경과 시간을 반영한 시각으로 조회 담당을 정하고, 장애 복구 확인은 탐색이 끝난 시각으로 시작한다 (Phase 7a 검수 2차 3) | FR-022 | example | PENDING | |
+| U361 | 일반 정기 탐색은 건마다 경과 시간을 반영한 시각으로 조회 담당을 정한다 (Phase 7a 검수 2차 3) | FR-022 | example | PENDING | |
+| U362 | 정기 탐색 작업은 장애 복구 확인을 탐색이 끝난 뒤의 현재 시각으로 시작한다 (Phase 7a 검수 2차 3, U361에서 분리) | FR-026 | example | PENDING | |
 
 ### `src/refund/refund-idempotency.service.ts`
 
