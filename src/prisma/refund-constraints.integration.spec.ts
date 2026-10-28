@@ -520,6 +520,19 @@ describe('환불 저장 모델 DB 제약', () => {
       expect(attempt.orderItemId).toBeNull();
     });
 
+    it('환불에 연결된 PG 취소 요청의 주문 항목이 환불의 주문 항목과 다르면 저장이 실패한다', async () => {
+      const refund = await createAcceptedRefund();
+      const other = await createPaidItem();
+
+      await expect(
+        prisma.paymentCancel.create({
+          data: paymentCancelAttempt(refund, {
+            orderItemId: other.orderItemId,
+          }),
+        }),
+      ).rejects.toThrow(/payment_cancels_refund_target_check/);
+    });
+
     it('PG가 확인한 실제 취소액이 -1이면 저장이 실패한다', async () => {
       const refund = await createAcceptedRefund();
 
