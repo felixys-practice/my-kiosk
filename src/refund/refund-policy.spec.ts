@@ -143,6 +143,18 @@ describe('evaluateCustomerRefund', () => {
       );
     }
 
+    it('신청 시각이 시간권 소진 기한과 같으면 기한 안으로 허용된다', () => {
+      const ticket = timeTicket(purchasedMinutes);
+
+      const decision = evaluateCustomerRefund(
+        ticket,
+        customerId,
+        new Date(ticket.ticket.minuteExpireDeadline!.getTime()),
+      );
+
+      expect(decision).toMatchObject({ eligible: true });
+    });
+
     it('신청 시각이 시간권 소진 기한보다 1ms 늦으면 EXPIRED_TICKET으로 판정된다', () => {
       const ticket = timeTicket(purchasedMinutes);
 
