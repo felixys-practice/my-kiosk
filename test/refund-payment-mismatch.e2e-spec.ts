@@ -83,7 +83,7 @@ describe('승인 금액 불일치의 자동 취소 (E2E)', () => {
     const approvedAmount = awaiting.amount - shortfall;
     pgStub.respondToSend({ result: 'ACCEPTED' });
 
-    await sendApprovalCallback(awaiting, approvedAmount).expect(201);
+    await sendApprovalCallback(awaiting, approvedAmount).expect(200);
 
     const payment = await ctx.prisma.payment.findUniqueOrThrow({
       where: { id: awaiting.paymentId },
@@ -134,7 +134,7 @@ describe('승인 금액 불일치의 자동 취소 (E2E)', () => {
     const awaiting = await ctx.orderPeriodAwaitingApproval();
     const approvedAmount = awaiting.amount - shortfall;
     pgStub.respondToSend({ result: 'ACCEPTED' });
-    await sendApprovalCallback(awaiting, approvedAmount).expect(201);
+    await sendApprovalCallback(awaiting, approvedAmount).expect(200);
     const attempt = (await findSystemRefund(awaiting.paymentId))!
       .paymentCancels[0];
 
@@ -169,7 +169,7 @@ describe('승인 금액 불일치의 자동 취소 (E2E)', () => {
     const awaiting = await ctx.orderPeriodAwaitingApproval();
     const approvedAmount = awaiting.amount - shortfall;
     pgStub.respondToSend({ result: 'UNKNOWN', reason: '응답 시간 초과' });
-    await sendApprovalCallback(awaiting, approvedAmount).expect(201);
+    await sendApprovalCallback(awaiting, approvedAmount).expect(200);
     const attempt = (await findSystemRefund(awaiting.paymentId))!
       .paymentCancels[0];
     pgStub

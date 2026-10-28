@@ -498,7 +498,7 @@ describe('TicketPauseController (E2E)', () => {
           amount: payment.amount,
           reason: null,
         })
-        .expect(201);
+        .expect(200);
 
       const ticket = await prisma.ticket.findFirstOrThrow({
         where: { orderItem: { orderId } },

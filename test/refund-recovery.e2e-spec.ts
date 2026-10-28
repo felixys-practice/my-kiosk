@@ -880,7 +880,7 @@ describe('PG 결과 조회·재전송·장애 복구 (E2E)', () => {
         amount: approvedAmount,
         reason: null,
       })
-      .expect(201);
+      .expect(200);
     const refund = await ctx.prisma.refund.findFirstOrThrow({
       where: { paymentId: awaiting.paymentId },
       include: { paymentCancels: true },

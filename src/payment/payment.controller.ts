@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
   Param,
   ParseUUIDPipe,
   Post,
@@ -26,7 +27,12 @@ export class PaymentController {
     return await this.service.getPayment(id);
   }
 
+  /**
+   * PG 결제 결과 콜백을 받는다 (환불 명세 API 계약 §2·§7: 200 수신 확인)
+   * @param dto 콜백 본문
+   */
   @Post('callback')
+  @HttpCode(200)
   async callbackPayment(@Body() dto: PgCallbackDto) {
     await this.service.callbackPayment({
       success: dto.success,

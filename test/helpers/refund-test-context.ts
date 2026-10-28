@@ -324,7 +324,7 @@ export async function createRefundTestContext(options: {
         amount,
         reason: null,
       })
-      .expect(201);
+      .expect(200);
 
     // 발급된 이용권 조회
     const ticket = await prisma.ticket.findFirstOrThrow({

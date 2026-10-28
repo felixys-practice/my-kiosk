@@ -279,7 +279,7 @@ describe('좌석 타입 (E2E)', () => {
         amount: payment.amount,
         reason: success ? null : 'E2E 승인 실패',
       })
-      .expect(201);
+      .expect(200);
   }
 
   /**
