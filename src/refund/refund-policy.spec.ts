@@ -480,4 +480,36 @@ describe('evaluateStoreRefund', () => {
 
     expect(decision).toEqual({ eligible: false, code: 'TICKET_NOT_FOUND' });
   });
+  it('지급 완료된 확정 환불이 있으면 매장 환불도 ALREADY_REFUNDED로 판정된다', () => {
+    const decision = evaluateStoreRefund(
+      usedCandidate({
+        existingRefunds: [
+          {
+            decisionStatus: RefundDecisionStatus.ACCEPTED,
+            payoutStatus: RefundPayoutStatus.PAID,
+          },
+        ],
+      }),
+      { amount: 1000, reason: '보상' },
+      now,
+    );
+
+    expect(decision).toEqual({ eligible: false, code: 'ALREADY_REFUNDED' });
+  });
+  it('지급이 끝나지 않은 확정 환불이 있으면 매장 환불도 REFUND_IN_PROGRESS로 판정된다', () => {
+    const decision = evaluateStoreRefund(
+      usedCandidate({
+        existingRefunds: [
+          {
+            decisionStatus: RefundDecisionStatus.ACCEPTED,
+            payoutStatus: RefundPayoutStatus.ACTION_REQUIRED,
+          },
+        ],
+      }),
+      { amount: 1000, reason: '보상' },
+      now,
+    );
+
+    expect(decision).toEqual({ eligible: false, code: 'REFUND_IN_PROGRESS' });
+  });
 });
