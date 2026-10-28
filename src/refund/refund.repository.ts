@@ -32,6 +32,30 @@ export type CustomerRefundTarget = {
   shopId: string; // 원래 주문의 매장(원장 기록용)
 };
 
+/** PG 결과를 반영할 PG 취소 요청과 그 환불 */
+export type AttemptForResult = {
+  id: string;
+  status: PaymentCancelStatus;
+  claimToken: string | null;
+  refund: {
+    id: string;
+    amount: number; // 확정된 환불 금액(불변)
+    paidAmount: number; // 지금까지 실제 지급 합계
+    orderId: string;
+    shopId: string;
+  };
+};
+
+/** 환불 지급 상태 갱신 내용 */
+export type RefundPayoutUpdate = {
+  paidAmount?: number;
+  payoutStatus?: RefundPayoutStatus;
+  paidAt?: Date | null;
+  reviewRequired?: boolean;
+  actionCode?: string | null;
+  actionReason?: string | null;
+};
+
 /** 확정할 환불 내용 */
 export type AcceptedRefundInput = {
   paymentId: string;
@@ -246,6 +270,88 @@ export class RefundRepository {
       refundId: refund.id,
       paymentCancelId: refund.paymentCancels[0]?.id ?? null,
     };
+  }
+
+  /**
+   * PG 결과를 반영할 PG 취소 요청과 그 환불을 조회한다
+   * @param paymentCancelId PG 취소 요청 ID
+   * @param tx 지급 결과 반영 트랜잭션
+   * @returns PG 취소 요청과 환불, 없거나 새 환불에 속하지 않으면 null
+   */
+  async findAttemptForResult(
+    paymentCancelId: string,
+    tx: TransactionClient,
+  ): Promise<AttemptForResult | null> {
+    const attempt = await tx.paymentCancel.findUnique({
+      where: { id: paymentCancelId },
+      select: {
+        id: true,
+        status: true,
+        claimToken: true,
+        refund: {
+          select: {
+            id: true,
+            amount: true,
+            paidAmount: true,
+            payment: {
+              select: { order: { select: { id: true, shopId: true } } },
+            },
+          },
+        },
+      },
+    });
+    if (!attempt?.refund) return null;
+    return {
+      id: attempt.id,
+      status: attempt.status,
+      claimToken: attempt.claimToken,
+      refund: {
+        id: attempt.refund.id,
+        amount: attempt.refund.amount,
+        paidAmount: attempt.refund.paidAmount,
+        orderId: attempt.refund.payment.order.id,
+        shopId: attempt.refund.payment.order.shopId,
+      },
+    };
+  }
+
+  /**
+   * PG 취소 요청을 성공으로 확정하고 실제 취소액을 기록한다
+   * @param tx 지급 결과 반영 트랜잭션
+   * @param id PG 취소 요청 ID
+   * @param result PG 취소 거래 ID·실제 취소액·확정 시각
+   */
+  async markAttemptSucceeded(
+    tx: TransactionClient,
+    id: string,
+    result: { pgTransactionId: string; actualAmount: number; now: Date },
+  ): Promise<void> {
+    await tx.paymentCancel.update({
+      where: { id },
+      data: {
+        status: PaymentCancelStatus.SUCCEEDED,
+        pgTransactionId: result.pgTransactionId,
+        actualAmount: result.actualAmount,
+        cancelledAt: result.now,
+        nextInquiryAt: null,
+        claimToken: null,
+        claimUntil: null,
+      },
+    });
+  }
+
+  /**
+   * 환불의 지급 합계와 지급 상태를 갱신한다
+   * @param tx 지급 결과 반영 트랜잭션
+   * @param refundId 환불 ID
+   * @param update 새 지급 합계·상태·완료 시각·검토·조치 사유
+   */
+  async updateRefundPayout(
+    tx: TransactionClient,
+    refundId: string,
+    update: RefundPayoutUpdate,
+  ): Promise<void> {
+    await tx.refund.update({ where: { id: refundId }, data: update });
   }
 
   /**
