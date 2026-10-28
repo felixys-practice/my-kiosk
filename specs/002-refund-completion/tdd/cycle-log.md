@@ -973,3 +973,27 @@ U10~U15를 마친 뒤, 관계 검증의 비교 대상 설정을 생략하면 정
   - `IdempotencyRecord.refundId`는 선택 필드로 두어 Phase 2 단위 테스트의 기록 대역을 바꾸지 않았다.
 - 결과: 단위 491 passed, E2E 124 passed(`db55d74`).
 
+## Phase 7a Codex 검수 2차 (2026-10-29)
+
+- 범위 `44aab82..c09ccd7`. 판정 **수정 필요**: P1 2건, P2 1건.
+  1. [P1] 이어받기 뒤에도 이어받기 전 조회값(`existing.refundId`)으로 커밋 여부를 판단한다. 이어받기가 이전 처리 트랜잭션의 커밋을 기다렸다면 재처리 → 중복 거절 → 기록 삭제로 이어진다.
+  2. [P1] `completeAfterCommit`이 갱신 0건을 무시해, 담당을 잃은 요청이 자기 응답(ACTION_REQUIRED)을 돌려준다. 이어받은 요청은 PENDING을 저장했으므로 응답이 어긋난다.
+  3. [P2] 일반 정기 탐색과 처리기가 같은 `now`를 재사용해, 뒤쪽 작업이 지난 담당 기한으로 시작할 수 있다.
+- 사용자 결정(3번 처리기): **"U350 단언 변경"**. 장애 복구는 탐색이 끝난 뒤의 현재 시각으로 시작하고, U350은 '복구 시각 ≥ 탐색 시각'으로 바꾼다.
+
+## Phase 7a 검수 2차 수정 사이클 (2026-10-29)
+
+| 동작 | red(실행 명령 → 결정적 줄) | green | 커밋 |
+|---|---|---|---|
+| U359 | `npx jest src/refund/refund-idempotency.service.spec.ts -t '이어받기가 기다리는 동안'` → `- "reprocessed": 0`(재처리 발생, 결과 undefined) | 이어받기 성공 뒤 `find(scope)`로 최신 기록을 다시 읽어 `refundId`를 판단한다. 단위 492, E2E 124 | `0641bf5` |
+| U360 | `npx jest src/refund/refund-acceptance.integration.spec.ts -t '늦게 끝난 최초 요청은'` → `+ "payoutStatus": "ACTION_REQUIRED"`, `- "payoutStatus": "PENDING"` | `completeAfterCommit`이 갱신 여부를 돌려준다. `completeOrReplay`는 실패하면 저장 기록이 COMPLETED일 때 그 응답을, 아니면 409 IN_PROGRESS를 낸다. 재구성 경로도 같은 함수를 쓴다. 단위 493, E2E 124 | `2d48479` |
+| U361 | `… refund-result.integration.spec.ts -t '일반 정기 탐색의 뒤쪽 건은'` → `Expected: >= 852076861001`, `Received: 852076860001` | `sweep`이 건마다 `itemNow = now + 경과`를 쓴다. 단위 494, E2E 124 | `b855399` |
+| U362 | `npx jest src/refund/refund-recovery.processor.spec.ts` → `Expected: >= 45`, `Received: 0` | 처리기가 `sweep(new Date())` 뒤 `recoverQueryFailed(new Date())`를 호출한다. 단위 495, E2E 124 | `ad4b1d2` |
+
+- 리팩터: 필요 없음.
+- 이탈·메모:
+  - U361은 처리기 부분이 기존 U350 단언 변경을 요구해 U361/U362로 나눴다.
+  - U350 단언은 사용자 결정에 따라 U362 구현 전에 먼저 바꿨다. 바꾼 단언은 현재 코드에서도 통과하는 것을 확인했다.
+  - U359는 실제 DB에서 이어받기의 행 잠금 대기를 결정적으로 재현하기 어렵다. 그래서 단위 테스트의 저장소 대역으로 '이어받기 전 조회=환불 없음, 뒤 조회=환불 있음'을 재현했다.
+- 결과: 단위 495 passed, E2E 124 passed(`ad4b1d2`).
+

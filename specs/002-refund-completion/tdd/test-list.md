@@ -266,10 +266,10 @@ suite_baseline: green
 | U356 | BATCH의 뒤쪽 건은 경과 시간을 반영한 시각으로 조회 담당을 정한다 (Phase 7a 검수 2) | FR-026 | example | DONE | `src/refund/refund-result.integration.spec.ts` › BATCH의 뒤쪽 건은 앞 건 조회에 걸린 시간을 반영한 시각으로 조회 담당을 정한다 |
 | U357 | 개별 확인 재전송은 실행자·시각·개별 확인 재전송임을 거래 로그에 남긴다 (Phase 7a 검수 5) | FR-054 | example | DONE | `src/refund/refund-result.integration.spec.ts` › 개별 확인 재전송은 실행자·시각·개별 확인 재전송임을 거래 로그에 남긴다 |
 | U358 | 환불 접수 멱등 기록은 PG 전송 결과 반영 뒤 최종 응답으로 완료하고, 전송 중 같은 키는 IDEMPOTENCY_REQUEST_IN_PROGRESS, 중단 뒤에는 저장된 환불로 응답을 만든다 (Phase 7a 검수 1, 사용자 결정 A) | FR-035 | example | DONE | `src/refund/refund-acceptance.integration.spec.ts` › PG 전송 중에 같은 키로…, 확정은 커밋됐지만 PG 전송 단계 전에 중단되면… |
-| U359 | 커밋 뒤 단계가 있는 처리를 이어받으면, 이어받기 전에 읽은 기록이 아니라 이어받은 뒤의 최신 기록으로 처리 커밋 여부를 판단한다(이어받기가 기다리는 동안 처리가 커밋된 경우 재처리하지 않음) (Phase 7a 검수 2차 1) | FR-035 | example | PENDING | |
-| U360 | 담당을 잃은 요청은 자기 최종 응답을 확정하지 않고, 이어받은 요청이 저장한 최초 응답을 돌려준다 (Phase 7a 검수 2차 2) | FR-035 | example | PENDING | |
-| U361 | 일반 정기 탐색은 건마다 경과 시간을 반영한 시각으로 조회 담당을 정한다 (Phase 7a 검수 2차 3) | FR-022 | example | PENDING | |
-| U362 | 정기 탐색 작업은 장애 복구 확인을 탐색이 끝난 뒤의 현재 시각으로 시작한다 (Phase 7a 검수 2차 3, U361에서 분리) | FR-026 | example | PENDING | |
+| U359 | 커밋 뒤 단계가 있는 처리를 이어받으면, 이어받기 전에 읽은 기록이 아니라 이어받은 뒤의 최신 기록으로 처리 커밋 여부를 판단한다(이어받기가 기다리는 동안 처리가 커밋된 경우 재처리하지 않음) (Phase 7a 검수 2차 1) | FR-035 | example | DONE | `src/refund/refund-idempotency.service.spec.ts` › 커밋 뒤 단계가 있는 처리 › 이어받기가 기다리는 동안 처리가 커밋됐으면… |
+| U360 | 담당을 잃은 요청은 자기 최종 응답을 확정하지 않고, 이어받은 요청이 저장한 최초 응답을 돌려준다 (Phase 7a 검수 2차 2) | FR-035 | example | DONE | `src/refund/refund-acceptance.integration.spec.ts` › PG 전송이 처리 기한을 넘겨 다른 요청이 이어받아 완료했으면… |
+| U361 | 일반 정기 탐색은 건마다 경과 시간을 반영한 시각으로 조회 담당을 정한다 (Phase 7a 검수 2차 3) | FR-022 | example | DONE | `src/refund/refund-result.integration.spec.ts` › 일반 정기 탐색의 뒤쪽 건은 앞 건 조회에 걸린 시간을 반영한 시각으로 조회 담당을 정한다 |
+| U362 | 정기 탐색 작업은 장애 복구 확인을 탐색이 끝난 뒤의 현재 시각으로 시작한다 (Phase 7a 검수 2차 3, U361에서 분리) | FR-026 | example | DONE | `src/refund/refund-recovery.processor.spec.ts` › 장애 복구 확인은 탐색이 끝난 뒤의 현재 시각으로 시작한다 |
 
 ### `src/refund/refund-idempotency.service.ts`
 
