@@ -6,6 +6,7 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  ParseUUIDPipe,
   Post,
   Query,
   Res,
@@ -14,7 +15,13 @@ import type { Response } from 'express';
 import { CurrentUser } from 'src/auth/decorators/current-user.decorator';
 import type { JwtValidationResult } from 'src/auth/interfaces/jwt-payload.interface';
 import { RefundService } from './refund.service';
-import { GetRefundQueryDto, RefundDto, PgRefundCallbackDto } from './dto';
+import {
+  GetRefundQueryDto,
+  RefundDto,
+  PgRefundCallbackDto,
+  StoreRefundDto,
+} from './dto';
+import { RefundStoreService } from './refund-store.service';
 import { RefundAcceptanceService } from './refund-acceptance.service';
 import { RefundResultService } from './refund-result.service';
 
@@ -24,6 +31,7 @@ export class RefundController {
     private readonly refundService: RefundService,
     private readonly refundAcceptanceService: RefundAcceptanceService,
     private readonly refundResultService: RefundResultService,
+    private readonly refundStoreService: RefundStoreService,
   ) {}
 
   /**
@@ -47,6 +55,40 @@ export class RefundController {
       {
         ticketId: dto.ticketId,
         consentToTerminateTicket: dto.consentToTerminateTicket,
+        idempotencyKey,
+      },
+    );
+    res.status(result.status);
+    return result.body;
+  }
+
+  /**
+   * 점주가 자기 매장 이용권의 환불을 확정한다 (API 계약 §4 매장: POST /refund/shop/:shopId)
+   * - 같은 Idempotency-Key 재요청은 DB 멱등 기록의 최초 응답을 돌려준다
+   * @param user 요청한 점주(JWT)
+   * @param shopId 요청 매장
+   * @param dto 이용권·금액·사유·종료/퇴실 동의
+   * @param res 응답 상태 지정용(양수 접수 202, 0원 200)
+   * @param idempotencyKey 선택 멱등 키
+   * @returns 접수 응답 본문
+   */
+  @Post('shop/:shopId')
+  async storeRefund(
+    @CurrentUser() user: JwtValidationResult,
+    @Param('shopId', ParseUUIDPipe) shopId: string,
+    @Body() dto: StoreRefundDto,
+    @Res({ passthrough: true }) res: Response,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
+    const result = await this.refundStoreService.acceptStoreRefund(
+      { userId: user.userId, role: user.role },
+      shopId,
+      {
+        ticketId: dto.ticketId,
+        amount: dto.amount,
+        reason: dto.reason,
+        consentToTerminateTicket: dto.consentToTerminateTicket,
+        consentToEndSession: dto.consentToEndSession,
         idempotencyKey,
       },
     );
