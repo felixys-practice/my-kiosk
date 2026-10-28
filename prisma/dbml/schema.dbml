@@ -254,8 +254,8 @@ Table payment_cancels {
   refund refunds
   requestedBy user
   payment payments [not null]
-  orderItemId String [not null]
-  orderItem order_items [not null]
+  orderItemId String
+  orderItem order_items
   locks refund_locks [not null]
   ledger ledger
   notifications refund_notifications [not null]
@@ -752,7 +752,7 @@ Ref: payment_cancels.requestedById > user.id [delete: Restrict]
 
 Ref: payment_cancels.paymentId > payments.id
 
-Ref: payment_cancels.orderItemId > order_items.id
+Ref: payment_cancels.orderItemId > order_items.id [delete: Restrict]
 
 Ref: refund_locks.orderItemId - order_items.id
 
