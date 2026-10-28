@@ -349,4 +349,17 @@ describe('evaluateStoreRefund', () => {
       code: 'REFUND_AMOUNT_EXCEEDED',
     });
   });
+  it('사용 이력이 있는 이용권의 매장 환불 금액이 실결제액과 같으면 허용된다', () => {
+    const decision = evaluateStoreRefund(
+      usedCandidate(),
+      { amount: paidAmount, reason: '전액 보상' },
+      now,
+    );
+
+    expect(decision).toEqual({
+      eligible: true,
+      amount: paidAmount,
+      reason: '전액 보상',
+    });
+  });
 });
