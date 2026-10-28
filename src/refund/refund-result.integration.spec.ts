@@ -1059,4 +1059,28 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       operatorNotified: true,
     });
   });
+
+  it('PG 전송 결과가 즉시 REJECTED이면 그 시도는 실패(PG_REJECTED), 환불은 조치 필요다', async () => {
+    const pending = await createPendingRefund();
+    pgGateway.sendCancel.mockResolvedValueOnce({
+      result: 'REJECTED',
+      reason: '취소 가능 기간 경과',
+    });
+
+    await app.get(RefundDispatchService).dispatch(pending.paymentCancelId);
+
+    const refund = await prisma.refund.findUniqueOrThrow({
+      where: { id: pending.refundId },
+      include: { paymentCancels: true },
+    });
+    expect({
+      attempt: refund.paymentCancels[0].status,
+      failureCode: refund.paymentCancels[0].failureCode,
+      payoutStatus: refund.payoutStatus,
+    }).toEqual({
+      attempt: PaymentCancelStatus.FAILED,
+      failureCode: PaymentCancelFailureCode.PG_REJECTED,
+      payoutStatus: RefundPayoutStatus.ACTION_REQUIRED,
+    });
+  });
 });
