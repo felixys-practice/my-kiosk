@@ -64,27 +64,27 @@
 
 ### HTTP 인수 테스트
 
-- [ ] T019 [US1] [A1] E2E: `test/refund-customer.e2e-spec.ts`에 명세 1-1의 Given/When으로 요청하고 다음 결과를 검증한다: 실결제액 전액 환불과 이용 종료가 확정되고 고정석 배정이 해제되며, 응답은 "이용 종료 완료·환불금 지급 처리 중"이다. 테스트 이름 끝에 `(QS-1-1)`를 붙인다.
-- [ ] T020 [US1] [A2] E2E: `test/refund-customer.e2e-spec.ts`에 명세 1-1a의 Given/When으로 요청하고 다음 결과를 검증한다: 동의가 필요하다는 오류로 거절되고 이용권·좌석·환불 기록에는 변화가 없다. 테스트 이름 끝에 `(QS-1-1a)`를 붙인다.
-- [ ] T021 [US1] [A3] E2E: `test/refund-customer.e2e-spec.ts`에 명세 1-2의 Given/When으로 요청하고 다음 결과를 검증한다: 찾을 수 없는 이용권으로 거절되고, 그 이용권이 있다는 사실은 드러나지 않는다. 테스트 이름 끝에 `(QS-1-2)`를 붙인다.
-- [ ] T022 [US1] [A4] E2E: `test/refund-customer.e2e-spec.ts`에 명세 1-3의 Given/When으로 요청하고 다음 결과를 검증한다: `PAYMENT_NOT_COMPLETED`로 거절된다. 테스트 이름 끝에 `(QS-1-3)`를 붙인다.
-- [ ] T023 [US1] [A5] E2E: `test/refund-customer.e2e-spec.ts`에 명세 1-4의 Given/When으로 요청하고 다음 결과를 검증한다: `ALREADY_REFUNDED`로 거절된다. 테스트 이름 끝에 `(QS-1-4)`를 붙인다.
-- [ ] T024 [US1] [A6] E2E: `test/refund-customer.e2e-spec.ts`에 명세 1-5의 Given/When으로 요청하고 다음 결과를 검증한다: `REFUND_IN_PROGRESS`로 거절된다. 테스트 이름 끝에 `(QS-1-5)`를 붙인다.
-- [ ] T025 [US1] [A7] E2E: `test/refund-customer.e2e-spec.ts`에 명세 1-6의 Given/When으로 요청하고 다음 결과를 검증한다: `USED_TICKET`으로 거절되고 매장에 환불을 요청하라고 안내되며, 환불 기록은 남지 않는다. 테스트 이름 끝에 `(QS-1-6)`를 붙인다.
-- [ ] T026 [US1] [A8] E2E: `test/refund-customer.e2e-spec.ts`에 명세 1-7의 Given/When으로 요청하고 다음 결과를 검증한다: `USED_TICKET`으로 거절된다. 테스트 이름 끝에 `(QS-1-7)`를 붙인다.
-- [ ] T027 [US1] [A9] E2E: `test/refund-customer.e2e-spec.ts`에 명세 1-8의 Given/When으로 요청하고 다음 결과를 검증한다: `EXPIRED_TICKET`으로 거절되고 매장에 환불을 요청하라고 안내된다. 테스트 이름 끝에 `(QS-1-8)`를 붙인다.
-- [ ] T028 [US1] [A10] E2E: `test/refund-customer.e2e-spec.ts`에 명세 1-9의 Given/When으로 요청하고 다음 결과를 검증한다: 대상 여부 규칙이 먼저 적용되어 `USED_TICKET`이 아니라 `REFUND_IN_PROGRESS`로 거절된다. 테스트 이름 끝에 `(QS-1-9)`를 붙인다.
+- [X] T019 [US1] [A1] E2E: `test/refund-customer.e2e-spec.ts`에 명세 1-1의 Given/When으로 요청하고 다음 결과를 검증한다: 실결제액 전액 환불과 이용 종료가 확정되고 고정석 배정이 해제되며, 응답은 "이용 종료 완료·환불금 지급 처리 중"이다. 테스트 이름 끝에 `(QS-1-1)`를 붙인다.
+- [X] T020 [US1] [A2] E2E: `test/refund-customer.e2e-spec.ts`에 명세 1-1a의 Given/When으로 요청하고 다음 결과를 검증한다: 동의가 필요하다는 오류로 거절되고 이용권·좌석·환불 기록에는 변화가 없다. 테스트 이름 끝에 `(QS-1-1a)`를 붙인다.
+- [X] T021 [US1] [A3] E2E: `test/refund-customer.e2e-spec.ts`에 명세 1-2의 Given/When으로 요청하고 다음 결과를 검증한다: 찾을 수 없는 이용권으로 거절되고, 그 이용권이 있다는 사실은 드러나지 않는다. 테스트 이름 끝에 `(QS-1-2)`를 붙인다.
+- [X] T022 [US1] [A4] E2E: `test/refund-customer.e2e-spec.ts`에 명세 1-3의 Given/When으로 요청하고 다음 결과를 검증한다: `PAYMENT_NOT_COMPLETED`로 거절된다. 테스트 이름 끝에 `(QS-1-3)`를 붙인다.
+- [X] T023 [US1] [A5] E2E: `test/refund-customer.e2e-spec.ts`에 명세 1-4의 Given/When으로 요청하고 다음 결과를 검증한다: `ALREADY_REFUNDED`로 거절된다. 테스트 이름 끝에 `(QS-1-4)`를 붙인다.
+- [X] T024 [US1] [A6] E2E: `test/refund-customer.e2e-spec.ts`에 명세 1-5의 Given/When으로 요청하고 다음 결과를 검증한다: `REFUND_IN_PROGRESS`로 거절된다. 테스트 이름 끝에 `(QS-1-5)`를 붙인다.
+- [X] T025 [US1] [A7] E2E: `test/refund-customer.e2e-spec.ts`에 명세 1-6의 Given/When으로 요청하고 다음 결과를 검증한다: `USED_TICKET`으로 거절되고 매장에 환불을 요청하라고 안내되며, 환불 기록은 남지 않는다. 테스트 이름 끝에 `(QS-1-6)`를 붙인다.
+- [X] T026 [US1] [A8] E2E: `test/refund-customer.e2e-spec.ts`에 명세 1-7의 Given/When으로 요청하고 다음 결과를 검증한다: `USED_TICKET`으로 거절된다. 테스트 이름 끝에 `(QS-1-7)`를 붙인다.
+- [X] T027 [US1] [A9] E2E: `test/refund-customer.e2e-spec.ts`에 명세 1-8의 Given/When으로 요청하고 다음 결과를 검증한다: `EXPIRED_TICKET`으로 거절되고 매장에 환불을 요청하라고 안내된다. 테스트 이름 끝에 `(QS-1-8)`를 붙인다.
+- [X] T028 [US1] [A10] E2E: `test/refund-customer.e2e-spec.ts`에 명세 1-9의 Given/When으로 요청하고 다음 결과를 검증한다: 대상 여부 규칙이 먼저 적용되어 `USED_TICKET`이 아니라 `REFUND_IN_PROGRESS`로 거절된다. 테스트 이름 끝에 `(QS-1-9)`를 붙인다.
 
 ### 단위 테스트와 구현
 
-- [ ] T029 [US1] [U62] [U63] [U64] [U65] [U66] [U67] [U68] [U69] [U70] [U71] [U72] [U73] [U74] [U75] [U76] [U77] [U78] [U79] `src/refund/refund-policy.spec.ts`에 대상 검증 순서·미사용 판정·신청 시각=기한 시각 경계·USED_TICKET 우선·위반 사유 목록을 동작별 테스트로 추가한다.
-- [ ] T030 [US1] [U62] [U63] [U64] [U65] [U66] [U67] [U68] [U69] [U70] [U71] [U72] [U73] [U74] [U75] [U76] [U77] [U78] [U79] `src/refund/refund-policy.ts`에 본인 범위→결제 SUCCESS→PAID 환불→미지급 ACCEPTED→사용/기한 조건 순 판정을 구현한다. PERIOD.activationDeadline과 TIME.minuteExpireDeadline을 사용하고 기한과 같은 시각은 허용한다. 가능 조건 거절에는 CONTACT_SHOP과 violations를 반환한다.
-- [ ] T031 [US1] [U80] [U81] [U82] [U83] [U84] [U85] [U86] `src/refund/dto/refund.dto.ts`와 `src/refund/dto/refund.dto.spec.ts`에 ticketId UUID와 boolean 종료 동의를 반영한다. amount·userId·shopId 주입을 거부하고 동의 false/누락은 REFUND_TERMINATION_CONSENT_REQUIRED로 처리한다.
-- [ ] T034 [US1] [U87] [U88] [U89] [U90] [U91] [U92] [U93] [U94] [U95] [U96] [U97] `src/refund/refund-acceptance.service.spec.ts`에 커밋 직전 실패의 전체 롤백, 커밋 이후 호출, 같은 이용권 동시 신청의 확정 환불 1건, PG 실패 후에도 종료 유지 테스트를 추가한다.
-- [ ] T032 [US1] [U87] [U88] [U89] [U90] [U91] [U92] [U93] [U94] [U95] `src/refund/refund-acceptance.service.ts`, `src/refund/refund.repository.ts`에 검증·금액/동의 저장·Ticket REVOKED·기존 정지 종료·좌석 해제·Refund ACCEPTED·최초 PaymentCancel 저장을 같은 트랜잭션으로 구현한다. 거절/저장 실패는 업무 기록과 PG 호출을 남기지 않는다. RefundLock을 신규 생성하지 않는다.
-- [ ] T033 [US1] [U93] [U94] [U96] [U97] `src/refund/refund.service.ts`, `src/refund/refund.controller.ts`에 고객 POST /refund를 연결하고 기존 승인 대기 분기를 제거한다. PG 최초 호출은 커밋 후 수행하며 양수 접수는 202·환불 식별자·이용 종료·지급 상태를 반환한다. 최초 응답 재반환은 공통 DB 멱등 처리를 사용한다.
+- [X] T029 [US1] [U62] [U63] [U64] [U65] [U66] [U67] [U68] [U69] [U70] [U71] [U72] [U73] [U74] [U75] [U76] [U77] [U78] [U79] `src/refund/refund-policy.spec.ts`에 대상 검증 순서·미사용 판정·신청 시각=기한 시각 경계·USED_TICKET 우선·위반 사유 목록을 동작별 테스트로 추가한다.
+- [X] T030 [US1] [U62] [U63] [U64] [U65] [U66] [U67] [U68] [U69] [U70] [U71] [U72] [U73] [U74] [U75] [U76] [U77] [U78] [U79] `src/refund/refund-policy.ts`에 본인 범위→결제 SUCCESS→PAID 환불→미지급 ACCEPTED→사용/기한 조건 순 판정을 구현한다. PERIOD.activationDeadline과 TIME.minuteExpireDeadline을 사용하고 기한과 같은 시각은 허용한다. 가능 조건 거절에는 CONTACT_SHOP과 violations를 반환한다.
+- [X] T031 [US1] [U80] [U81] [U82] [U83] [U84] [U85] [U86] `src/refund/dto/refund.dto.ts`와 `src/refund/dto/refund.dto.spec.ts`에 ticketId UUID와 boolean 종료 동의를 반영한다. amount·userId·shopId 주입을 거부하고 동의 false/누락은 REFUND_TERMINATION_CONSENT_REQUIRED로 처리한다.
+- [X] T034 [US1] [U87] [U88] [U89] [U90] [U91] [U92] [U93] [U94] [U95] [U96] [U97] `src/refund/refund-acceptance.service.spec.ts`에 커밋 직전 실패의 전체 롤백, 커밋 이후 호출, 같은 이용권 동시 신청의 확정 환불 1건, PG 실패 후에도 종료 유지 테스트를 추가한다.
+- [X] T032 [US1] [U87] [U88] [U89] [U90] [U91] [U92] [U93] [U94] [U95] `src/refund/refund-acceptance.service.ts`, `src/refund/refund.repository.ts`에 검증·금액/동의 저장·Ticket REVOKED·기존 정지 종료·좌석 해제·Refund ACCEPTED·최초 PaymentCancel 저장을 같은 트랜잭션으로 구현한다. 거절/저장 실패는 업무 기록과 PG 호출을 남기지 않는다. RefundLock을 신규 생성하지 않는다.
+- [X] T033 [US1] [U93] [U94] [U96] [U97] `src/refund/refund.service.ts`, `src/refund/refund.controller.ts`에 고객 POST /refund를 연결하고 기존 승인 대기 분기를 제거한다. PG 최초 호출은 커밋 후 수행하며 양수 접수는 202·환불 식별자·이용 종료·지급 상태를 반환한다. 최초 응답 재반환은 공통 DB 멱등 처리를 사용한다.
 
-- [ ] T179 [US1] [A1] [A2] [A3] [A4] [A5] [A6] [A7] [A8] [A9] [A10] `test/refund-customer.e2e-spec.ts`의 사용자 스토리 1 인수 테스트 A1부터 A10까지 10개가 모두 통과하는지 실행해 확인한 뒤에만 이 스토리를 완료로 표시한다.
+- [X] T179 [US1] [A1] [A2] [A3] [A4] [A5] [A6] [A7] [A8] [A9] [A10] `test/refund-customer.e2e-spec.ts`의 사용자 스토리 1 인수 테스트 A1부터 A10까지 10개가 모두 통과하는지 실행해 확인한 뒤에만 이 스토리를 완료로 표시한다.
 
 **검수 관문**: T019부터 T034까지의 작업과 T179 작업을 마치면 실행 규칙의 Phase 검수 절차에 따라 Codex 검수를 받는다. "통과" 판정 전에는 다음 Phase로 넘어가지 않는다.
 

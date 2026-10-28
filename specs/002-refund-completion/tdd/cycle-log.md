@@ -535,3 +535,60 @@ U10~U15를 마친 뒤, 관계 검증의 비교 대상 설정을 생략하면 정
 ## Phase 2 완료
 
 - T006~T014, T016~T018 완료 표시. T015는 U50 BASELINE 때문에 열어 둔다. Codex 재검수 2차 통과. 다음은 Phase 3(US1, T019~T034·T179)이다.
+
+## Phase 3: 사용자 스토리 1 — 고객 환불 판정과 이용 종료 확정 (2026-10-28)
+
+### 바깥 루프
+
+- A1(`test/refund-customer.e2e-spec.ts` QS-1-1)을 먼저 작성했다.
+  - red: `expected 202 "Accepted", got 400 "Bad Request"`. 기존 `POST /refund`가 동의 필드를 허용하지 않는 필드로 거부했다.
+  - 단위 루프 동안 이 파일은 스크래치 패드에 보관했다(skip 미사용). 전체 테스트가 바깥 루프의 red로 막히지 않게 하려는 조치다. T033 연결 뒤 되돌려 같은 테스트가 통과했다.
+- A2~A10은 안쪽 루프를 마친 뒤 작성해 첫 실행에서 통과했다(바깥 루프 순서 이탈). 대신 뮤턴트로 각 테스트가 동작을 잡는지 확인했다.
+  - 뮤턴트 1(종료 동의 검사 제거): A2가 실패했다.
+  - 뮤턴트 2(이용권이 있으면 판정 거절을 무시): A3~A10 8개가 실패했다.
+
+### 안쪽 루프
+
+| 동작 | 테스트 | red | green | 커밋 |
+|---|---|---|---|---|
+| U62 | `refund-policy.spec.ts` 본인 범위 밖 → TICKET_NOT_FOUND | `- Expected - 2 / + Received + 2` | 후보 없음·소유자 불일치 | `158c785` |
+| U63 | 결제 SUCCESS 아님 → PAYMENT_NOT_COMPLETED | 같음 | 결제 상태 검사 | `7fc5e66` |
+| U65 | PAID 환불 → ALREADY_REFUNDED | 같음 | ACCEPTED·PAID 검사 | `18af95b` |
+| U66 | 미지급 확정 환불(PENDING·ACTION_REQUIRED) → REFUND_IN_PROGRESS | 2 failed | 남은 ACCEPTED 검사 | `8e6168b` |
+| U68 | 이용 중 → USED_TICKET | 1 failed | inUse 검사 | `e271ca6` |
+| U70 / U69 | 활성화된 정기권 USED / 활성화 전 미사용 | U70 1 failed / U69 첫 통과 → 뮤턴트(isUnused 항상 false) 1 failed | `isUnused` 정기권 분기 | `4d76b3c` / `1d7ff16` |
+| U72 / U71 | 시간권 잔여 < 구매 USED / 잔여 = 구매 미사용 | U72 1 failed / U71 첫 통과 → 뮤턴트(=== → >) 1 failed | 시간권 분기 | `b87b3b5` / `b5bd5bf` |
+| U64·U67 | 결제 미완료·미지급 확정 환불이 사용 이력보다 먼저 | 첫 통과 → 뮤턴트(사용 검사를 결제 검사 앞으로) 2 failed | 구현 변경 없음 | `aa566f4` |
+| U75 / U74 | 정기권 활성화 기한 +1ms 초과 / 같은 시각 허용 | U75 1 failed / U74 첫 통과 → 뮤턴트(> → >=) 1 failed | `unusedDeadlineOf` | `70fe316` / `69604b1` |
+| U77 / U76 | 시간권 소진 기한 +1ms 초과 / 같은 시각 허용 | U77 1 failed / U76 첫 통과 → 뮤턴트(> → >=) 1 failed | 시간권 기한 분기 | `4049eef` / `8f542b7` |
+| U73 | 사용 이력이 기한 초과보다 먼저 | 첫 통과 → 뮤턴트(기한 검사를 앞으로) 1 failed | 구현 변경 없음 | `e16b6bd` |
+| U78 | 위반 사유 목록 + CONTACT_SHOP | `- Expected - 5 / + Received + 0` | 위반 수집, 대표는 첫 위반 | `2d35911` |
+| U79 | 금액 = 실결제액 전액 | 1 failed(0) | `amount = paidAmount` | `63ee5ed` |
+| U86 | DTO 동의 "true" 문자열 → isBoolean | `Expected isBoolean / Received whitelistValidation` | `@IsOptional @IsBoolean` | `a1ec290` |
+| U80~U83 | DTO UUID·미허용 필드(amount·userId·shopId) | 첫 통과 → 뮤턴트(IsUUID 제거 + 세 필드 허용) 4 failed | 구현 변경 없음 | `b2a6c59` |
+| U84 / U85 | 동의 false / 누락 → REFUND_TERMINATION_CONSENT_REQUIRED(판정 뒤) | U84 `Received constructor: Error`(미구현 신호) / U85 첫 통과 → 뮤턴트(=== false만) 1 failed | 판정 통과 뒤 동의 확인 | `e6bbd28` / `7d83343` |
+| U305(추가) | 판정 거절 → 계약 코드 오류(404 1종, 409 5종), 저장 없음 | 6 failed(미구현 Error) | `rejectionError` | `468b88a` |
+| U306(추가) | 필터가 도메인 오류 details를 응답에 포함 | `Received: undefined` | `detailsOf` | `1a377bd` |
+| U91 | (실제 DB) Refund ACCEPTED + 시도 1 REQUESTED | `TicketNotFoundError`(대상 조회 미구현) | `findCustomerRefundTarget`·`createAcceptedRefund`·202 본문 | `ff0dbfc` |
+| U87 | (실제 DB) 이용권 REVOKED | `Expected REVOKED / Received UNUSED` | `terminateTicket`(상태·revokedAt만) | `1375d7e` |
+| U88 | (실제 DB) 고정석 배정 해제 | 1 failed | `releaseByTicket(TICKET_REVOKED)` | `e569a6c` |
+| U89 | (실제 DB) 열린 정지 REFUND_TERMINATED로 닫힘, resumedAt null | 1 failed | `closeOpenPausesForRefund` | `ce93f8a` |
+| U90 | (실제 DB) 기한·만료 시각 불변 | 첫 통과 → 뮤턴트(종료 때 expiresAt +30일) 1 failed | 구현 변경 없음 | `eac0335` |
+| U92 | (실제 DB) 마지막 저장 실패 시 이용권·좌석·정지·환불·시도 모두 롤백, PG 미호출 | 첫 통과 → 뮤턴트(terminateTicket을 트랜잭션 밖 저장) 1 failed | 구현 변경 없음 | `bf136a8` |
+| U93 | PG 전송은 커밋 뒤에만, 확정 금액으로 | `- Expected - 1 / + Received + 0`(호출 없음) | 이번 요청이 확정한 경우에만 커밋 뒤 `sendCancel` | `3b203c3` |
+| U94 | 커밋 실패 시 PG 미호출 | 첫 통과 → 뮤턴트(커밋 전 전송) 1 failed | 구현 변경 없음 | `e438436` |
+| U95 | (실제 DB) 동시 신청 두 건 중 한 건만, 다른 건 REFUND_IN_PROGRESS | `P2002 Unique constraint(order_item_id)` | `findLockedTarget`(조회 → 공유 순서 잠금 → 재조회), 5회 반복 통과 | `bb6434d` |
+| U96 | (실제 DB) NOT_SENT여도 접수 성공·REVOKED 유지 | 첫 통과 → 뮤턴트(NOT_SENT면 UNUSED 복구) 1 failed | 구현 변경 없음 | `acab3f9` |
+| U97 | 접수 응답 202·refundId·종료 시각·PENDING | 첫 통과 → 뮤턴트(200) 1 failed | 구현 변경 없음 | `3c0787a` |
+| T033 / A1~A10 | `POST /refund` 연결, 인수 테스트 | 위 바깥 루프 참조 | 컨트롤러 → `RefundAcceptanceService`, DB 멱등 키 | `edd5079` |
+
+### 사용자 결정과 이탈
+
+- **기존 경로 유지(사용자 결정)**: 기존 `RefundService.refund()`와 승인 대기 코드는 Phase 13(RefundLock 흐름 제거)까지 남긴다. 외부에서 호출되지 않는다. T033의 "승인 대기 분기 제거"는 Phase 13으로 미룬다.
+- **기존 테스트 수정(사용자 결정)**: 좌석 타입 E2E QS-21을 새 계약(동의 필수, 202, 확정 즉시 좌석 해제, 콜백 단계 제거)으로 바꿨다. 검증하는 결과(배정 RELEASED·TICKET_REVOKED, 좌석 선택 가능)는 그대로다. 새 Refund 행 때문에 seat-type afterAll이 FK 삭제 제한(`refunds_payment_id_fkey`)으로 실패해 정리 순서에 Refund·멱등 기록 삭제를 추가했다.
+- **U84·U85의 담당 위치**: 동의 false·누락 거절은 DTO가 아니라 확정 서비스에서 한다. 계약 §4 확인 순서(대상 판정 → 종료 동의)를 지키기 위해서다. DTO는 boolean 형식만 검사한다(U86).
+- **PG 전송 결과 저장은 US5로**: NOT_SENT·REJECTED를 FAILED·ACTION_REQUIRED로 저장하는 일은 T096(US5) 범위다. US1은 커밋 뒤 전송만 하고 결과로 이용권을 되돌리지 않는다(U96). 따라서 계약의 "전송 전 실패도 202에 ACTION_REQUIRED로 응답"은 아직 구현되지 않았다. 현재 응답은 확정 시점의 PENDING이다.
+- **멱등 재생 응답**: 최초 응답은 확정 트랜잭션에서 저장한 접수 응답(PENDING)이다. PG 결과로 바뀐 최신 상태는 GET에서 확인한다는 계약을 따른다.
+- **역할 검사**: `POST /refund`에 역할 데코레이터를 붙이지 않았다. 다른 고객·점주의 요청은 본인 이용권 범위 검사에서 TICKET_NOT_FOUND가 된다. 계약 §2의 "USER·본인 이용권" 범위와 결과는 같지만, 점주·운영자가 자기 이용권을 신청하는 경우의 역할 거절은 따로 검증하지 않았다.
+- **E2E 간헐 실패**: VS Code Jest 감시를 끈 뒤에도 seat-type·ticket-pause에서 401·403·404·426 실패가 이어졌고, 재실행하면 통과했다. "IDE 동시 실행"만으로는 설명되지 않는다. 원인은 미확정이다.
+- 결과: 단위 352 passed, E2E 69 passed(`edd5079`).

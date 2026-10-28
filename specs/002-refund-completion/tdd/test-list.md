@@ -34,16 +34,16 @@ suite_baseline: green
 
 | id | behavior | traces | kind | state | test |
 |---|---|---|---|---|---|
-| A1 | Given 고객이 결제를 마친 미사용 이용권을 이용 기한 안에 가지고 있을 때, When 환불을 신청하면, | QS-1-1 | example | PENDING | |
-| A2 | Given 환불 가능한 이용권이 있을 때, When 이용 종료와 환불 금액에 대한 명시적 동의 없이 신청하면, Then 동의가 필요하다는 오류로 거절되고 이용권·좌석·환불 기록에는 변화가 없다. | QS-1-1a | example | PENDING | |
-| A3 | Given 다른 고객의 이용권일 때, When 환불을 신청하면, | QS-1-2 | example | PENDING | |
-| A4 | Given 이용권 주문의 결제가 성공 상태가 아닐 때, When 환불을 신청하면, Then `PAYMENT_NOT_COMPLETED`로 거절된다. | QS-1-3 | example | PENDING | |
-| A5 | Given 환불이 확정되고 지급까지 완료된 이용권일 때, When 환불을 신청하면, Then `ALREADY_REFUNDED`로 거절된다. | QS-1-4 | example | PENDING | |
-| A6 | Given 같은 이용권에 확정됐지만 지급이 끝나지 않은 환불이 있을 때, When 환불을 신청하면, Then `REFUND_IN_PROGRESS`로 거절된다. | QS-1-5 | example | PENDING | |
-| A7 | Given 사용 이력이 있는 이용권일 때, When 환불을 신청하면, | QS-1-6 | example | PENDING | |
-| A8 | Given 지금 이용 중인 이용권일 때, When 환불을 신청하면, Then `USED_TICKET`으로 거절된다. | QS-1-7 | example | PENDING | |
-| A9 | Given 이용 기한(정기권은 활성화 기한, 시간권은 소진 기한)이 지난 미사용 이용권일 때, When 환불을 신청하면, | QS-1-8 | example | PENDING | |
-| A10 | Given 확정된 미지급 환불과 사용 이력이 함께 있는 이용권일 때, When 환불을 신청하면, | QS-1-9 | example | PENDING | |
+| A1 | Given 고객이 결제를 마친 미사용 이용권을 이용 기한 안에 가지고 있을 때, When 환불을 신청하면, | QS-1-1 | example | DONE | `test/refund-customer.e2e-spec.ts` |
+| A2 | Given 환불 가능한 이용권이 있을 때, When 이용 종료와 환불 금액에 대한 명시적 동의 없이 신청하면, Then 동의가 필요하다는 오류로 거절되고 이용권·좌석·환불 기록에는 변화가 없다. | QS-1-1a | example | DONE | `test/refund-customer.e2e-spec.ts` |
+| A3 | Given 다른 고객의 이용권일 때, When 환불을 신청하면, | QS-1-2 | example | DONE | `test/refund-customer.e2e-spec.ts` |
+| A4 | Given 이용권 주문의 결제가 성공 상태가 아닐 때, When 환불을 신청하면, Then `PAYMENT_NOT_COMPLETED`로 거절된다. | QS-1-3 | example | DONE | `test/refund-customer.e2e-spec.ts` |
+| A5 | Given 환불이 확정되고 지급까지 완료된 이용권일 때, When 환불을 신청하면, Then `ALREADY_REFUNDED`로 거절된다. | QS-1-4 | example | DONE | `test/refund-customer.e2e-spec.ts` |
+| A6 | Given 같은 이용권에 확정됐지만 지급이 끝나지 않은 환불이 있을 때, When 환불을 신청하면, Then `REFUND_IN_PROGRESS`로 거절된다. | QS-1-5 | example | DONE | `test/refund-customer.e2e-spec.ts` |
+| A7 | Given 사용 이력이 있는 이용권일 때, When 환불을 신청하면, | QS-1-6 | example | DONE | `test/refund-customer.e2e-spec.ts` |
+| A8 | Given 지금 이용 중인 이용권일 때, When 환불을 신청하면, Then `USED_TICKET`으로 거절된다. | QS-1-7 | example | DONE | `test/refund-customer.e2e-spec.ts` |
+| A9 | Given 이용 기한(정기권은 활성화 기한, 시간권은 소진 기한)이 지난 미사용 이용권일 때, When 환불을 신청하면, | QS-1-8 | example | DONE | `test/refund-customer.e2e-spec.ts` |
+| A10 | Given 확정된 미지급 환불과 사용 이력이 함께 있는 이용권일 때, When 환불을 신청하면, | QS-1-9 | example | DONE | `test/refund-customer.e2e-spec.ts` |
 | A11 | Given 사용 이력이 있는 이용권이 있을 때, When 그 매장 점주가 0원보다 크고 실결제액 이하인 금액과 사유를 입력해 환불하면, | QS-2-1 | example | PENDING | |
 | A12 | Given 1번으로 이용은 종료됐고 환불금 지급 처리 중일 때, When PG가 확정된 환불 금액의 취소를 확정하면, Then 환불금 지급 완료로 바뀌며 이용 종료·좌석 해제는 반복하지 않는다. | QS-2-2 | example | PENDING | |
 | A13 | Given 이용 기한이 지난 미사용 이용권이 있을 때, When 그 매장 점주가 0원부터 실결제액까지의 금액과 사유를 입력하고 이용 종료에 동의해 환불하면, | QS-2-3 | example | PENDING | |
@@ -212,8 +212,8 @@ suite_baseline: green
 | U302 | 처리 트랜잭션 안에서 처리 중인 요청의 기록은 기한이 지나도 다른 요청이 이어받지 못한다(기한 경과를 이전 작업 종료의 증거로 쓰지 않음) (Phase 2 재검수 P1) | FR-041 | example | DONE | `src/refund/refund-idempotency.service.spec.ts` |
 | U303 | 기한이 지난 같은 기록을 두 요청이 동시에 이어받으려 하면 하나만 처리한다 (Phase 2 재검수 P1) | FR-041 | example | DONE | `src/refund/refund-idempotency.service.spec.ts` |
 | U304 | (실제 DB) 담당 토큰이 다른 완료·정리는 기록을 바꾸거나 지우지 못하고, 처리 트랜잭션이 잡은 기록의 이어받기는 그 트랜잭션이 끝날 때까지 기다린 뒤 실패한다 (Phase 2 재검수 P1) | FR-041 | example | DONE | `src/refund/refund-idempotency.repository.integration.spec.ts` |
-| U305 | 고객 환불 판정 거절은 계약 코드의 도메인 오류로 거절되고(TICKET_NOT_FOUND 404, PAYMENT_NOT_COMPLETED·ALREADY_REFUNDED·REFUND_IN_PROGRESS·USED_TICKET·EXPIRED_TICKET 409) 아무것도 저장하지 않는다 | FR-001, FR-005 | example | PENDING | |
-| U306 | 도메인 오류에 details가 있으면 응답 error.details로 그대로 나간다(USED_TICKET의 violations·action 안내) | FR-005 | example | PENDING | |
+| U305 | 고객 환불 판정 거절은 계약 코드의 도메인 오류로 거절되고(TICKET_NOT_FOUND 404, PAYMENT_NOT_COMPLETED·ALREADY_REFUNDED·REFUND_IN_PROGRESS·USED_TICKET·EXPIRED_TICKET 409) 아무것도 저장하지 않는다 | FR-001, FR-005 | example | DONE | `src/refund/refund-acceptance.service.spec.ts` |
+| U306 | 도메인 오류에 details가 있으면 응답 error.details로 그대로 나간다(USED_TICKET의 violations·action 안내) | FR-005 | example | DONE | `src/common/filters/http-exception.filter.spec.ts` |
 
 ### `src/refund/refund-idempotency.service.ts`
 
@@ -266,52 +266,52 @@ suite_baseline: green
 
 | id | behavior | traces | kind | state | test |
 |---|---|---|---|---|---|
-| U62 | 본인 소유 범위 밖 이용권은 TICKET_NOT_FOUND로 판정된다 | FR-001 | example | PENDING | |
-| U63 | 결제가 SUCCESS가 아니면 PAYMENT_NOT_COMPLETED로 판정된다 | FR-001 | example | PENDING | |
-| U64 | 결제 미완료와 사용 이력이 함께 있으면 PAYMENT_NOT_COMPLETED가 먼저 판정된다 | FR-001 | example | PENDING | |
-| U65 | 지급 완료(PAID) 환불이 있으면 ALREADY_REFUNDED로 판정된다 | FR-002 | example | PENDING | |
-| U66 | 확정됐지만 미지급인 환불이 있으면 REFUND_IN_PROGRESS로 판정된다 | FR-002 | example | PENDING | |
-| U67 | 미지급 확정 환불과 사용 이력이 함께 있으면 REFUND_IN_PROGRESS가 먼저 판정된다 | FR-001, QS-1-9 | example | PENDING | |
-| U68 | 이용 중인 이용권은 USED_TICKET으로 판정된다 | FR-003 | example | PENDING | |
-| U69 | 활성화 전 정기권은 미사용으로 판정된다 | FR-003 | example | PENDING | |
-| U70 | 활성화된 정기권은 USED_TICKET으로 판정된다 | FR-003 | example | PENDING | |
-| U71 | 남은 시간이 구매 시간과 같은 시간권은 미사용으로 판정된다 | FR-003 | example | PENDING | |
-| U72 | 남은 시간이 구매 시간보다 1분 적은 시간권은 USED_TICKET으로 판정된다 | FR-003 | example | PENDING | |
-| U73 | 사용 이력과 기한 초과가 함께 있으면 USED_TICKET이 먼저 판정된다 | FR-001 | example | PENDING | |
-| U74 | 신청 시각이 정기권 활성화 기한과 같으면 기한 안으로 허용된다 | FR-004 | example | PENDING | |
-| U75 | 신청 시각이 정기권 활성화 기한보다 1ms 늦으면 EXPIRED_TICKET으로 판정된다 | FR-004 | example | PENDING | |
-| U76 | 신청 시각이 시간권 소진 기한과 같으면 기한 안으로 허용된다 | FR-004 | example | PENDING | |
-| U77 | 신청 시각이 시간권 소진 기한보다 1ms 늦으면 EXPIRED_TICKET으로 판정된다 | FR-004 | example | PENDING | |
-| U78 | 가능 조건 거절 결과에 매장 문의 안내(CONTACT_SHOP)와 위반 사유 목록이 담긴다 | FR-005 | example | PENDING | |
-| U79 | 미사용·기한 안 이용권의 고객 환불 금액은 실결제액 전액으로 정해진다 | FR-006 | example | PENDING | |
+| U62 | 본인 소유 범위 밖 이용권은 TICKET_NOT_FOUND로 판정된다 | FR-001 | example | DONE | `src/refund/refund-policy.spec.ts` |
+| U63 | 결제가 SUCCESS가 아니면 PAYMENT_NOT_COMPLETED로 판정된다 | FR-001 | example | DONE | `src/refund/refund-policy.spec.ts` |
+| U64 | 결제 미완료와 사용 이력이 함께 있으면 PAYMENT_NOT_COMPLETED가 먼저 판정된다 | FR-001 | example | DONE | `src/refund/refund-policy.spec.ts` |
+| U65 | 지급 완료(PAID) 환불이 있으면 ALREADY_REFUNDED로 판정된다 | FR-002 | example | DONE | `src/refund/refund-policy.spec.ts` |
+| U66 | 확정됐지만 미지급인 환불이 있으면 REFUND_IN_PROGRESS로 판정된다 | FR-002 | example | DONE | `src/refund/refund-policy.spec.ts` |
+| U67 | 미지급 확정 환불과 사용 이력이 함께 있으면 REFUND_IN_PROGRESS가 먼저 판정된다 | FR-001, QS-1-9 | example | DONE | `src/refund/refund-policy.spec.ts` |
+| U68 | 이용 중인 이용권은 USED_TICKET으로 판정된다 | FR-003 | example | DONE | `src/refund/refund-policy.spec.ts` |
+| U69 | 활성화 전 정기권은 미사용으로 판정된다 | FR-003 | example | DONE | `src/refund/refund-policy.spec.ts` |
+| U70 | 활성화된 정기권은 USED_TICKET으로 판정된다 | FR-003 | example | DONE | `src/refund/refund-policy.spec.ts` |
+| U71 | 남은 시간이 구매 시간과 같은 시간권은 미사용으로 판정된다 | FR-003 | example | DONE | `src/refund/refund-policy.spec.ts` |
+| U72 | 남은 시간이 구매 시간보다 1분 적은 시간권은 USED_TICKET으로 판정된다 | FR-003 | example | DONE | `src/refund/refund-policy.spec.ts` |
+| U73 | 사용 이력과 기한 초과가 함께 있으면 USED_TICKET이 먼저 판정된다 | FR-001 | example | DONE | `src/refund/refund-policy.spec.ts` |
+| U74 | 신청 시각이 정기권 활성화 기한과 같으면 기한 안으로 허용된다 | FR-004 | example | DONE | `src/refund/refund-policy.spec.ts` |
+| U75 | 신청 시각이 정기권 활성화 기한보다 1ms 늦으면 EXPIRED_TICKET으로 판정된다 | FR-004 | example | DONE | `src/refund/refund-policy.spec.ts` |
+| U76 | 신청 시각이 시간권 소진 기한과 같으면 기한 안으로 허용된다 | FR-004 | example | DONE | `src/refund/refund-policy.spec.ts` |
+| U77 | 신청 시각이 시간권 소진 기한보다 1ms 늦으면 EXPIRED_TICKET으로 판정된다 | FR-004 | example | DONE | `src/refund/refund-policy.spec.ts` |
+| U78 | 가능 조건 거절 결과에 매장 문의 안내(CONTACT_SHOP)와 위반 사유 목록이 담긴다 | FR-005 | example | DONE | `src/refund/refund-policy.spec.ts` |
+| U79 | 미사용·기한 안 이용권의 고객 환불 금액은 실결제액 전액으로 정해진다 | FR-006 | example | DONE | `src/refund/refund-policy.spec.ts` |
 
 ### `src/refund/dto/refund.dto.ts`
 
 | id | behavior | traces | kind | state | test |
 |---|---|---|---|---|---|
-| U80 | ticketId가 UUID 형식이 아니면 400을 받는다 | FR-001 | example | PENDING | |
-| U81 | 본문에 amount를 넣으면 미허용 필드로 400을 받는다 | FR-006 | example | PENDING | |
-| U82 | 본문에 userId를 넣으면 미허용 필드로 400을 받는다 | FR-001 | example | PENDING | |
-| U83 | 본문에 shopId를 넣으면 미허용 필드로 400을 받는다 | FR-001 | example | PENDING | |
-| U84 | 종료 동의가 false이면 REFUND_TERMINATION_CONSENT_REQUIRED로 거절된다 | FR-040 | example | PENDING | |
-| U85 | 종료 동의 필드가 없으면 REFUND_TERMINATION_CONSENT_REQUIRED로 거절된다 | FR-040 | example | PENDING | |
-| U86 | 종료 동의가 문자열 "true"이면 형식 오류 400을 받는다 | FR-040 | example | PENDING | |
+| U80 | ticketId가 UUID 형식이 아니면 400을 받는다 | FR-001 | example | DONE | `src/refund/dto/refund.dto.spec.ts` |
+| U81 | 본문에 amount를 넣으면 미허용 필드로 400을 받는다 | FR-006 | example | DONE | `src/refund/dto/refund.dto.spec.ts` |
+| U82 | 본문에 userId를 넣으면 미허용 필드로 400을 받는다 | FR-001 | example | DONE | `src/refund/dto/refund.dto.spec.ts` |
+| U83 | 본문에 shopId를 넣으면 미허용 필드로 400을 받는다 | FR-001 | example | DONE | `src/refund/dto/refund.dto.spec.ts` |
+| U84 | 종료 동의가 false이면 REFUND_TERMINATION_CONSENT_REQUIRED로 거절된다 | FR-040 | example | DONE | `src/refund/refund-acceptance.service.spec.ts` |
+| U85 | 종료 동의 필드가 없으면 REFUND_TERMINATION_CONSENT_REQUIRED로 거절된다 | FR-040 | example | DONE | `src/refund/refund-acceptance.service.spec.ts` |
+| U86 | 종료 동의가 문자열 "true"이면 형식 오류 400을 받는다 | FR-040 | example | DONE | `src/refund/dto/refund.dto.spec.ts` |
 
 ### `src/refund/refund-acceptance.service.ts, src/refund/refund.service.ts`
 
 | id | behavior | traces | kind | state | test |
 |---|---|---|---|---|---|
-| U87 | 환불 확정 뒤 이용권 상태가 REVOKED로 저장된다 | FR-041 | example | PENDING | |
-| U88 | 환불 확정 뒤 고정석 배정이 해제된다 | FR-041 | example | PENDING | |
-| U89 | 환불 확정 뒤 진행 중이던 정지 기록이 closeReason=REFUND_TERMINATED로 닫히고 재개되지 않는다 | FR-042 | example | PENDING | |
-| U90 | 환불 확정 뒤 정기권 만료 시각이 늘어나지 않는다 | FR-042 | example | PENDING | |
-| U91 | 환불 확정 시 Refund ACCEPTED와 확정된 환불 금액의 최초 PG 취소 요청 REQUESTED가 저장된다 | FR-041 | example | PENDING | |
-| U92 | 저장 마지막 단계가 실패하면 이용권·좌석·정지·환불·PG 취소 요청이 모두 저장 전 상태로 남는다 | FR-041 | example | PENDING | |
-| U93 | PG 전송은 확정 트랜잭션이 커밋된 뒤에만 호출된다 | FR-041 | example | PENDING | |
-| U94 | 확정 트랜잭션 커밋이 실패하면 PG가 호출되지 않는다 | FR-041 | example | PENDING | |
-| U95 | 같은 이용권의 동시 신청 두 건 중 한 건만 확정되고 다른 한 건은 REFUND_IN_PROGRESS를 받는다 | FR-029 | example | PENDING | |
-| U96 | PG 전송 결과가 NOT_SENT여도 이용권은 REVOKED로 남는다 | FR-016 | example | PENDING | |
-| U97 | 양수 금액 접수 응답은 202와 환불 식별자·이용 종료 완료·지급 처리 중 상태를 담는다 | FR-035 | example | PENDING | |
+| U87 | 환불 확정 뒤 이용권 상태가 REVOKED로 저장된다 | FR-041 | example | DONE | `src/refund/refund-acceptance.integration.spec.ts`(실제 DB) |
+| U88 | 환불 확정 뒤 고정석 배정이 해제된다 | FR-041 | example | DONE | `src/refund/refund-acceptance.integration.spec.ts`(실제 DB) |
+| U89 | 환불 확정 뒤 진행 중이던 정지 기록이 closeReason=REFUND_TERMINATED로 닫히고 재개되지 않는다 | FR-042 | example | DONE | `src/refund/refund-acceptance.integration.spec.ts`(실제 DB) |
+| U90 | 환불 확정 뒤 정기권 만료 시각이 늘어나지 않는다 | FR-042 | example | DONE | `src/refund/refund-acceptance.integration.spec.ts`(실제 DB) |
+| U91 | 환불 확정 시 Refund ACCEPTED와 확정된 환불 금액의 최초 PG 취소 요청 REQUESTED가 저장된다 | FR-041 | example | DONE | `src/refund/refund-acceptance.integration.spec.ts`(실제 DB) |
+| U92 | 저장 마지막 단계가 실패하면 이용권·좌석·정지·환불·PG 취소 요청이 모두 저장 전 상태로 남는다 | FR-041 | example | DONE | `src/refund/refund-acceptance.integration.spec.ts`(실제 DB) |
+| U93 | PG 전송은 확정 트랜잭션이 커밋된 뒤에만 호출된다 | FR-041 | example | DONE | `src/refund/refund-acceptance.service.spec.ts` |
+| U94 | 확정 트랜잭션 커밋이 실패하면 PG가 호출되지 않는다 | FR-041 | example | DONE | `src/refund/refund-acceptance.service.spec.ts` |
+| U95 | 같은 이용권의 동시 신청 두 건 중 한 건만 확정되고 다른 한 건은 REFUND_IN_PROGRESS를 받는다 | FR-029 | example | DONE | `src/refund/refund-acceptance.integration.spec.ts`(실제 DB) |
+| U96 | PG 전송 결과가 NOT_SENT여도 이용권은 REVOKED로 남는다 | FR-016 | example | DONE | `src/refund/refund-acceptance.integration.spec.ts`(실제 DB) |
+| U97 | 양수 금액 접수 응답은 202와 환불 식별자·이용 종료 완료·지급 처리 중 상태를 담는다 | FR-035 | example | DONE | `src/refund/refund-acceptance.service.spec.ts` |
 
 ### `src/refund/refund-store.service.ts, src/refund/dto/store-refund.dto.ts`
 
