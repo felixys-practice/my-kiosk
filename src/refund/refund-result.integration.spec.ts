@@ -22,6 +22,7 @@ import { AppModule } from 'src/app.module';
 import { DomainConflictError, DomainNotFoundError } from 'src/common/errors';
 import { REFUND_PG_GATEWAY } from 'src/pg/refund-pg.gateway';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { TransactionLoggerService } from 'src/logger/transaction-logger.service';
 import {
   PgCallbackTargetMismatchError,
   PgCallbackTargetNotFoundError,
@@ -714,4 +715,58 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       },
     ]);
   });
+
+  it.each([
+    [
+      'PG 거절',
+      'PG_REJECTED',
+      (paymentCancelId: string) =>
+        service.applyPgResult({
+          paymentCancelId,
+          outcome: { kind: 'FAILED', reason: '취소 가능 기간 경과' },
+        }),
+    ],
+    [
+      'PG 실제액 불일치',
+      'AMOUNT_MISMATCH',
+      (paymentCancelId: string) => succeed(paymentCancelId, refundAmount - 1),
+    ],
+    [
+      '확정 결과와 모순되는 통보',
+      'PG_RESULT_CONFLICT',
+      async (paymentCancelId: string) => {
+        await succeed(paymentCancelId, refundAmount);
+        return service.applyPgResult({
+          paymentCancelId,
+          outcome: { kind: 'FAILED', reason: '늦은 실패 통보' },
+        });
+      },
+    ],
+  ])(
+    '%s는 거래 로그에 환불·PG 취소 요청과 함께 기록된다',
+    async (_label, status, apply) => {
+      const pending = await createPendingRefund();
+      const txLog = jest.spyOn(
+        app.get(TransactionLoggerService),
+        'logTransaction',
+      );
+
+      await apply(pending.paymentCancelId);
+
+      const logged = txLog.mock.calls.map(([log]) => log);
+      txLog.mockRestore();
+      expect(logged).toContainEqual(
+        expect.objectContaining({
+          type: 'REFUND',
+          status,
+          orderId: pending.orderId,
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- jest 비대칭 매처는 any를 반환한다
+          metadata: expect.objectContaining({
+            refundId: pending.refundId,
+            paymentCancelId: pending.paymentCancelId,
+          }),
+        }),
+      );
+    },
+  );
 });

@@ -7,6 +7,10 @@ import {
   RefundSource,
 } from '@prisma/client';
 import { TransactionClient } from 'src/prisma/prisma.service';
+import {
+  TransactionLog,
+  TransactionLoggerService,
+} from 'src/logger/transaction-logger.service';
 import { RefundLedgerRepository } from 'src/ledger/refund-ledger.repository';
 import { AttemptForResult, RefundRepository } from './refund.repository';
 import { RefundEventRepository } from './refund-event.repository';
@@ -79,6 +83,7 @@ export class RefundResultService {
     private readonly lockingRepository: RefundLockingRepository,
     private readonly ledgerRepository: RefundLedgerRepository,
     private readonly eventRepository: RefundEventRepository,
+    private readonly txLogger: TransactionLoggerService,
   ) {}
 
   /**
@@ -89,7 +94,9 @@ export class RefundResultService {
   async applyPgResult(
     command: ApplyPgResultCommand,
   ): Promise<ApplyPgResultOutcome | null> {
-    return this.refundRepository.runInTransaction(async (tx) => {
+    // 조치가 필요한 사건은 커밋된 뒤에만 거래 로그에 남긴다(롤백된 사건을 기록하지 않는다)
+    const actionLogs: TransactionLog[] = [];
+    const result = await this.refundRepository.runInTransaction(async (tx) => {
       // 결과가 온 PG 취소 요청과 환불을 찾고 Refund → PaymentCancel 순서로 잠근 뒤 다시 읽는다
       const found = await this.refundRepository.findAttemptForResult(
         command.paymentCancelId,
@@ -130,7 +137,7 @@ export class RefundResultService {
       if (!unresolvedAttemptStatuses.includes(attempt.status)) {
         // 확정된 결과와 모순되는 늦은 통보는 덮어쓰지 않고 검토 필요·운영자 알림으로 남긴다(API 계약 §7)
         if (contradicts(attempt, outcome)) {
-          await this.recordResultConflict(tx, attempt);
+          await this.recordResultConflict(tx, attempt, actionLogs);
         }
         return stored;
       }
@@ -145,7 +152,7 @@ export class RefundResultService {
           payoutStatus: RefundPayoutStatus.ACTION_REQUIRED,
           actionCode: 'PG_REJECTED',
         });
-        await this.notifyPayoutAction(tx, attempt, 'PG_REJECTED');
+        await this.notifyPayoutAction(tx, attempt, 'PG_REJECTED', actionLogs);
         return {
           applied: true,
           attemptStatus: PaymentCancelStatus.FAILED,
@@ -189,7 +196,7 @@ export class RefundResultService {
       );
       // 실제액 불일치는 운영자가 부족액·초과액을 처리해야 하므로 알린다(FR-027)
       if (!amountMatches) {
-        await this.notifyOperator(tx, attempt, 'AMOUNT_MISMATCH');
+        await this.notifyOperator(tx, attempt, 'AMOUNT_MISMATCH', actionLogs);
       }
       return {
         applied: true,
@@ -197,6 +204,8 @@ export class RefundResultService {
         payoutStatus,
       };
     });
+    for (const log of actionLogs) this.txLogger.logTransaction(log);
+    return result;
   }
 
   /**
@@ -241,19 +250,30 @@ export class RefundResultService {
   }
 
   /**
-   * 운영자 알림을 저장한다
+   * 운영자 알림을 저장하고 커밋 뒤 남길 거래 로그를 모은다 (FR-037)
    * @param tx 지급 결과 반영 트랜잭션
    * @param attempt 사건이 생긴 PG 취소 요청과 그 환불
-   * @param kind 알림 종류
+   * @param kind 알림 종류(조치 사유 코드)
+   * @param actionLogs 커밋 뒤 기록할 거래 로그
    */
   private async notifyOperator(
     tx: TransactionClient,
     attempt: AttemptForResult,
     kind: string,
+    actionLogs: TransactionLog[],
   ): Promise<void> {
     await this.eventRepository.recordNotification(tx, {
       ...this.notificationBase(attempt, kind),
       audience: RefundNotificationAudience.OPERATOR,
+    });
+    actionLogs.push({
+      transactionId: `REFUND-${attempt.refund.id}-${attempt.id}`,
+      type: 'REFUND',
+      userId: attempt.refund.customerId,
+      orderId: attempt.refund.orderId,
+      orderItemId: attempt.refund.orderItemId ?? undefined,
+      status: kind,
+      metadata: { refundId: attempt.refund.id, paymentCancelId: attempt.id },
     });
   }
 
@@ -263,13 +283,15 @@ export class RefundResultService {
    * @param tx 지급 결과 반영 트랜잭션
    * @param attempt 사건이 생긴 PG 취소 요청과 그 환불
    * @param kind 알림 종류(조치 사유 코드)
+   * @param actionLogs 커밋 뒤 기록할 거래 로그
    */
   private async notifyPayoutAction(
     tx: TransactionClient,
     attempt: AttemptForResult,
     kind: string,
+    actionLogs: TransactionLog[],
   ): Promise<void> {
-    await this.notifyOperator(tx, attempt, kind);
+    await this.notifyOperator(tx, attempt, kind, actionLogs);
     await this.eventRepository.recordNotification(tx, {
       ...this.notificationBase(attempt, kind),
       audience: RefundNotificationAudience.SHOP,
@@ -289,10 +311,12 @@ export class RefundResultService {
    * - 지급 합계·원장·시도 상태는 바꾸지 않는다
    * @param tx 지급 결과 반영 트랜잭션
    * @param attempt 이미 확정된 PG 취소 요청과 그 환불
+   * @param actionLogs 커밋 뒤 기록할 거래 로그
    */
   private async recordResultConflict(
     tx: TransactionClient,
     attempt: AttemptForResult,
+    actionLogs: TransactionLog[],
   ): Promise<void> {
     await this.refundRepository.updateRefundPayout(tx, attempt.refund.id, {
       payoutStatus: RefundPayoutStatus.ACTION_REQUIRED,
@@ -300,6 +324,6 @@ export class RefundResultService {
       reviewRequired: true,
       actionCode: 'PG_RESULT_CONFLICT',
     });
-    await this.notifyOperator(tx, attempt, 'PG_RESULT_CONFLICT');
+    await this.notifyOperator(tx, attempt, 'PG_RESULT_CONFLICT', actionLogs);
   }
 }
