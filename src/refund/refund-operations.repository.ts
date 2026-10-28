@@ -177,4 +177,32 @@ export class RefundOperationsRepository {
     });
     return used !== null;
   }
+
+  /**
+   * 실제로 지급하지 않았음이 확인된 예약을 실패로 종료한다(환불·지급액·원장은 바꾸지 않는다)
+   * @param tx Refund 잠금 트랜잭션
+   * @param payoutId 예약
+   * @param input 확인자·시각·사유·미지급 근거
+   */
+  async markPayoutNotPaid(
+    tx: TransactionClient,
+    payoutId: string,
+    input: {
+      confirmedById: string;
+      now: Date;
+      reason: string;
+      evidenceReference: string;
+    },
+  ): Promise<void> {
+    await tx.manualRefundPayout.update({
+      where: { id: payoutId },
+      data: {
+        status: ManualRefundPayoutStatus.FAILED,
+        confirmedById: input.confirmedById,
+        confirmedAt: input.now,
+        failureReason: input.reason,
+        notPaidEvidence: input.evidenceReference,
+      },
+    });
+  }
 }

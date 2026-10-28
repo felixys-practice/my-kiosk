@@ -59,6 +59,21 @@ export type ManualConfirmResponse = {
   payoutStatus: string; // 등록 뒤 환불의 지급 상태
 };
 
+/** 별도 환불금 미지급 확인 요청 */
+export type ManualNotPaidCommand = {
+  reason: string; // DTO에서 앞뒤 공백을 지운 사유
+  evidenceReference?: string; // 확실한 미지급 근거(없으면 MANUAL_PAYOUT_EVIDENCE_REQUIRED)
+  idempotencyKey?: string;
+};
+
+/** 별도 환불금 미지급 확인 응답 */
+export type ManualNotPaidResponse = {
+  refundId: string;
+  payoutId: string;
+  status: 'FAILED';
+  payoutStatus: string; // 종료 뒤 환불의 지급 상태(조치 필요)
+};
+
 /**
  * 미지급 환불금의 운영 처리 서비스 (API 계약 §5, MANAGER 전용)
  * - 별도 환불금 지급 예약·지급 결과 등록·미지급 확인·초과 취소 검토
@@ -265,6 +280,75 @@ export class RefundOperationsService {
         },
       )
       .catch(rethrowReferenceReused);
+  }
+
+  /**
+   * 예약한 별도 환불금 지급을 실제로 지급하지 않았다고 확인해 실패로 종료한다
+   * @param actor 요청한 운영자
+   * @param refundId 환불
+   * @param payoutId 예약
+   * @param command 사유·근거·멱등 키
+   * @returns 200 종료 응답
+   */
+  async markManualPayoutNotPaid(
+    actor: RefundActor,
+    refundId: string,
+    payoutId: string,
+    command: ManualNotPaidCommand,
+  ): Promise<IdempotentResult<ManualNotPaidResponse>> {
+    const idempotencyKey = await this.assertOperationRequest(
+      actor,
+      refundId,
+      command.idempotencyKey,
+    );
+    // 지급하지 않았다는 확실한 근거가 있어야 예약을 종료한다(지급 여부를 모르면 종료하지 않는다)
+    const evidenceReference = command.evidenceReference?.trim();
+    if (!evidenceReference) throw new ManualPayoutEvidenceRequiredError();
+    return this.idempotencyService.execute<ManualNotPaidResponse>(
+      {
+        requesterId: actor.userId,
+        operation: 'MANUAL_PAYOUT_NOT_PAID',
+        key: idempotencyKey,
+        request: {
+          refundId,
+          payoutId,
+          reason: command.reason,
+          evidenceReference,
+        },
+        authorize: () => Promise.resolve(),
+      },
+      async (tx) => {
+        const now = new Date();
+        await this.lockPayoutTarget(tx, refundId);
+        const payout = await this.operationsRepository.findPayout(
+          tx,
+          refundId,
+          payoutId,
+        );
+        if (!payout) throw new ManualPayoutNotFoundError();
+        // 이미 지급 성공·실패로 끝난 예약은 바꾸지 않는다
+        if (payout.status !== ManualRefundPayoutStatus.RESERVED) {
+          throw new ManualPayoutStateConflictError();
+        }
+        // 예약만 실패로 종료한다. 환불은 조치 필요·MANUAL 그대로이고 PG 재개는 운영자 직접 재시도로만 한다
+        await this.operationsRepository.markPayoutNotPaid(tx, payoutId, {
+          confirmedById: actor.userId,
+          now,
+          reason: command.reason,
+          evidenceReference,
+        });
+        return {
+          status: 200,
+          refundId,
+          body: {
+            refundId,
+            payoutId,
+            status: 'FAILED',
+            payoutStatus: 'ACTION_REQUIRED',
+          },
+        };
+      },
+    );
   }
 
   /**

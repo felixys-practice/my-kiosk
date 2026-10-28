@@ -2995,5 +2995,71 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
         ledgers: [-(refundAmount - shortfall), -shortfall],
       });
     });
+
+    /**
+     * 예약한 별도 지급을 실제로 지급하지 않았다고 확인한다
+     * @param target 환불·예약
+     * @param evidenceReference 미지급 확인 근거(없으면 생략)
+     * @returns 응답
+     */
+    function notPaid(
+      target: { refundId: string; payoutId: string },
+      evidenceReference: string | undefined,
+    ) {
+      return app
+        .get(RefundOperationsService)
+        .markManualPayoutNotPaid(manager(), target.refundId, target.payoutId, {
+          reason: '은행 이체를 실행하지 않았음을 확인',
+          evidenceReference,
+          idempotencyKey: `not-paid-${randomUUID()}`,
+        });
+    }
+
+    it('미지급 확인은 증빙·사유가 있으면 예약을 실패로 종료하고 환불은 조치 필요로 남기며 지급액은 그대로다', async () => {
+      const reserved = await reservedPayout();
+      const evidence = '은행 거래 내역에 출금 없음';
+
+      const response = await notPaid(reserved, evidence);
+
+      const payout = await prisma.manualRefundPayout.findUniqueOrThrow({
+        where: { id: reserved.payoutId },
+      });
+      const refund = await prisma.refund.findUniqueOrThrow({
+        where: { id: reserved.refundId },
+      });
+      expect({
+        status: response.status,
+        payout: [payout.status, payout.notPaidEvidence, payout.failureReason],
+        refund: [refund.payoutStatus, refund.paidAmount, refund.payoutMethod],
+      }).toEqual({
+        status: 200,
+        payout: [
+          ManualRefundPayoutStatus.FAILED,
+          evidence,
+          '은행 이체를 실행하지 않았음을 확인',
+        ],
+        refund: [
+          RefundPayoutStatus.ACTION_REQUIRED,
+          0,
+          RefundPayoutMethod.MANUAL,
+        ],
+      });
+    });
+
+    it('미지급 확인에 증빙이 없으면 MANUAL_PAYOUT_EVIDENCE_REQUIRED로 거절되고 예약은 그대로다', async () => {
+      const reserved = await reservedPayout();
+
+      const rejected = await notPaid(reserved, undefined).catch(
+        (error: { code?: string }) => error.code,
+      );
+
+      const payout = await prisma.manualRefundPayout.findUniqueOrThrow({
+        where: { id: reserved.payoutId },
+      });
+      expect({ rejected, status: payout.status }).toEqual({
+        rejected: 'MANUAL_PAYOUT_EVIDENCE_REQUIRED',
+        status: ManualRefundPayoutStatus.RESERVED,
+      });
+    });
   });
 });
