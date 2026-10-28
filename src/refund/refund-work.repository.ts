@@ -69,6 +69,23 @@ export class RefundWorkRepository {
   }
 
   /**
+   * 맡은 복구 작업의 처리 기한을 늘린다(긴 BATCH 중 담당을 잃지 않게)
+   * @param claimToken 담당 토큰
+   * @param claimUntil 새 처리 기한
+   * @returns 아직 자기 담당이라 늘렸으면 true
+   */
+  async extendRecoveryControl(
+    claimToken: string,
+    claimUntil: Date,
+  ): Promise<boolean> {
+    const { count } = await this.prisma.refundRecoveryControl.updateMany({
+      where: { id: recoveryControlId, claimToken },
+      data: { claimUntil },
+    });
+    return count === 1;
+  }
+
+  /**
    * 맡았던 복구 작업 담당을 내려놓는다(아직 자기 담당일 때만)
    * @param claimToken 담당 토큰
    */

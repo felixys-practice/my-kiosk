@@ -193,13 +193,21 @@ export class RefundRecoveryService {
       });
       return;
     }
+    // 건마다 경과 시간을 반영한 시각을 쓰고 복구 담당 기한을 늘린다(뒤쪽 건이 지난 기한으로 담당을 잡지 않게)
+    const startedAt = Date.now();
     for (const paymentCancelId of batch) {
-      const result = await this.inquireAttempt(paymentCancelId, now);
+      const itemNow = new Date(now.getTime() + (Date.now() - startedAt));
+      const stillMine = await this.workRepository.extendRecoveryControl(
+        claimToken,
+        new Date(itemNow.getTime() + this.config('workLeaseSeconds') * 1000),
+      );
+      if (!stillMine) return;
+      const result = await this.inquireAttempt(paymentCancelId, itemNow);
       if (result === 'QUERY_ERROR') {
         await this.workRepository.updateRecoveryControl(claimToken, {
           mode: RefundRecoveryMode.PROBE,
           batchCutoffAt: null,
-          nextProbeAt: this.nextProbeAt(now),
+          nextProbeAt: this.nextProbeAt(itemNow),
         });
         return;
       }

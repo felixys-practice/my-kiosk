@@ -2089,4 +2089,37 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       afterCurrent: RefundRecoveryMode.BATCH,
     });
   });
+
+  it('BATCH의 뒤쪽 건은 앞 건 조회에 걸린 시간을 반영한 시각으로 조회 담당을 정한다', async () => {
+    await resetRecoveryControl();
+    const year = recoveryYear--;
+    await createQueryFailed(new Date(Date.UTC(year, 0, 1)));
+    const later = await createQueryFailed(new Date(Date.UTC(year, 0, 2)));
+    const now = new Date(Date.UTC(year, 1, 1));
+    const work = app.get(RefundWorkRepository);
+    await work.claimRecoveryControl('setup', now, new Date(now.getTime() + 1));
+    await work.updateRecoveryControl('setup', {
+      mode: RefundRecoveryMode.BATCH,
+      batchCutoffAt: now,
+    });
+    await work.releaseRecoveryControl('setup');
+    // 앞 건의 PG 조회가 1.1초 걸린다
+    pgGateway.inquireCancel
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) =>
+            setTimeout(() => resolve({ result: 'IN_PROGRESS' }), 1_100),
+          ),
+      )
+      .mockResolvedValue({ result: 'IN_PROGRESS' });
+
+    await app.get(RefundRecoveryService).recoverQueryFailed(now);
+
+    const attempt = await prisma.paymentCancel.findUniqueOrThrow({
+      where: { id: later.paymentCancelId },
+    });
+    expect(attempt.lastInquiryAt!.getTime()).toBeGreaterThanOrEqual(
+      now.getTime() + 1_000,
+    );
+  });
 });
