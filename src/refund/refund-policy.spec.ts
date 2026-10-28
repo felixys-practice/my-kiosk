@@ -7,6 +7,7 @@ import {
 import {
   CustomerRefundCandidate,
   evaluateCustomerRefund,
+  evaluateStoreRefund,
 } from './refund-policy';
 
 describe('evaluateCustomerRefund', () => {
@@ -287,5 +288,53 @@ describe('evaluateCustomerRefund', () => {
     );
 
     expect(decision).toEqual({ eligible: true, amount: 8700 });
+  });
+});
+
+describe('evaluateStoreRefund', () => {
+  const now = new Date('2026-10-28T12:00:00Z');
+  const paidAmount = 10000;
+
+  /**
+   * 매장 환불 대상 기본 후보(결제 완료·사용 이력 있는 정기권)를 만든다
+   * @param overrides 바꿀 필드
+   * @param ticketOverrides 바꿀 이용권 필드
+   * @returns 후보
+   */
+  function usedCandidate(
+    overrides: Partial<CustomerRefundCandidate> = {},
+    ticketOverrides: Partial<CustomerRefundCandidate['ticket']> = {},
+  ): CustomerRefundCandidate {
+    return {
+      ownerId: 'customer-1',
+      paymentStatus: PaymentStatus.SUCCESS,
+      paidAmount,
+      existingRefunds: [],
+      ticket: {
+        type: TicketType.PERIOD,
+        inUse: false,
+        activatedAt: new Date('2026-10-20T12:00:00Z'),
+        activationDeadline: new Date('2026-11-27T12:00:00Z'),
+        purchasedMinutes: null,
+        remainingMinutes: null,
+        minuteExpireDeadline: null,
+        ...ticketOverrides,
+      },
+      ...overrides,
+    };
+  }
+
+  it('사용 이력이 있는 이용권의 매장 환불 금액 0원은 사유와 함께 허용된다', () => {
+    const decision = evaluateStoreRefund(
+      usedCandidate(),
+      { amount: 0, reason: '이용 불편 보상 없음 처리' },
+      now,
+    );
+
+    expect(decision).toEqual({
+      eligible: true,
+      amount: 0,
+      reason: '이용 불편 보상 없음 처리',
+    });
   });
 });

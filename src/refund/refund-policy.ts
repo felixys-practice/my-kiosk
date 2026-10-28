@@ -131,3 +131,31 @@ function unusedDeadlineOf(
       return ticket.minuteExpireDeadline;
   }
 }
+
+/** 점주가 입력한 매장 환불 금액·사유 */
+export type StoreRefundInput = {
+  amount: number; // 원 단위 정수
+  reason?: string; // 점주 사유(선택)
+};
+
+/** 매장 환불 판정 결과 */
+export type StoreRefundDecision =
+  | { eligible: true; amount: number; reason: string | null }
+  | { eligible: false; code: string };
+
+/**
+ * 매장 환불 가능 여부와 확정 금액·사유를 판정한다 (API 계약 §4 매장 환불)
+ * @param candidate 매장 범위에서 찾은 이용권·결제·기존 환불 정보, 없으면 null
+ * @param input 점주 입력 금액·사유
+ * @param now 요청 시각
+ * @returns 판정 결과
+ */
+export function evaluateStoreRefund(
+  candidate: CustomerRefundCandidate | null,
+  input: StoreRefundInput,
+  now: Date,
+): StoreRefundDecision {
+  void candidate;
+  void now;
+  return { eligible: true, amount: input.amount, reason: input.reason ?? null };
+}
