@@ -1,6 +1,10 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
 import request from 'supertest';
-import { LedgerStatus } from '@prisma/client';
+import {
+  LedgerStatus,
+  PaymentCancelStatus,
+  RefundPayoutStatus,
+} from '@prisma/client';
 import { REFUND_PG_GATEWAY } from '../src/pg/refund-pg.gateway';
 import {
   createRefundTestContext,
@@ -90,5 +94,66 @@ describe('실제 지급별 원장 (E2E)', () => {
         paymentCancelId: accepted.paymentCancelId,
       }),
     ]);
+  });
+  /**
+   * 확정된 환불의 PG 취소 성공 콜백 본문을 만든다
+   * @param accepted 확정된 환불
+   * @returns 콜백 본문
+   */
+  function successCallback(
+    accepted: Awaited<ReturnType<typeof acceptedRefund>>,
+  ) {
+    return {
+      success: true,
+      paymentCancelId: accepted.paymentCancelId,
+      pgTransactionId: `pg-cancel-${accepted.paymentCancelId}`,
+      orderItemId: accepted.orderItemId,
+      amount: accepted.amount,
+      reason: null,
+    };
+  }
+
+  it('실제 지급과 원장이 반영된 뒤 같은 지급 확정 통보가 다시 와도 원장 기록은 1건 그대로다 (QS-4-2)', async () => {
+    const accepted = await acceptedRefund();
+    await sendRefundCallback(successCallback(accepted)).expect(200);
+
+    await sendRefundCallback(successCallback(accepted)).expect(200);
+
+    const ledgers = await ctx.prisma.ledger.findMany({
+      where: { refundId: accepted.refundId },
+    });
+    expect(ledgers).toHaveLength(1);
+  });
+
+  it('환불금 지급 처리 중에 PG가 취소 요청 실패를 확정하면 원장에는 아무 기록도 생기지 않는다 (QS-4-3)', async () => {
+    const accepted = await acceptedRefund();
+
+    await sendRefundCallback({
+      ...successCallback(accepted),
+      success: false,
+      reason: '취소 가능 기간 경과',
+    }).expect(200);
+
+    const refund = await ctx.prisma.refund.findUniqueOrThrow({
+      where: { id: accepted.refundId },
+      include: { ledgers: true, paymentCancels: true },
+    });
+    expect({
+      attemptStatus: refund.paymentCancels[0].status,
+      ledgers: refund.ledgers.length,
+    }).toEqual({ attemptStatus: PaymentCancelStatus.FAILED, ledgers: 0 });
+  });
+
+  it('환불금 지급 처리 중이고 PG 결과가 아직 확정되지 않았으면 원장에는 아무 기록도 없다 (QS-4-4)', async () => {
+    const accepted = await acceptedRefund();
+
+    const refund = await ctx.prisma.refund.findUniqueOrThrow({
+      where: { id: accepted.refundId },
+      include: { ledgers: true },
+    });
+    expect({
+      payoutStatus: refund.payoutStatus,
+      ledgers: refund.ledgers.length,
+    }).toEqual({ payoutStatus: RefundPayoutStatus.PENDING, ledgers: 0 });
   });
 });
