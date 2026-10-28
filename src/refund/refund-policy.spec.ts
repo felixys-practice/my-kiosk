@@ -411,4 +411,22 @@ describe('evaluateStoreRefund', () => {
       reason: null,
     });
   });
+  it('기한이 지난 미사용 이용권에 사유가 없으면', () => {
+    const decision = evaluateStoreRefund(
+      usedCandidate(
+        {},
+        {
+          activatedAt: null,
+          activationDeadline: new Date('2026-10-27T12:00:00Z'),
+        },
+      ),
+      { amount: paidAmount - 3000 },
+      now,
+    );
+
+    expect(decision).toEqual({
+      eligible: false,
+      code: 'REFUND_REASON_REQUIRED',
+    });
+  });
 });
