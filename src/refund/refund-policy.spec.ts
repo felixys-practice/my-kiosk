@@ -143,6 +143,16 @@ describe('evaluateCustomerRefund', () => {
       );
     }
 
+    it('남은 시간이 구매 시간과 같은 시간권은 미사용으로 판정되어 환불 가능하다', () => {
+      const decision = evaluateCustomerRefund(
+        timeTicket(purchasedMinutes),
+        customerId,
+        now,
+      );
+
+      expect(decision).toMatchObject({ eligible: true });
+    });
+
     it('남은 시간이 구매 시간보다 1분 적은 시간권은 USED_TICKET으로 판정된다', () => {
       const decision = evaluateCustomerRefund(
         timeTicket(purchasedMinutes - 1),
