@@ -261,4 +261,25 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       paidAt: null,
     });
   });
+
+  it('PG 실제액이 확정 금액보다 많으면 조치 필요·검토 필요로 기록되고 확정 금액은 그대로다', async () => {
+    const pending = await createPendingRefund();
+
+    await succeed(pending.paymentCancelId, refundAmount + 2000);
+
+    const refund = await prisma.refund.findUniqueOrThrow({
+      where: { id: pending.refundId },
+    });
+    expect({
+      payoutStatus: refund.payoutStatus,
+      reviewRequired: refund.reviewRequired,
+      amount: refund.amount,
+      paidAmount: refund.paidAmount,
+    }).toEqual({
+      payoutStatus: RefundPayoutStatus.ACTION_REQUIRED,
+      reviewRequired: true,
+      amount: refundAmount,
+      paidAmount: refundAmount + 2000,
+    });
+  });
 });
