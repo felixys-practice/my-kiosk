@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/unbound-method -- jest 목(mock) 메서드를 expect로 검증할 때 생기는 오탐 */
 import { Queue } from 'bullmq';
 import { TransactionClient } from 'src/prisma/prisma.service';
+import { DomainConflictError } from 'src/common/errors';
 import { SeatType, TicketStatus, TicketType } from '@prisma/client';
 import { NotAssignedSeatError } from 'src/seat-assignment/errors/not-assigned-seat.error';
 import { SeatTypeMismatchError } from 'src/seat-assignment/errors/seat-type-mismatch.error';
@@ -74,6 +75,20 @@ describe('UsageSessionService', () => {
   });
 
   describe('createSession', () => {
+    it('환불로 종료된(REVOKED) 이용권의 입실은 TICKET_TERMINATED로 거절되고 세션을 만들지 않는다', async () => {
+      ticketRepository.getTicketById.mockResolvedValue({
+        ...timeTicket(SeatType.FIXED),
+        status: TicketStatus.REVOKED,
+      });
+      repository.findSeatType.mockResolvedValue(SeatType.FIXED);
+
+      const entry = service.createSession('ticket-1', shopId, 'seat-1', userId);
+
+      await expect(entry).rejects.toBeInstanceOf(DomainConflictError);
+      await expect(entry).rejects.toMatchObject({ code: 'TICKET_TERMINATED' });
+      expect(repository.createSession).not.toHaveBeenCalled();
+    });
+
     it('자유석 이용권으로 고정석에 입실하면 SeatTypeMismatchError다', async () => {
       ticketRepository.getTicketById.mockResolvedValue(
         timeTicket(SeatType.FREE),
