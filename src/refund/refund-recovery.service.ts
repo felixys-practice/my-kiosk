@@ -273,6 +273,28 @@ export class RefundRecoveryService {
   ): Promise<PgCancelSendResult['result'] | null> {
     const paymentCancelId = attempt.id;
 
+    // PG가 결과를 확정했으면 공통 결과 처리로 반영한다(성공: 실제액·원장, 거절: 시도 실패·조치 필요)
+    if (result.result === 'SUCCEEDED') {
+      await this.resultService.applyPgResult({
+        paymentCancelId,
+        claimToken,
+        outcome: {
+          kind: 'SUCCEEDED',
+          pgTransactionId: result.pgTransactionId,
+          actualAmount: result.cancelledAmount,
+        },
+      });
+      return null;
+    }
+    if (result.result === 'FAILED') {
+      await this.resultService.applyPgResult({
+        paymentCancelId,
+        claimToken,
+        outcome: { kind: 'FAILED', reason: result.reason },
+      });
+      return null;
+    }
+
     // 3. PG가 미접수를 확실히 확인했으면 자동 한도 안에서 같은 ID·금액으로 다시 보내고,
     //    한도를 모두 썼으면 그 시도를 실패(RETRY_EXHAUSTED)로 끝내 운영자 재처리로 넘긴다
     if (result.result === 'NOT_FOUND') {

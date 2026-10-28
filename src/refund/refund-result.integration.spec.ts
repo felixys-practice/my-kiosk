@@ -1820,4 +1820,113 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       ],
     });
   });
+
+  it('개별 확인 재전송은 개별 확인 재전송 횟수만 늘리고 자동 재전송 횟수는 그대로 둔다', async () => {
+    const target = await createInquiredBefore(60);
+    await prisma.paymentCancel.update({
+      where: { id: target.paymentCancelId },
+      data: { resendCount: 2 },
+    });
+    pgGateway.inquireCancel.mockResolvedValueOnce({
+      result: 'NOT_FOUND',
+      authoritative: true,
+    });
+    pgGateway.sendCancel.mockResolvedValueOnce({ result: 'ACCEPTED' });
+
+    await app
+      .get(RefundPgCheckService)
+      .check(operator, target.refundId, target.now);
+
+    const attempt = await prisma.paymentCancel.findUniqueOrThrow({
+      where: { id: target.paymentCancelId },
+    });
+    expect({
+      resendCount: attempt.resendCount,
+      manualResendCount: attempt.manualResendCount,
+      sendAttemptCount: attempt.sendAttemptCount,
+    }).toEqual({ resendCount: 2, manualResendCount: 1, sendAttemptCount: 2 });
+  });
+
+  it.each([
+    ['PG 처리 중', { result: 'IN_PROGRESS' as const }],
+    ['조회 오류', { result: 'QUERY_ERROR' as const, reason: '조회 실패' }],
+  ])(
+    '개별 확인 조회가 %s이면 다시 보내지 않고 지급을 확정하지 않는다',
+    async (_label, inquiry) => {
+      const target = await createInquiredBefore(60);
+      pgGateway.inquireCancel.mockResolvedValueOnce(inquiry);
+
+      const result = await app
+        .get(RefundPgCheckService)
+        .check(operator, target.refundId, target.now);
+
+      const refund = await prisma.refund.findUniqueOrThrow({
+        where: { id: target.refundId },
+      });
+      expect({
+        resendResult: result.resendResult,
+        sends: pgGateway.sendCancel.mock.calls.length,
+        payoutStatus: refund.payoutStatus,
+      }).toEqual({
+        resendResult: null,
+        sends: 0,
+        payoutStatus: RefundPayoutStatus.PENDING,
+      });
+    },
+  );
+
+  it('미확정 요청의 개별 확인에서 새로 확인한 거절은 실패·조치 필요만 기록하고 새 PG 취소 요청을 만들지 않는다', async () => {
+    const target = await createInquiredBefore(60);
+    pgGateway.inquireCancel.mockResolvedValueOnce({
+      result: 'FAILED',
+      reason: '취소 가능 기간 경과',
+    });
+
+    await app
+      .get(RefundPgCheckService)
+      .check(operator, target.refundId, target.now);
+
+    const refund = await prisma.refund.findUniqueOrThrow({
+      where: { id: target.refundId },
+      include: { paymentCancels: true },
+    });
+    expect({
+      attempts: refund.paymentCancels.map((a) => a.status),
+      payoutStatus: refund.payoutStatus,
+      sends: pgGateway.sendCancel.mock.calls.length,
+    }).toEqual({
+      attempts: [PaymentCancelStatus.FAILED],
+      payoutStatus: RefundPayoutStatus.ACTION_REQUIRED,
+      sends: 0,
+    });
+  });
+
+  it('개별 확인은 다른 환불의 상태와 전체 복구 제어를 바꾸지 않는다', async () => {
+    await resetRecoveryControl();
+    const target = await createInquiredBefore(60);
+    const other = await createInquiredBefore(60);
+    const otherBefore = await prisma.paymentCancel.findUniqueOrThrow({
+      where: { id: other.paymentCancelId },
+    });
+    const controlBefore = await prisma.refundRecoveryControl.findFirstOrThrow();
+    pgGateway.inquireCancel.mockResolvedValue({ result: 'IN_PROGRESS' });
+
+    await app
+      .get(RefundPgCheckService)
+      .check(operator, target.refundId, target.now);
+
+    const otherAfter = await prisma.paymentCancel.findUniqueOrThrow({
+      where: { id: other.paymentCancelId },
+    });
+    const controlAfter = await prisma.refundRecoveryControl.findFirstOrThrow();
+    expect({
+      inquired: pgGateway.inquireCancel.mock.calls,
+      other: otherAfter.updatedAt,
+      control: controlAfter.updatedAt,
+    }).toEqual({
+      inquired: [[{ paymentCancelId: target.paymentCancelId }]],
+      other: otherBefore.updatedAt,
+      control: controlBefore.updatedAt,
+    });
+  });
 });
