@@ -79,6 +79,22 @@ describe('evaluateCustomerRefund', () => {
 
     expect(decision).toEqual({ eligible: false, code: 'ALREADY_REFUNDED' });
   });
+  it.each([RefundPayoutStatus.PENDING, RefundPayoutStatus.ACTION_REQUIRED])(
+    '확정됐지만 미지급(%s)인 환불이 있으면 REFUND_IN_PROGRESS로 판정된다',
+    (payoutStatus) => {
+      const decision = evaluateCustomerRefund(
+        candidate({
+          existingRefunds: [
+            { decisionStatus: RefundDecisionStatus.ACCEPTED, payoutStatus },
+          ],
+        }),
+        customerId,
+        now,
+      );
+
+      expect(decision).toEqual({ eligible: false, code: 'REFUND_IN_PROGRESS' });
+    },
+  );
 });
 
 void RefundDecisionStatus;

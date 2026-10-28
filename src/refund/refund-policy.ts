@@ -66,6 +66,10 @@ export function evaluateCustomerRefund(
   ) {
     return { eligible: false, code: 'ALREADY_REFUNDED' };
   }
+  // 4. 확정됐지만 지급이 끝나지 않은 환불이 있으면 진행 중
+  if (accepted.length > 0) {
+    return { eligible: false, code: 'REFUND_IN_PROGRESS' };
+  }
   void now;
   return { eligible: true, amount: 0 };
 }
