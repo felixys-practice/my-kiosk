@@ -769,4 +769,31 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       );
     },
   );
+  it('기존 경로가 만든 PG 취소 요청에 결제 전체(null) 대상 콜백이 오면 PG_CALLBACK_TARGET_MISMATCH로 거절된다', async () => {
+    // 환불 기록 없이 기존 경로가 만든 PG 취소 요청
+    const pending = await createPendingRefund();
+    const source = await prisma.paymentCancel.findUniqueOrThrow({
+      where: { id: pending.paymentCancelId },
+    });
+    const legacy = await prisma.paymentCancel.create({
+      data: {
+        paymentId: source.paymentId,
+        orderItemId: pending.orderItemId,
+        amount: refundAmount,
+        status: PaymentCancelStatus.REQUESTED,
+        requestedAt: new Date(),
+      },
+    });
+
+    await expect(
+      service.receiveCallback({
+        success: true,
+        paymentCancelId: legacy.id,
+        pgTransactionId: `pg-cancel-${randomUUID()}`,
+        orderItemId: null,
+        amount: refundAmount,
+        reason: null,
+      }),
+    ).rejects.toBeInstanceOf(PgCallbackTargetMismatchError);
+  });
 });
