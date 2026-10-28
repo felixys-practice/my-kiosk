@@ -19,6 +19,8 @@ import {
   UserRole,
 } from '@prisma/client';
 import { randomUUID } from 'crypto';
+import { getQueueToken } from '@nestjs/bullmq';
+import { Job, Queue } from 'bullmq';
 import { AppModule } from 'src/app.module';
 import { DomainConflictError, DomainNotFoundError } from 'src/common/errors';
 import { REFUND_PG_GATEWAY } from 'src/pg/refund-pg.gateway';
@@ -1604,6 +1606,39 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
     expect({ outcome, mode: control.mode }).toEqual({
       outcome: 'NO_WORK',
       mode: 'PROBE',
+    });
+  });
+
+  it('전체 재확인 요청은 대상이 있으면 SCHEDULED를 받고, 자동 확인 예정 시각을 기다리지 않도록 BATCH로 바꿔 즉시 실행을 예약한다', async () => {
+    await resetRecoveryControl();
+    const year = recoveryYear--;
+    await createQueryFailed(new Date(Date.UTC(year, 0, 1)));
+    const now = new Date(Date.UTC(year, 1, 1));
+    // 앞선 PROBE 오류로 다음 확인 시각이 먼 상태
+    await prisma.refundRecoveryControl.update({
+      where: { id: 'PG_RESULT_RECOVERY' },
+      data: { nextProbeAt: new Date(now.getTime() + 900_000) },
+    });
+    const queue = app.get<Queue>(getQueueToken('refund-recovery'));
+    const enqueue = jest.spyOn(queue, 'add').mockResolvedValue({} as Job);
+
+    const outcome = await app.get(RefundRecoveryService).resumeRecovery(now);
+
+    const control = await prisma.refundRecoveryControl.findFirstOrThrow();
+    const enqueued = enqueue.mock.calls.map(([name]) => name);
+    enqueue.mockRestore();
+    expect({
+      outcome,
+      mode: control.mode,
+      batchCutoffAt: control.batchCutoffAt,
+      nextProbeAt: control.nextProbeAt,
+      enqueued,
+    }).toEqual({
+      outcome: 'SCHEDULED',
+      mode: 'BATCH',
+      batchCutoffAt: now,
+      nextProbeAt: null,
+      enqueued: ['sweep'],
     });
   });
 });

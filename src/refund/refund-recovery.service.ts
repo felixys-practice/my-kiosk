@@ -14,6 +14,9 @@ import { RefundDispatchService } from './refund-dispatch.service';
 import { RefundResultService } from './refund-result.service';
 import { inquiryBackoffSeconds } from './refund-recovery.policy';
 import { RefundWorkRepository } from './refund-work.repository';
+import { refundRecoveryQueueName } from './refund-recovery.scheduler';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 import { PgCancelQueryResult } from 'src/pg/pg.types';
 
 /** 자동 조회 대상인 미확정 시도 상태 */
@@ -35,6 +38,7 @@ export class RefundRecoveryService {
     private readonly resultService: RefundResultService,
     private readonly configService: ConfigService,
     private readonly workRepository: RefundWorkRepository,
+    @InjectQueue(refundRecoveryQueueName) private readonly recoveryQueue: Queue,
     @Inject(REFUND_PG_GATEWAY) private readonly pgGateway: RefundPgGateway,
   ) {}
 
@@ -92,7 +96,15 @@ export class RefundRecoveryService {
     // 기준 시각 이전의 결과 확인 실패 건이 없으면 할 일이 없다
     const [any] = await this.workRepository.findQueryFailed(now, 1);
     if (!any) return 'NO_WORK';
-    return Promise.reject(new Error('구현 전'));
+    // 다음 PROBE 시각을 기다리지 않고 지금 이전의 결과 확인 실패 건을 처리 단위씩 확인한다
+    await this.workRepository.updateRecoveryControl({
+      mode: RefundRecoveryMode.BATCH,
+      batchCutoffAt: now,
+      nextProbeAt: null,
+    });
+    // 정기 탐색을 기다리지 않도록 같은 작업을 바로 한 번 넣는다
+    await this.recoveryQueue.add('sweep', {});
+    return 'SCHEDULED';
   }
 
   /**
