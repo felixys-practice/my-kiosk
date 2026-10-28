@@ -32,6 +32,21 @@ export class RefundRecoveryService {
   ) {}
 
   /**
+   * DB에서 조회 예정 시각이 지난 PG 취소 요청을 찾아 조회한다(정기 탐색)
+   * @param now 탐색 시각
+   */
+  async sweep(now: Date): Promise<void> {
+    const due = await this.refundRepository.findDueInquiries(
+      now,
+      this.config('recoveryBatchSize'),
+    );
+    // 예정 시각 순으로 한 건씩 조회한다(각 건은 담당 토큰으로 중복 실행을 막는다)
+    for (const paymentCancelId of due) {
+      await this.inquireAttempt(paymentCancelId, now);
+    }
+  }
+
+  /**
    * PG 취소 요청 한 건을 조회하고 결과에 따라 반영·재전송·재조회 예약을 한다
    * @param paymentCancelId 조회할 PG 취소 요청
    * @param now 조회 시각(일정 계산 기준)
@@ -178,7 +193,8 @@ export class RefundRecoveryService {
       | 'queryIntervalSeconds'
       | 'queryBackoffSeconds'
       | 'queryBackoffMaxSeconds'
-      | 'queryFailureThreshold',
+      | 'queryFailureThreshold'
+      | 'recoveryBatchSize',
   ): number {
     return this.configService.get<number>(`refund.${key}`)!;
   }

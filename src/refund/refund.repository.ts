@@ -419,6 +419,25 @@ export class RefundRepository {
   }
 
   /**
+   * 정기 탐색에서 조회할 PG 취소 요청을 찾는다(일정의 원천은 DB의 nextInquiryAt)
+   * @param now 탐색 시각
+   * @param limit 한 번에 처리할 최대 건수
+   * @returns 조회 예정 시각이 지난 미확정 시도 ID(예정 시각 순)
+   */
+  async findDueInquiries(now: Date, limit: number): Promise<string[]> {
+    const due = await this.prisma.paymentCancel.findMany({
+      where: {
+        status: PaymentCancelStatus.REQUESTED,
+        nextInquiryAt: { lte: now },
+      },
+      orderBy: { nextInquiryAt: 'asc' },
+      take: limit,
+      select: { id: true },
+    });
+    return due.map((attempt) => attempt.id);
+  }
+
+  /**
    * 조회 직전에 조회 시작 시각·횟수와 담당을 저장한다 (API 계약 §8)
    * @param tx 조회 준비 트랜잭션
    * @param id PG 취소 요청 ID

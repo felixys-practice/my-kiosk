@@ -1122,16 +1122,17 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
   /**
    * 응답 없이 전송된 뒤 첫 조회를 기다리는 PG 취소 요청을 만든다(먼 과거 시각 기준)
    * @param resendCount 지금까지의 자동 재전송 횟수
+   * @param sentAt 전송 시각(기본: 먼 과거 기준 시각, 일정 탐색 테스트는 저마다 다른 시각을 쓴다)
    * @returns 환불·PG 취소 요청과 첫 조회 예정 시각
    */
-  async function createAwaitingInquiry(resendCount = 0) {
+  async function createAwaitingInquiry(resendCount = 0, sentAt = pastBase) {
     const pending = await createPendingRefund();
-    const dueAt = new Date(pastBase.getTime() + 60_000);
+    const dueAt = new Date(sentAt.getTime() + 60_000);
     await prisma.paymentCancel.update({
       where: { id: pending.paymentCancelId },
       data: {
         sendAttemptCount: 1,
-        lastSendAttemptAt: pastBase,
+        lastSendAttemptAt: sentAt,
         nextInquiryAt: dueAt,
         resendCount,
       },
@@ -1331,6 +1332,25 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       failures: 5,
       claimToken: null,
       operatorNotified: true,
+    });
+  });
+
+  it('응답 없는 전송 59초 시점의 정기 탐색은 조회하지 않고 60초 시점에는 조회한다', async () => {
+    const sentAt = new Date('1999-03-01T00:00:00Z');
+    const awaiting = await createAwaitingInquiry(0, sentAt);
+    pgGateway.inquireCancel.mockResolvedValue({ result: 'IN_PROGRESS' });
+    const recovery = app.get(RefundRecoveryService);
+
+    await recovery.sweep(new Date(sentAt.getTime() + 59_000));
+    const callsAt59 = pgGateway.inquireCancel.mock.calls.length;
+    await recovery.sweep(new Date(sentAt.getTime() + 60_000));
+
+    expect({
+      callsAt59,
+      calledAt60: pgGateway.inquireCancel.mock.calls,
+    }).toEqual({
+      callsAt59: 0,
+      calledAt60: [[{ paymentCancelId: awaiting.paymentCancelId }]],
     });
   });
 });
