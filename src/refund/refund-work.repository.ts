@@ -17,6 +17,7 @@ export type RecoveryControlState = {
   mode: RefundRecoveryMode;
   nextProbeAt: Date | null;
   batchCutoffAt: Date | null;
+  claimUntil: Date | null; // 복구 작업을 맡은 작업자의 처리 기한
 };
 
 /**
@@ -36,7 +37,12 @@ export class RefundWorkRepository {
       where: { id: recoveryControlId },
       create: { id: recoveryControlId, mode: RefundRecoveryMode.PROBE },
       update: {},
-      select: { mode: true, nextProbeAt: true, batchCutoffAt: true },
+      select: {
+        mode: true,
+        nextProbeAt: true,
+        batchCutoffAt: true,
+        claimUntil: true,
+      },
     });
   }
 

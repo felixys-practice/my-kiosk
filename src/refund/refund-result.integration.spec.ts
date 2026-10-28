@@ -1641,4 +1641,32 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       enqueued: ['sweep'],
     });
   });
+
+  it('전체 재확인 요청은 복구 작업이 실행 중이면 ALREADY_RUNNING을 받고 아무것도 바꾸지 않는다', async () => {
+    await resetRecoveryControl();
+    const year = recoveryYear--;
+    await createQueryFailed(new Date(Date.UTC(year, 0, 1)));
+    const now = new Date(Date.UTC(year, 1, 1));
+    // 다른 작업자가 복구 작업을 맡아 처리 기한 안에서 실행 중인 상태
+    await prisma.refundRecoveryControl.update({
+      where: { id: 'PG_RESULT_RECOVERY' },
+      data: {
+        claimToken: 'running-worker',
+        claimUntil: new Date(now.getTime() + 30_000),
+      },
+    });
+    const queue = app.get<Queue>(getQueueToken('refund-recovery'));
+    const enqueue = jest.spyOn(queue, 'add').mockResolvedValue({} as Job);
+
+    const outcome = await app.get(RefundRecoveryService).resumeRecovery(now);
+
+    const control = await prisma.refundRecoveryControl.findFirstOrThrow();
+    const enqueued = enqueue.mock.calls.length;
+    enqueue.mockRestore();
+    expect({ outcome, mode: control.mode, enqueued }).toEqual({
+      outcome: 'ALREADY_RUNNING',
+      mode: 'PROBE',
+      enqueued: 0,
+    });
+  });
 });

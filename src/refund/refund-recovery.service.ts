@@ -93,6 +93,10 @@ export class RefundRecoveryService {
   async resumeRecovery(
     now: Date,
   ): Promise<'SCHEDULED' | 'ALREADY_RUNNING' | 'NO_WORK'> {
+    // 다른 작업자가 복구 작업을 처리 기한 안에서 실행 중이면 중복 실행하지 않는다
+    const control = await this.workRepository.getRecoveryControl();
+    if (control.claimUntil && control.claimUntil > now)
+      return 'ALREADY_RUNNING';
     // 기준 시각 이전의 결과 확인 실패 건이 없으면 할 일이 없다
     const [any] = await this.workRepository.findQueryFailed(now, 1);
     if (!any) return 'NO_WORK';
