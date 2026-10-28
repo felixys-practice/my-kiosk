@@ -512,4 +512,16 @@ describe('evaluateStoreRefund', () => {
 
     expect(decision).toEqual({ eligible: false, code: 'REFUND_IN_PROGRESS' });
   });
+  it('결제가 SUCCESS가 아니면 매장 환불도 PAYMENT_NOT_COMPLETED로 판정된다', () => {
+    const decision = evaluateStoreRefund(
+      usedCandidate({ paymentStatus: PaymentStatus.FAILED }),
+      { amount: 1000, reason: '보상' },
+      now,
+    );
+
+    expect(decision).toEqual({
+      eligible: false,
+      code: 'PAYMENT_NOT_COMPLETED',
+    });
+  });
 });
