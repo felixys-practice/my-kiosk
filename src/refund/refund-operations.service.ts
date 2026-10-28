@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { ManualRefundPayoutStatus, Prisma } from '@prisma/client';
 import { TransactionClient } from 'src/prisma/prisma.service';
 import { RefundAccessService, RefundActor } from './refund-access.service';
 import {
@@ -15,6 +16,10 @@ import {
 } from './refund-manual-payout.policy';
 import {
   IdempotencyKeyRequiredError,
+  ManualPayoutEvidenceRequiredError,
+  ManualPayoutNotFoundError,
+  ManualPayoutReferenceReusedError,
+  ManualPayoutStateConflictError,
   RefundNotFoundError,
   RefundOutstandingAmountMismatchError,
   RefundPayoutNotActionableError,
@@ -148,68 +153,114 @@ export class RefundOperationsService {
       refundId,
       command.idempotencyKey,
     );
-    return this.idempotencyService.execute<ManualConfirmResponse>(
-      {
-        requesterId: actor.userId,
-        operation: 'MANUAL_PAYOUT_CONFIRM',
-        key: idempotencyKey,
-        request: {
-          refundId,
-          payoutId,
-          amount: command.amount,
-          paidAt: command.paidAt.toISOString(),
-          externalTransactionId: command.externalTransactionId,
-          evidenceReference: command.evidenceReference ?? null,
-        },
-        authorize: () => Promise.resolve(),
-      },
-      async (tx) => {
-        const now = new Date();
-        await this.lockPayoutTarget(tx, refundId);
-        const payout = (await this.operationsRepository.findPayout(
-          tx,
-          refundId,
-          payoutId,
-        ))!;
-        // 예약 성공 확정·지급 합계·원장을 같은 트랜잭션에서 저장한다
-        await this.operationsRepository.markPayoutSucceeded(tx, payoutId, {
-          confirmedById: actor.userId,
-          now,
-          paidAt: command.paidAt,
-          externalTransactionId: command.externalTransactionId,
-          evidenceReference: command.evidenceReference!,
-        });
-        const refund = await this.operationsRepository.findRefundForPayout(
-          tx,
-          refundId,
-        );
-        await this.ledgerRepository.recordPayout(tx, {
-          shopId: refund.shopId,
-          orderId: refund.orderId,
-          refundId,
-          paidAmount: payout.amount,
-          manualRefundPayoutId: payoutId,
-        });
-        const paidAmount = refund.paidAmount + payout.amount;
-        const settled = paidAmount === refund.amount;
-        await this.operationsRepository.applyManualPaid(tx, refundId, {
-          paidAmount,
-          settled,
-          now,
-        });
-        return {
-          status: 200,
-          refundId,
-          body: {
+    // 실제 지급 사실을 확인할 증빙이 있어야 결과를 등록한다
+    const evidenceReference = command.evidenceReference?.trim();
+    if (!evidenceReference) throw new ManualPayoutEvidenceRequiredError();
+    return this.idempotencyService
+      .execute<ManualConfirmResponse>(
+        {
+          requesterId: actor.userId,
+          operation: 'MANUAL_PAYOUT_CONFIRM',
+          key: idempotencyKey,
+          request: {
             refundId,
             payoutId,
-            status: 'SUCCEEDED',
-            amount: payout.amount,
-            payoutStatus: settled ? 'PAID' : 'ACTION_REQUIRED',
+            amount: command.amount,
+            paidAt: command.paidAt.toISOString(),
+            externalTransactionId: command.externalTransactionId,
+            evidenceReference,
           },
-        };
-      },
-    );
+          authorize: () => Promise.resolve(),
+        },
+        async (tx) => {
+          const now = new Date();
+          await this.lockPayoutTarget(tx, refundId);
+          const payout = await this.operationsRepository.findPayout(
+            tx,
+            refundId,
+            payoutId,
+          );
+          if (!payout) throw new ManualPayoutNotFoundError();
+          // 같은 지급 결과의 반복 등록은 저장된 결과를 돌려주고 지급액·원장을 더하지 않는다
+          if (
+            payout.status === ManualRefundPayoutStatus.SUCCEEDED &&
+            payout.externalTransactionId === command.externalTransactionId &&
+            payout.amount === command.amount
+          ) {
+            const stored = await this.operationsRepository.findRefundForPayout(
+              tx,
+              refundId,
+            );
+            return {
+              status: 200,
+              refundId,
+              body: {
+                refundId,
+                payoutId,
+                status: 'SUCCEEDED',
+                amount: payout.amount,
+                payoutStatus: stored.payoutStatus,
+              },
+            };
+          }
+          // 실패로 끝났거나 다른 결과로 확정된 예약은 바꾸지 않는다
+          if (payout.status !== ManualRefundPayoutStatus.RESERVED) {
+            throw new ManualPayoutStateConflictError();
+          }
+          // 실제 지급액은 예약 금액과 같아야 한다
+          if (command.amount !== payout.amount) {
+            throw new RefundOutstandingAmountMismatchError();
+          }
+          // 거래 식별자는 전역에서 한 지급에만 쓴다(동시 등록은 DB unique가 막는다)
+          if (
+            await this.operationsRepository.isExternalTransactionUsedByOther(
+              tx,
+              command.externalTransactionId,
+              payoutId,
+            )
+          ) {
+            throw new ManualPayoutReferenceReusedError();
+          }
+          // 예약 성공 확정·지급 합계·원장을 같은 트랜잭션에서 저장한다
+          await this.operationsRepository.markPayoutSucceeded(tx, payoutId, {
+            confirmedById: actor.userId,
+            now,
+            paidAt: command.paidAt,
+            externalTransactionId: command.externalTransactionId,
+            evidenceReference,
+          });
+          const refund = await this.operationsRepository.findRefundForPayout(
+            tx,
+            refundId,
+          );
+          await this.ledgerRepository.recordPayout(tx, {
+            shopId: refund.shopId,
+            orderId: refund.orderId,
+            refundId,
+            paidAmount: payout.amount,
+            manualRefundPayoutId: payoutId,
+          });
+          const paidAmount = refund.paidAmount + payout.amount;
+          const settled = paidAmount === refund.amount;
+          await this.operationsRepository.applyManualPaid(tx, refundId, {
+            paidAmount,
+            settled,
+            now,
+          });
+          return {
+            status: 200,
+            refundId,
+            body: {
+              refundId,
+              payoutId,
+              status: 'SUCCEEDED',
+              amount: payout.amount,
+              payoutStatus: settled ? 'PAID' : 'ACTION_REQUIRED',
+            },
+          };
+        },
+      )
+      .catch(rethrowReferenceReused);
   }
 
   /**
@@ -265,4 +316,21 @@ function reservationRejectionError(code: ManualReservationRejection): Error {
     return new RefundOutstandingAmountMismatchError();
   }
   return new RefundPayoutNotActionableError();
+}
+
+/**
+ * 동시 등록 경쟁으로 거래 식별자 고유 제약에 걸리면 재사용 오류로 바꾼다
+ * @param error 잡은 오류
+ * @returns 없음(항상 던진다)
+ * @throws ManualPayoutReferenceReusedError 거래 식별자 고유 위반일 때
+ */
+function rethrowReferenceReused(error: unknown): never {
+  if (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === 'P2002' &&
+    JSON.stringify(error.meta ?? {}).includes('external_transaction_id')
+  ) {
+    throw new ManualPayoutReferenceReusedError();
+  }
+  throw error;
 }

@@ -279,6 +279,9 @@ suite_baseline: green
 | U369 | 시스템 자동 취소(SYSTEM) 환불의 PG 취소 요청 실패·조치 필요 알림은 운영자(MANAGER)에게만 저장한다 (계약 §9, US6 검수 2) | FR-028 | example | DONE | `src/refund/refund-result.integration.spec.ts` › 시스템 자동 취소 환불의 PG 거절은 운영자에게만 알린다; QS-5-12 수신자 확인 |
 | U370 | 결제 승인 콜백의 금액이 원 단위 정수가 아니면 형식 오류(400)다 (US6 검수 3) | FR-030 | example | DONE | `src/payment/dto/pg-callback.dto.spec.ts` › 승인 금액이 원 단위 정수가 아니면(1000.5) 형식 오류(400)다 |
 | U371 | 결제 승인 콜백은 200으로 수신 확인한다 (계약 §2·§7, US6 검수 1, 기존 E2E 기대값 변경 — 사용자 결정) | FR-030 | example | DONE | `test/refund-payment-mismatch.e2e-spec.ts` 등 결제 콜백 `.expect(200)` |
+| U372 | 환불에 속하지 않는 별도 지급 예약 ID로 결과 등록·미지급 확인을 요청하면 404 MANUAL_PAYOUT_NOT_FOUND다 (계약 §10, US10 진행 중 추가) | FR-046 | example | PENDING | |
+| U373 | 이미 실패로 종료된 예약의 결과 등록은 409 MANUAL_PAYOUT_STATE_CONFLICT다 (계약 §10, US10 진행 중 추가) | FR-046 | example | PENDING | |
+| U374 | 결과 등록 금액이 예약 금액과 다르면 400 REFUND_OUTSTANDING_AMOUNT_MISMATCH다 (계약 §5 '예약과 같은 금액', US10 진행 중 추가) | FR-046 | example | PENDING | |
 
 ### `src/refund/refund-idempotency.service.ts`
 

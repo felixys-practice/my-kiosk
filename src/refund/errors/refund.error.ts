@@ -192,3 +192,43 @@ export class RefundOutstandingAmountMismatchError extends DomainBadRequestError 
     this.name = 'RefundOutstandingAmountMismatchError';
   }
 }
+
+/** 실제 지급·확실한 미지급의 증빙 누락 (400) */
+export class ManualPayoutEvidenceRequiredError extends DomainBadRequestError {
+  readonly code = 'MANUAL_PAYOUT_EVIDENCE_REQUIRED';
+
+  constructor() {
+    super('지급 결과를 확인할 수 있는 증빙이 필요합니다');
+    this.name = 'ManualPayoutEvidenceRequiredError';
+  }
+}
+
+/** 없거나 다른 환불에 속한 별도 환불금 지급 예약 (404) */
+export class ManualPayoutNotFoundError extends DomainNotFoundError {
+  readonly code = 'MANUAL_PAYOUT_NOT_FOUND';
+
+  constructor() {
+    super('별도 환불금 지급 예약을 찾을 수 없습니다');
+    this.name = 'ManualPayoutNotFoundError';
+  }
+}
+
+/** 이미 실패·완료된 예약의 상충 변경 (409) */
+export class ManualPayoutStateConflictError extends DomainConflictError {
+  readonly code = 'MANUAL_PAYOUT_STATE_CONFLICT';
+
+  constructor() {
+    super('이미 종료된 별도 환불금 지급 예약은 바꿀 수 없습니다');
+    this.name = 'ManualPayoutStateConflictError';
+  }
+}
+
+/** 다른 환불금 지급에서 이미 쓴 실제 지급 거래 식별자 (409) */
+export class ManualPayoutReferenceReusedError extends DomainConflictError {
+  readonly code = 'MANUAL_PAYOUT_REFERENCE_REUSED';
+
+  constructor() {
+    super('다른 환불금 지급에서 이미 사용한 거래 식별자입니다');
+    this.name = 'ManualPayoutReferenceReusedError';
+  }
+}

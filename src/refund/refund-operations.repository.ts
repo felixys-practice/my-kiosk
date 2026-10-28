@@ -78,6 +78,7 @@ export class RefundOperationsRepository {
       select: {
         amount: true,
         paidAmount: true,
+        payoutStatus: true,
         reviewRequired: true,
         payment: { select: { order: { select: { id: true, shopId: true } } } },
       },
@@ -85,6 +86,7 @@ export class RefundOperationsRepository {
     return {
       amount: refund.amount,
       paidAmount: refund.paidAmount,
+      payoutStatus: refund.payoutStatus,
       reviewRequired: refund.reviewRequired,
       orderId: refund.payment.order.id,
       shopId: refund.payment.order.shopId,
@@ -143,5 +145,24 @@ export class RefundOperationsRepository {
           }
         : { paidAmount: input.paidAmount },
     });
+  }
+
+  /**
+   * 실제 지급 거래 식별자를 다른 별도 지급이 이미 쓰는지 확인한다(전역 고유)
+   * @param tx 트랜잭션
+   * @param externalTransactionId 거래 식별자
+   * @param payoutId 지금 확정하는 예약(제외)
+   * @returns 다른 지급이 쓰고 있으면 true
+   */
+  async isExternalTransactionUsedByOther(
+    tx: TransactionClient,
+    externalTransactionId: string,
+    payoutId: string,
+  ): Promise<boolean> {
+    const used = await tx.manualRefundPayout.findFirst({
+      where: { externalTransactionId, id: { not: payoutId } },
+      select: { id: true },
+    });
+    return used !== null;
   }
 }

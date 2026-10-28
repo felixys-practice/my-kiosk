@@ -2852,5 +2852,100 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
         ledgers: [[-refundAmount, reserved.payoutId]],
       });
     });
+
+    it('지급 증빙이 없으면 MANUAL_PAYOUT_EVIDENCE_REQUIRED로 거절되고 예약은 그대로다', async () => {
+      const reserved = await reservedPayout();
+
+      const rejected = await confirm(reserved, {
+        evidenceReference: undefined,
+      }).catch((error: { code?: string }) => error.code);
+
+      const payout = await prisma.manualRefundPayout.findUniqueOrThrow({
+        where: { id: reserved.payoutId },
+      });
+      expect({ rejected, status: payout.status }).toEqual({
+        rejected: 'MANUAL_PAYOUT_EVIDENCE_REQUIRED',
+        status: ManualRefundPayoutStatus.RESERVED,
+      });
+    });
+
+    it('같은 지급 결과를 다른 멱등 키로 다시 등록하면 최초 결과를 받고 지급액·원장은 더해지지 않는다', async () => {
+      const reserved = await reservedPayout();
+      const externalTransactionId = `bank-${randomUUID()}`;
+      const first = await confirm(reserved, { externalTransactionId });
+
+      const repeated = await confirm(reserved, { externalTransactionId });
+
+      const refund = await prisma.refund.findUniqueOrThrow({
+        where: { id: reserved.refundId },
+      });
+      const ledgers = await prisma.ledger.count({
+        where: { refundId: reserved.refundId },
+      });
+      expect({
+        repeated: { status: repeated.status, body: repeated.body },
+        paidAmount: refund.paidAmount,
+        ledgers,
+      }).toEqual({
+        repeated: { status: first.status, body: first.body },
+        paidAmount: refundAmount,
+        ledgers: 1,
+      });
+    });
+
+    it('다른 환불의 별도 지급에서 이미 쓴 거래 ID로 등록하면 MANUAL_PAYOUT_REFERENCE_REUSED로 거절된다', async () => {
+      const first = await reservedPayout();
+      const second = await reservedPayout();
+      const externalTransactionId = `bank-${randomUUID()}`;
+      await confirm(first, { externalTransactionId });
+
+      const rejected = await confirm(second, { externalTransactionId }).catch(
+        (error: { code?: string }) => error.code,
+      );
+
+      expect(rejected).toBe('MANUAL_PAYOUT_REFERENCE_REUSED');
+    });
+
+    it('환불에 속하지 않는 별도 지급 예약 ID로 결과를 등록하면 MANUAL_PAYOUT_NOT_FOUND로 거절된다', async () => {
+      const reserved = await reservedPayout();
+      const other = await reservedPayout();
+
+      const rejected = await confirm({
+        refundId: reserved.refundId,
+        payoutId: other.payoutId,
+      }).catch((error: { code?: string }) => error.code);
+
+      expect(rejected).toBe('MANUAL_PAYOUT_NOT_FOUND');
+    });
+
+    it('이미 실패로 종료된 예약의 결과 등록은 MANUAL_PAYOUT_STATE_CONFLICT로 거절된다', async () => {
+      const reserved = await reservedPayout();
+      await prisma.manualRefundPayout.update({
+        where: { id: reserved.payoutId },
+        data: { status: ManualRefundPayoutStatus.FAILED },
+      });
+
+      const rejected = await confirm(reserved).catch(
+        (error: { code?: string }) => error.code,
+      );
+
+      expect(rejected).toBe('MANUAL_PAYOUT_STATE_CONFLICT');
+    });
+
+    it('결과 등록 금액이 예약 금액과 다르면 REFUND_OUTSTANDING_AMOUNT_MISMATCH로 거절되고 예약은 그대로다', async () => {
+      const reserved = await reservedPayout();
+
+      const rejected = await confirm(reserved, {
+        amount: refundAmount - 1,
+      }).catch((error: { code?: string }) => error.code);
+
+      const payout = await prisma.manualRefundPayout.findUniqueOrThrow({
+        where: { id: reserved.payoutId },
+      });
+      expect({ rejected, status: payout.status }).toEqual({
+        rejected: 'REFUND_OUTSTANDING_AMOUNT_MISMATCH',
+        status: ManualRefundPayoutStatus.RESERVED,
+      });
+    });
   });
 });
