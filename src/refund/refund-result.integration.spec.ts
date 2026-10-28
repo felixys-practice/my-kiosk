@@ -2034,4 +2034,30 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       nextInquiryAt: now.getTime() + 60_000,
     });
   });
+
+  it('개별 확인은 잠금 안에서 최근 조회 간격을 다시 확인해, 먼저 읽은 기록이 오래됐어도 PG를 다시 부르지 않는다', async () => {
+    const target = await createInquiredBefore(60);
+    pgGateway.inquireCancel.mockResolvedValue({ result: 'IN_PROGRESS' });
+    const pgCheck = app.get(RefundPgCheckService);
+    // 두 요청이 같은 오래된 기록을 읽은 경합: 두 번째 요청은 첫 조회 전의 기록을 보고 들어온다
+    const stale = await app
+      .get(RefundRepository)
+      .findPendingAttemptOfRefund(target.refundId);
+    await pgCheck.check(operator, target.refundId, target.now);
+    const staleRead = jest
+      .spyOn(app.get(RefundRepository), 'findPendingAttemptOfRefund')
+      .mockResolvedValueOnce(stale);
+
+    const second = await pgCheck.check(
+      operator,
+      target.refundId,
+      new Date(target.now.getTime() + 1_000),
+    );
+    staleRead.mockRestore();
+
+    expect({
+      checkStatus: second.checkStatus,
+      inquiries: pgGateway.inquireCancel.mock.calls.length,
+    }).toEqual({ checkStatus: 'RECENT_RESULT', inquiries: 1 });
+  });
 });

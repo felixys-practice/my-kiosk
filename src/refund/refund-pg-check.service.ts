@@ -85,6 +85,13 @@ export class RefundPgCheckService {
     if (inquired === null) {
       return this.storedResult('ALREADY_RUNNING', pending);
     }
+    // 잠금 안의 재확인에서 최근 조회 간격 안으로 판명되면 저장된 최근 결과를 안내한다
+    if (inquired === 'RECENT') {
+      return this.storedResult(
+        'RECENT_RESULT',
+        await this.refundRepository.findPendingAttemptOfRefund(refundId),
+      );
+    }
     const after =
       await this.refundRepository.findPendingAttemptOfRefund(refundId);
     return {

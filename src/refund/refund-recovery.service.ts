@@ -19,6 +19,12 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { PgCancelQueryResult, PgCancelSendResult } from 'src/pg/pg.types';
 
+/** 조회 한 번의 결과(조회 결과와 이번에 다시 보낸 전송 결과) */
+export type InquiryOutcome = {
+  inquiryResult: PgCancelQueryResult['result'];
+  resendResult: PgCancelSendResult['result'] | null;
+};
+
 /** 자동 조회 대상인 미확정 시도 상태 */
 const inquirableStatuses: readonly PaymentCancelStatus[] = [
   PaymentCancelStatus.REQUESTED,
@@ -199,7 +205,7 @@ export class RefundRecoveryService {
     now: Date,
   ): Promise<PgCancelQueryResult['result'] | null> {
     const inquired = await this.runInquiry(paymentCancelId, now, false);
-    return inquired?.inquiryResult ?? null;
+    return inquired && inquired !== 'RECENT' ? inquired.inquiryResult : null;
   }
 
   /**
@@ -212,10 +218,7 @@ export class RefundRecoveryService {
   inquireForCheck(
     paymentCancelId: string,
     now: Date,
-  ): Promise<{
-    inquiryResult: PgCancelQueryResult['result'];
-    resendResult: PgCancelSendResult['result'] | null;
-  } | null> {
+  ): Promise<InquiryOutcome | 'RECENT' | null> {
     return this.runInquiry(paymentCancelId, now, true);
   }
 
@@ -224,24 +227,22 @@ export class RefundRecoveryService {
    * @param paymentCancelId 조회할 PG 취소 요청
    * @param now 조회 시각
    * @param manual 개별 확인이면 true
-   * @returns 조회·재전송 결과, 담당을 맡지 못했으면 null
+   * @returns 조회·재전송 결과, 최근 조회 간격 안이면 RECENT, 담당을 맡지 못했으면 null
    */
   private async runInquiry(
     paymentCancelId: string,
     now: Date,
     manual: boolean,
-  ): Promise<{
-    inquiryResult: PgCancelQueryResult['result'];
-    resendResult: PgCancelSendResult['result'] | null;
-  } | null> {
+  ): Promise<InquiryOutcome | 'RECENT' | null> {
     // 1. Refund → PaymentCancel을 잠그고 조회 담당을 정한 뒤 커밋한다
     const claimToken = randomUUID();
     const attempt = await this.claimForInquiry(
       paymentCancelId,
       claimToken,
       now,
+      manual,
     );
-    if (!attempt) return null;
+    if (attempt === null || attempt === 'RECENT') return attempt;
 
     // 2. PG 조회는 트랜잭션 밖에서 한다
     const result = await this.pgGateway.inquireCancel({ paymentCancelId });
@@ -396,13 +397,15 @@ export class RefundRecoveryService {
    * @param paymentCancelId PG 취소 요청
    * @param claimToken 새 담당 토큰
    * @param now 조회 시각
-   * @returns 맡은 시도, 맡지 못하면 null
+   * @param manual 개별 확인이면 true(최근 조회 간격 안이면 맡지 않는다)
+   * @returns 맡은 시도, 최근 조회 간격 안이면 RECENT, 맡지 못하면 null
    */
   private claimForInquiry(
     paymentCancelId: string,
     claimToken: string,
     now: Date,
-  ): Promise<AttemptForResult | null> {
+    manual: boolean,
+  ): Promise<AttemptForResult | 'RECENT' | null> {
     return this.refundRepository.runInTransaction(async (tx) => {
       const found = await this.refundRepository.findAttemptForResult(
         paymentCancelId,
@@ -420,6 +423,15 @@ export class RefundRecoveryService {
       ))!;
       if (!inquirableStatuses.includes(attempt.status)) return null;
       if (attempt.claimUntil && attempt.claimUntil > now) return null;
+      // 개별 확인은 잠금 안에서 최근 조회 간격을 다시 확인한다(먼저 읽은 기록이 오래됐을 수 있다)
+      if (
+        manual &&
+        attempt.lastInquiryAt &&
+        now.getTime() - attempt.lastInquiryAt.getTime() <
+          this.config('queryIntervalSeconds') * 1000
+      ) {
+        return 'RECENT';
+      }
       await this.refundRepository.markInquiryStarted(tx, attempt.id, {
         claimToken,
         claimUntil: new Date(

@@ -44,6 +44,7 @@ export type AttemptForResult = {
   resendCount: number; // 백그라운드 자동 재전송 횟수
   inquiryFailureCount: number; // 연속 조회 오류 횟수
   lastSendAttemptAt: Date | null; // 마지막 전송 시도 시각
+  lastInquiryAt: Date | null; // 마지막 조회 시작 시각
   actualAmount: number | null; // 성공으로 확정됐으면 PG 실제 취소액
   pgTransactionId: string | null; // 성공으로 확정됐으면 PG 취소 거래 ID
   refund: {
@@ -316,6 +317,7 @@ export class RefundRepository {
         resendCount: true,
         inquiryFailureCount: true,
         lastSendAttemptAt: true,
+        lastInquiryAt: true,
         actualAmount: true,
         pgTransactionId: true,
         refund: {
@@ -347,6 +349,7 @@ export class RefundRepository {
       resendCount: attempt.resendCount,
       inquiryFailureCount: attempt.inquiryFailureCount,
       lastSendAttemptAt: attempt.lastSendAttemptAt,
+      lastInquiryAt: attempt.lastInquiryAt,
       actualAmount: attempt.actualAmount,
       pgTransactionId: attempt.pgTransactionId,
       refund: {
