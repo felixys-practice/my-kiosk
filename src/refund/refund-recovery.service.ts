@@ -70,6 +70,22 @@ export class RefundRecoveryService {
           failureCode: PaymentCancelFailureCode.RETRY_EXHAUSTED,
         },
       });
+      return;
+    }
+
+    // 4. PG가 처리 중이면 결과를 단정하지 않고 정상 간격 뒤 다시 조회한다(연속 조회 오류는 0으로)
+    if (result.result === 'IN_PROGRESS') {
+      await this.refundRepository.scheduleNextInquiry(
+        paymentCancelId,
+        claimToken,
+        {
+          nextInquiryAt: new Date(
+            now.getTime() + this.config('queryIntervalSeconds') * 1000,
+          ),
+          inquiryFailureCount: 0,
+          lastInquiryError: null,
+        },
+      );
     }
   }
 
@@ -118,7 +134,9 @@ export class RefundRecoveryService {
    * @param key 설정 이름(refund.<key>)
    * @returns 설정 값
    */
-  private config(key: 'resendLimit' | 'workLeaseSeconds'): number {
+  private config(
+    key: 'resendLimit' | 'workLeaseSeconds' | 'queryIntervalSeconds',
+  ): number {
     return this.configService.get<number>(`refund.${key}`)!;
   }
 }

@@ -1206,4 +1206,26 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       operatorNotified: true,
     });
   });
+
+  it('자동 재전송 한도를 소진한 뒤 PG가 처리 중이면 실패로 끝내지 않고 정상 간격(15초) 뒤 다시 조회를 예약한다', async () => {
+    const awaiting = await createAwaitingInquiry(3);
+    pgGateway.inquireCancel.mockResolvedValueOnce({ result: 'IN_PROGRESS' });
+
+    await app
+      .get(RefundRecoveryService)
+      .inquireAttempt(awaiting.paymentCancelId, awaiting.dueAt);
+
+    const attempt = await prisma.paymentCancel.findUniqueOrThrow({
+      where: { id: awaiting.paymentCancelId },
+    });
+    expect({
+      status: attempt.status,
+      nextInquiryAt: attempt.nextInquiryAt?.getTime(),
+      claimToken: attempt.claimToken,
+    }).toEqual({
+      status: PaymentCancelStatus.REQUESTED,
+      nextInquiryAt: awaiting.dueAt.getTime() + 15_000,
+      claimToken: null,
+    });
+  });
 });

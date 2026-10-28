@@ -463,6 +463,28 @@ export class RefundRepository {
   }
 
   /**
+   * 결과가 아직 확정되지 않은 조회 뒤 다음 조회를 예약하고 담당을 내려놓는다
+   * - 담당 토큰이 그대로일 때만 바꾼다
+   * @param id PG 취소 요청 ID
+   * @param claimToken 조회를 맡은 담당 토큰
+   * @param update 다음 조회 예정 시각과 연속 조회 오류 기록
+   */
+  async scheduleNextInquiry(
+    id: string,
+    claimToken: string,
+    update: {
+      nextInquiryAt: Date;
+      inquiryFailureCount: number;
+      lastInquiryError: string | null;
+    },
+  ): Promise<void> {
+    await this.prisma.paymentCancel.updateMany({
+      where: { id, claimToken },
+      data: { ...update, claimToken: null, claimUntil: null },
+    });
+  }
+
+  /**
    * 응답이 확정되지 않은 전송 뒤 첫 조회를 예약하고 담당을 내려놓는다
    * - 담당 토큰이 그대로일 때만 바꾼다(그사이 콜백 등이 확정했으면 아무것도 하지 않는다)
    * @param id PG 취소 요청 ID
