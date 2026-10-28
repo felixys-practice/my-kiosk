@@ -335,4 +335,25 @@ describe('환불 확정 저장 (실제 DB)', () => {
     });
     expect(pgGateway.sendCancel).not.toHaveBeenCalled();
   });
+
+  it('같은 이용권의 동시 신청 두 건 중 한 건만 확정되고 다른 한 건은 REFUND_IN_PROGRESS를 받는다', async () => {
+    const issued = await createUnusedPeriodTicket();
+
+    const results = await Promise.allSettled([
+      accept(issued.ticketId),
+      accept(issued.ticketId),
+    ]);
+
+    const rejected = results.filter(
+      (r): r is PromiseRejectedResult => r.status === 'rejected',
+    );
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+    expect(rejected[0].reason).toMatchObject({
+      code: 'REFUND_IN_PROGRESS',
+    });
+    expect(
+      await prisma.refund.count({ where: { orderItemId: issued.orderItemId } }),
+    ).toBe(1);
+  });
 });

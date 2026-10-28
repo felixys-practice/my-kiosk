@@ -8,7 +8,8 @@ import {
 import { REFUND_PG_GATEWAY } from 'src/pg/refund-pg.gateway';
 import type { RefundPgGateway } from 'src/pg/refund-pg.gateway';
 import { SeatAssignmentService } from 'src/seat-assignment/seat-assignment.service';
-import { RefundRepository } from './refund.repository';
+import { CustomerRefundTarget, RefundRepository } from './refund.repository';
+import { TransactionClient } from 'src/prisma/prisma.service';
 import { RefundLockingRepository } from './refund-locking.repository';
 import {
   IdempotentResult,
@@ -85,10 +86,7 @@ export class RefundAcceptanceService {
       async (tx) => {
         // 대상 판정(본인 범위 → 결제 → 기존 환불 → 사용·기한)
         const now = new Date();
-        const target = await this.refundRepository.findCustomerRefundTarget(
-          command.ticketId,
-          tx,
-        );
+        const target = await this.findLockedTarget(command.ticketId, tx);
         const decision = evaluateCustomerRefund(
           target?.candidate ?? null,
           actor.userId,
@@ -158,6 +156,26 @@ export class RefundAcceptanceService {
       await this.pgGateway.sendCancel(accepted);
     }
     return result;
+  }
+
+  /**
+   * 공유 잠금 순서로 대상 행을 잠근 뒤 판정에 쓸 대상을 다시 읽는다
+   * - 같은 이용권의 동시 신청은 잠금을 기다린 뒤 먼저 커밋된 확정 환불을 보고 판정한다
+   * @param ticketId 이용권 ID
+   * @param tx 확정 트랜잭션
+   * @returns 잠근 뒤 읽은 대상, 이용권이 없으면 null
+   */
+  private async findLockedTarget(
+    ticketId: string,
+    tx: TransactionClient,
+  ): Promise<CustomerRefundTarget | null> {
+    const unlocked = await this.refundRepository.findCustomerRefundTarget(
+      ticketId,
+      tx,
+    );
+    if (!unlocked) return null;
+    await this.lockingRepository.lockForAcceptance(tx, unlocked.lockTargets);
+    return this.refundRepository.findCustomerRefundTarget(ticketId, tx);
   }
 }
 
