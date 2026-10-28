@@ -232,3 +232,13 @@ export class ManualPayoutReferenceReusedError extends DomainConflictError {
     this.name = 'ManualPayoutReferenceReusedError';
   }
 }
+
+/** 부족액이 남았거나 초과 취소 검토 조건을 만족하지 않음 (409) */
+export class RefundAmountReviewIncompleteError extends DomainConflictError {
+  readonly code = 'REFUND_AMOUNT_REVIEW_INCOMPLETE';
+
+  constructor() {
+    super('초과 취소 검토를 마칠 수 있는 상태가 아닙니다');
+    this.name = 'RefundAmountReviewIncompleteError';
+  }
+}

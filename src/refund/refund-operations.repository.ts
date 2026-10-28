@@ -205,4 +205,35 @@ export class RefundOperationsRepository {
       },
     });
   }
+
+  /**
+   * 초과 취소 검토를 마치고 지급 완료로 바꾼다(확정 금액·지급액·원장은 그대로)
+   * @param tx Refund 잠금 트랜잭션
+   * @param refundId 환불
+   * @param input 검토자·시각·사유·근거
+   */
+  async completeAmountReview(
+    tx: TransactionClient,
+    refundId: string,
+    input: {
+      reviewedById: string;
+      now: Date;
+      reason: string;
+      evidenceReference: string;
+    },
+  ): Promise<void> {
+    await tx.refund.update({
+      where: { id: refundId },
+      data: {
+        reviewRequired: false,
+        reviewedById: input.reviewedById,
+        reviewedAt: input.now,
+        reviewReason: input.reason,
+        reviewEvidenceReference: input.evidenceReference,
+        payoutStatus: RefundPayoutStatus.PAID,
+        paidAt: input.now,
+        actionCode: null,
+      },
+    });
+  }
 }

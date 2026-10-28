@@ -3061,5 +3061,78 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
         status: ManualRefundPayoutStatus.RESERVED,
       });
     });
+
+    /**
+     * PG 실제 취소액이 확정 금액과 다른 환불을 만든다
+     * @param actualAmount PG가 실제로 취소한 금액
+     * @returns 환불 ID
+     */
+    async function mismatchedRefund(actualAmount: number) {
+      const pending = await createPendingRefund();
+      await succeed(pending.paymentCancelId, actualAmount);
+      return pending.refundId;
+    }
+
+    /**
+     * 초과 취소 검토 결과를 등록한다
+     * @param refundId 환불
+     * @returns 응답
+     */
+    function reviewAmount(refundId: string) {
+      return app
+        .get(RefundOperationsService)
+        .reviewRefundAmount(manager(), refundId, {
+          reason: 'PG 초과 취소 확인, 회수는 후속 처리',
+          evidenceReference: 'PG 정산 내역 2026-10-29',
+          idempotencyKey: `review-${randomUUID()}`,
+        });
+    }
+
+    it('초과 취소 검토 등록은 미지급액이 0이면 검토 기록을 남기고 지급 완료로 바꾸며 확정 금액·실제액·원장은 그대로 둔다', async () => {
+      const overpaid = refundAmount + 2000;
+      const refundId = await mismatchedRefund(overpaid);
+
+      const response = await reviewAmount(refundId);
+
+      const refund = await prisma.refund.findUniqueOrThrow({
+        where: { id: refundId },
+      });
+      const ledgers = await prisma.ledger.findMany({ where: { refundId } });
+      expect({
+        status: response.status,
+        refund: {
+          amount: refund.amount,
+          paidAmount: refund.paidAmount,
+          payoutStatus: refund.payoutStatus,
+          reviewRequired: refund.reviewRequired,
+          reviewedById: refund.reviewedById,
+          reviewReason: refund.reviewReason,
+          reviewEvidenceReference: refund.reviewEvidenceReference,
+        },
+        ledgers: ledgers.map((ledger) => ledger.amount),
+      }).toEqual({
+        status: 200,
+        refund: {
+          amount: refundAmount,
+          paidAmount: overpaid,
+          payoutStatus: RefundPayoutStatus.PAID,
+          reviewRequired: false,
+          reviewedById: managerId,
+          reviewReason: 'PG 초과 취소 확인, 회수는 후속 처리',
+          reviewEvidenceReference: 'PG 정산 내역 2026-10-29',
+        },
+        ledgers: [-overpaid],
+      });
+    });
+
+    it('부족액이 남은 환불의 검토 등록은 REFUND_AMOUNT_REVIEW_INCOMPLETE로 거절된다', async () => {
+      const refundId = await mismatchedRefund(refundAmount - 3000);
+
+      const rejected = await reviewAmount(refundId).catch(
+        (error: { code?: string }) => error.code,
+      );
+
+      expect(rejected).toBe('REFUND_AMOUNT_REVIEW_INCOMPLETE');
+    });
   });
 });

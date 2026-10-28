@@ -10,6 +10,7 @@ import { RefundLockingRepository } from './refund-locking.repository';
 import { RefundRepository } from './refund.repository';
 import { RefundOperationsRepository } from './refund-operations.repository';
 import { RefundLedgerRepository } from 'src/ledger/refund-ledger.repository';
+import { hasUnresolvedPayout } from './refund-retry.policy';
 import {
   evaluateManualReservation,
   ManualReservationRejection,
@@ -17,6 +18,7 @@ import {
 import {
   IdempotencyKeyRequiredError,
   ManualPayoutEvidenceRequiredError,
+  RefundAmountReviewIncompleteError,
   ManualPayoutNotFoundError,
   ManualPayoutReferenceReusedError,
   ManualPayoutStateConflictError,
@@ -72,6 +74,19 @@ export type ManualNotPaidResponse = {
   payoutId: string;
   status: 'FAILED';
   payoutStatus: string; // 종료 뒤 환불의 지급 상태(조치 필요)
+};
+
+/** 초과 취소 검토 결과 등록 요청 */
+export type AmountReviewCommand = {
+  reason: string; // DTO에서 앞뒤 공백을 지운 검토 사유
+  evidenceReference?: string; // 확인 근거(없으면 MANUAL_PAYOUT_EVIDENCE_REQUIRED)
+  idempotencyKey?: string;
+};
+
+/** 초과 취소 검토 결과 등록 응답 */
+export type AmountReviewResponse = {
+  refundId: string;
+  payoutStatus: 'PAID';
 };
 
 /**
@@ -346,6 +361,63 @@ export class RefundOperationsService {
             status: 'FAILED',
             payoutStatus: 'ACTION_REQUIRED',
           },
+        };
+      },
+    );
+  }
+
+  /**
+   * PG가 확정된 환불 금액보다 많이 취소한 환불의 검토 결과를 등록한다
+   * @param actor 요청한 운영자
+   * @param refundId 환불
+   * @param command 사유·근거·멱등 키
+   * @returns 200 등록 응답
+   */
+  async reviewRefundAmount(
+    actor: RefundActor,
+    refundId: string,
+    command: AmountReviewCommand,
+  ): Promise<IdempotentResult<AmountReviewResponse>> {
+    const idempotencyKey = await this.assertOperationRequest(
+      actor,
+      refundId,
+      command.idempotencyKey,
+    );
+    const evidenceReference = command.evidenceReference?.trim();
+    if (!evidenceReference) throw new ManualPayoutEvidenceRequiredError();
+    return this.idempotencyService.execute<AmountReviewResponse>(
+      {
+        requesterId: actor.userId,
+        operation: 'REFUND_AMOUNT_REVIEW',
+        key: idempotencyKey,
+        request: { refundId, reason: command.reason, evidenceReference },
+        authorize: () => Promise.resolve(),
+      },
+      async (tx) => {
+        const now = new Date();
+        const target = await this.lockPayoutTarget(tx, refundId);
+        // 확인되지 않은 지급이 있으면 검토를 마치지 않는다
+        if (hasUnresolvedPayout(target.state, now)) {
+          throw new RefundPayoutUnresolvedError();
+        }
+        // 초과 취소로 검토가 필요하고 미지급액이 없을 때만 마친다(부족액은 별도 지급 경로)
+        const refund = await this.operationsRepository.findRefundForPayout(
+          tx,
+          refundId,
+        );
+        if (!refund.reviewRequired || refund.paidAmount < refund.amount) {
+          throw new RefundAmountReviewIncompleteError();
+        }
+        await this.operationsRepository.completeAmountReview(tx, refundId, {
+          reviewedById: actor.userId,
+          now,
+          reason: command.reason,
+          evidenceReference,
+        });
+        return {
+          status: 200,
+          refundId,
+          body: { refundId, payoutStatus: 'PAID' },
         };
       },
     );
