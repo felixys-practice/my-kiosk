@@ -653,6 +653,24 @@ export class RefundRepository {
   }
 
   /**
+   * PG 취소 요청이 속한 환불과 원래 주문을 찾는다(거래 로그용)
+   * @param paymentCancelId PG 취소 요청 ID
+   * @returns 환불·주문 ID
+   */
+  async findAttemptRefundIds(
+    paymentCancelId: string,
+  ): Promise<{ refundId: string; orderId: string }> {
+    const attempt = await this.prisma.paymentCancel.findUniqueOrThrow({
+      where: { id: paymentCancelId },
+      select: {
+        refundId: true,
+        payment: { select: { orderId: true } },
+      },
+    });
+    return { refundId: attempt.refundId!, orderId: attempt.payment.orderId };
+  }
+
+  /**
    * PG 취소 요청이 속한 환불의 현재 지급 상태를 읽는다
    * @param paymentCancelId PG 취소 요청 ID
    * @returns 지급 상태와 조치 사유 코드

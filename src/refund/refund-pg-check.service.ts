@@ -42,7 +42,7 @@ export class RefundPgCheckService {
   ): Promise<PgCheckResult> {
     // 현재 점주인 OWNER(자기 매장)와 MANAGER만, 범위 밖 환불은 존재를 드러내지 않고 404
     await this.accessService.assertRefundScope(actor, refundId);
-    const result = await this.checkInScope(refundId, now);
+    const result = await this.checkInScope(refundId, now, actor.userId);
     return {
       ...result,
       refund: await this.refundRepository.findRefundSummary(refundId),
@@ -53,11 +53,13 @@ export class RefundPgCheckService {
    * 권한을 확인한 환불의 PG 결과를 개별 확인한다
    * @param refundId 확인할 환불
    * @param now 요청 시각
+   * @param actorId 실행자(재전송 거래 로그에 남긴다)
    * @returns 환불 요약을 뺀 확인 결과
    */
   private async checkInScope(
     refundId: string,
     now: Date,
+    actorId: string,
   ): Promise<Omit<PgCheckResult, 'refund'>> {
     // 지정한 환불의 미확정 PG 취소 요청 한 건만 조회한다(자동 조회 예정 시각과 무관)
     const pending =
@@ -80,6 +82,7 @@ export class RefundPgCheckService {
     const inquired = await this.recoveryService.inquireForCheck(
       pending.id,
       now,
+      actorId,
     );
     // 확인과 조회 담당 지정 사이에 다른 작업이 먼저 맡았으면 진행 중으로 안내한다
     if (inquired === null) {

@@ -2122,4 +2122,38 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       now.getTime() + 1_000,
     );
   });
+
+  it('개별 확인 재전송은 실행자·시각·개별 확인 재전송임을 거래 로그에 남긴다', async () => {
+    const target = await createInquiredBefore(60);
+    pgGateway.inquireCancel.mockResolvedValueOnce({
+      result: 'NOT_FOUND',
+      authoritative: true,
+    });
+    pgGateway.sendCancel.mockResolvedValueOnce({ result: 'ACCEPTED' });
+    const txLog = jest.spyOn(
+      app.get(TransactionLoggerService),
+      'logTransaction',
+    );
+
+    await app
+      .get(RefundPgCheckService)
+      .check(operator, target.refundId, target.now);
+
+    const logged = txLog.mock.calls
+      .map(([log]) => log)
+      .find((log) => log.status === 'MANUAL_RESEND');
+    txLog.mockRestore();
+    expect(logged).toEqual(
+      expect.objectContaining({
+        type: 'REFUND',
+        userId: operator.userId,
+        metadata: expect.objectContaining({
+          refundId: target.refundId,
+          paymentCancelId: target.paymentCancelId,
+          requestedAt: target.now.toISOString(),
+          resendResult: 'ACCEPTED',
+        }) as unknown,
+      }),
+    );
+  });
 });

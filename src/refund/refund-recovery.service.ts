@@ -14,6 +14,7 @@ import { RefundDispatchService } from './refund-dispatch.service';
 import { RefundResultService } from './refund-result.service';
 import { inquiryBackoffSeconds } from './refund-recovery.policy';
 import { RefundWorkRepository } from './refund-work.repository';
+import { TransactionLoggerService } from 'src/logger/transaction-logger.service';
 import { refundRecoveryQueueName } from './refund-recovery.scheduler';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
@@ -43,6 +44,7 @@ export class RefundRecoveryService {
     private readonly dispatchService: RefundDispatchService,
     private readonly resultService: RefundResultService,
     private readonly configService: ConfigService,
+    private readonly txLogger: TransactionLoggerService,
     private readonly workRepository: RefundWorkRepository,
     @InjectQueue(refundRecoveryQueueName) private readonly recoveryQueue: Queue,
     @Inject(REFUND_PG_GATEWAY) private readonly pgGateway: RefundPgGateway,
@@ -241,13 +243,35 @@ export class RefundRecoveryService {
    * - 미접수가 확인되면 자동 재전송 한도와 관계없이 기존 ID·금액으로 즉시 다시 보낸다
    * @param paymentCancelId 조회할 PG 취소 요청
    * @param now 조회 시각
+   * @param actorId 개별 확인 실행자(재전송하면 거래 로그에 남긴다)
    * @returns 이번 조회·재전송 결과, 조회 담당을 맡지 못했으면 null
    */
-  inquireForCheck(
+  async inquireForCheck(
     paymentCancelId: string,
     now: Date,
+    actorId: string,
   ): Promise<InquiryOutcome | 'RECENT' | null> {
-    return this.runInquiry(paymentCancelId, now, true);
+    const inquired = await this.runInquiry(paymentCancelId, now, true);
+    // 개별 확인에 따른 재전송은 실행자·시각·사유를 거래 로그에 남긴다(API 계약 §8)
+    if (inquired && inquired !== 'RECENT' && inquired.resendResult !== null) {
+      const attempt =
+        await this.refundRepository.findAttemptRefundIds(paymentCancelId);
+      this.txLogger.logTransaction({
+        transactionId: `REFUND-${attempt.refundId}-${paymentCancelId}-MANUAL-RESEND`,
+        type: 'REFUND',
+        userId: actorId,
+        orderId: attempt.orderId,
+        status: 'MANUAL_RESEND',
+        metadata: {
+          refundId: attempt.refundId,
+          paymentCancelId,
+          requestedAt: now.toISOString(),
+          reason: '개별 확인에서 PG 미접수 확인 후 같은 요청 재전송',
+          resendResult: inquired.resendResult,
+        },
+      });
+    }
+    return inquired;
   }
 
   /**
