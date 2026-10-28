@@ -1,6 +1,7 @@
 import { activePauseWhere } from 'src/ticket/ticket-pause/active-pause';
 import { Injectable } from '@nestjs/common';
 import {
+  RefundPayoutMethod,
   ManualRefundPayoutStatus,
   LedgerStatus,
   PaymentCancelFailureCode,
@@ -440,8 +441,12 @@ export class RefundRepository {
             OR: [{ claimUntil: null }, { claimUntil: { lte: now } }],
           },
         ],
+        // 자동 PG 처리 대상 환불: 확정·지급 처리 중·PG 방식(조치 필요·결과 모순 건은 운영자 목록에서 다룬다)
         // 별도 환불금 지급 예약이 있는 환불은 PG 자동 처리에서 빼고 담당자가 확인한다(API 계약 §8)
         refund: {
+          decisionStatus: RefundDecisionStatus.ACCEPTED,
+          payoutStatus: RefundPayoutStatus.PENDING,
+          payoutMethod: RefundPayoutMethod.PG,
           manualPayouts: {
             none: { status: ManualRefundPayoutStatus.RESERVED },
           },

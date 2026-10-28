@@ -1432,4 +1432,21 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       sends: 0,
     });
   });
+
+  it('지급 처리 중이 아닌(조치 필요) 환불의 미확정 시도는 정기 탐색에서 조회하지 않는다', async () => {
+    const awaiting = await createAwaitingInquiry(0, isolatedSweepBase());
+    await prisma.refund.update({
+      where: { id: awaiting.refundId },
+      data: {
+        payoutStatus: RefundPayoutStatus.ACTION_REQUIRED,
+        reviewRequired: true,
+        actionCode: 'PG_RESULT_CONFLICT',
+      },
+    });
+    pgGateway.inquireCancel.mockResolvedValue({ result: 'IN_PROGRESS' });
+
+    await app.get(RefundRecoveryService).sweep(awaiting.dueAt);
+
+    expect(pgGateway.inquireCancel.mock.calls.length).toBe(0);
+  });
 });
