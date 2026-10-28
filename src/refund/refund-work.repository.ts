@@ -80,16 +80,20 @@ export class RefundWorkRepository {
   }
 
   /**
-   * 복구 제어 상태를 바꾼다
+   * 복구 제어 상태를 바꾼다(현재 담당 토큰일 때만, 담당을 잃은 작업자의 늦은 변경을 막는다)
+   * @param claimToken 복구 작업 담당 토큰
    * @param update 바꿀 모드·다음 확인 시각·BATCH 기준 시각
+   * @returns 바꿨으면 true
    */
   async updateRecoveryControl(
-    update: Partial<RecoveryControlState>,
-  ): Promise<void> {
-    await this.prisma.refundRecoveryControl.update({
-      where: { id: recoveryControlId },
+    claimToken: string,
+    update: Partial<Omit<RecoveryControlState, 'claimUntil'>>,
+  ): Promise<boolean> {
+    const { count } = await this.prisma.refundRecoveryControl.updateMany({
+      where: { id: recoveryControlId, claimToken },
       data: update,
     });
+    return count === 1;
   }
 
   /**

@@ -13,6 +13,7 @@ import {
   RefundNotificationAudience,
   RefundPayoutMethod,
   RefundPayoutStatus,
+  RefundRecoveryMode,
   RefundSource,
   RefundTargetKind,
   TicketStatus,
@@ -2059,5 +2060,33 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       checkStatus: second.checkStatus,
       inquiries: pgGateway.inquireCancel.mock.calls.length,
     }).toEqual({ checkStatus: 'RECENT_RESULT', inquiries: 1 });
+  });
+
+  it('복구 제어 상태 변경은 현재 담당 토큰일 때만 반영된다', async () => {
+    await resetRecoveryControl();
+    const work = app.get(RefundWorkRepository);
+    const now = new Date();
+    await work.claimRecoveryControl(
+      'current-worker',
+      now,
+      new Date(now.getTime() + 30_000),
+    );
+
+    await work.updateRecoveryControl('stale-worker', {
+      mode: RefundRecoveryMode.BATCH,
+    });
+    const afterStale = await work.getRecoveryControl();
+    await work.updateRecoveryControl('current-worker', {
+      mode: RefundRecoveryMode.BATCH,
+    });
+    const afterCurrent = await work.getRecoveryControl();
+
+    expect({
+      afterStale: afterStale.mode,
+      afterCurrent: afterCurrent.mode,
+    }).toEqual({
+      afterStale: RefundRecoveryMode.PROBE,
+      afterCurrent: RefundRecoveryMode.BATCH,
+    });
   });
 });

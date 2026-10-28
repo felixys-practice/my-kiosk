@@ -78,7 +78,7 @@ export class RefundRecoveryService {
     );
     if (!claimed) return;
     try {
-      await this.runRecovery(now);
+      await this.runRecovery(claimToken, now);
     } finally {
       await this.workRepository.releaseRecoveryControl(claimToken);
     }
@@ -86,12 +86,17 @@ export class RefundRecoveryService {
 
   /**
    * 복구 제어 모드에 따라 PROBE 1건 또는 BATCH 처리 단위를 조회한다
+   * @param claimToken 복구 작업 담당 토큰
    * @param now 실행 시각
    */
-  private async runRecovery(now: Date): Promise<void> {
+  private async runRecovery(claimToken: string, now: Date): Promise<void> {
     const control = await this.workRepository.getRecoveryControl();
     if (control.mode === RefundRecoveryMode.BATCH) {
-      await this.runRecoveryBatch(control.batchCutoffAt ?? now, now);
+      await this.runRecoveryBatch(
+        claimToken,
+        control.batchCutoffAt ?? now,
+        now,
+      );
       return;
     }
     // PROBE: 다음 확인 시각이 되면 가장 오래된 1건만 조회한다
@@ -102,6 +107,7 @@ export class RefundRecoveryService {
     if (result === null) return;
     // 조회 장애가 이어지면 다음 확인 시각까지 기다리고, 정상 응답이면 나머지를 처리 단위씩 확인한다
     await this.workRepository.updateRecoveryControl(
+      claimToken,
       result === 'QUERY_ERROR'
         ? { nextProbeAt: this.nextProbeAt(now) }
         : {
@@ -136,19 +142,28 @@ export class RefundRecoveryService {
   async resumeRecovery(
     now: Date,
   ): Promise<'SCHEDULED' | 'ALREADY_RUNNING' | 'NO_WORK'> {
-    // 다른 작업자가 복구 작업을 처리 기한 안에서 실행 중이면 중복 실행하지 않는다
-    const control = await this.workRepository.getRecoveryControl();
-    if (control.claimUntil && control.claimUntil > now)
-      return 'ALREADY_RUNNING';
     // 기준 시각 이전의 결과 확인 실패 건이 없으면 할 일이 없다
     const [any] = await this.workRepository.findQueryFailed(now, 1);
     if (!any) return 'NO_WORK';
-    // 다음 PROBE 시각을 기다리지 않고 지금 이전의 결과 확인 실패 건을 처리 단위씩 확인한다
-    await this.workRepository.updateRecoveryControl({
-      mode: RefundRecoveryMode.BATCH,
-      batchCutoffAt: now,
-      nextProbeAt: null,
-    });
+    // 복구 작업 담당을 잡아야 상태를 바꾼다. 다른 작업자가 처리 기한 안에서 실행 중이면 중복 실행하지 않는다
+    const claimToken = randomUUID();
+    await this.workRepository.getRecoveryControl();
+    const claimed = await this.workRepository.claimRecoveryControl(
+      claimToken,
+      now,
+      new Date(now.getTime() + this.config('workLeaseSeconds') * 1000),
+    );
+    if (!claimed) return 'ALREADY_RUNNING';
+    try {
+      // 다음 PROBE 시각을 기다리지 않고 지금 이전의 결과 확인 실패 건을 처리 단위씩 확인한다
+      await this.workRepository.updateRecoveryControl(claimToken, {
+        mode: RefundRecoveryMode.BATCH,
+        batchCutoffAt: now,
+        nextProbeAt: null,
+      });
+    } finally {
+      await this.workRepository.releaseRecoveryControl(claimToken);
+    }
     // 정기 탐색을 기다리지 않도록 같은 작업을 바로 한 번 넣는다
     await this.recoveryQueue.add('sweep', {});
     return 'SCHEDULED';
@@ -157,16 +172,21 @@ export class RefundRecoveryService {
   /**
    * BATCH: 기준 시각 이전의 결과 확인 실패 건을 처리 단위만큼 조회한다
    * - 조회 장애가 다시 나면 PROBE로 돌아가고, 남은 건이 없으면 PROBE 대기로 돌아간다
+   * @param claimToken 복구 작업 담당 토큰
    * @param cutoff BATCH 대상 기준 시각
    * @param now 실행 시각
    */
-  private async runRecoveryBatch(cutoff: Date, now: Date): Promise<void> {
+  private async runRecoveryBatch(
+    claimToken: string,
+    cutoff: Date,
+    now: Date,
+  ): Promise<void> {
     const batch = await this.workRepository.findQueryFailed(
       cutoff,
       this.config('recoveryBatchSize'),
     );
     if (batch.length === 0) {
-      await this.workRepository.updateRecoveryControl({
+      await this.workRepository.updateRecoveryControl(claimToken, {
         mode: RefundRecoveryMode.PROBE,
         batchCutoffAt: null,
         nextProbeAt: null,
@@ -176,7 +196,7 @@ export class RefundRecoveryService {
     for (const paymentCancelId of batch) {
       const result = await this.inquireAttempt(paymentCancelId, now);
       if (result === 'QUERY_ERROR') {
-        await this.workRepository.updateRecoveryControl({
+        await this.workRepository.updateRecoveryControl(claimToken, {
           mode: RefundRecoveryMode.PROBE,
           batchCutoffAt: null,
           nextProbeAt: this.nextProbeAt(now),
