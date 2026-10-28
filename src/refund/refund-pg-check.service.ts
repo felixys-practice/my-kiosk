@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { RefundActor } from './refund-access.service';
+import { RefundAccessService, RefundActor } from './refund-access.service';
 import { RefundRepository } from './refund.repository';
 import { RefundRecoveryService } from './refund-recovery.service';
 
@@ -12,6 +12,7 @@ export type PgCheckResult = {
   resendResult: string | null; // 이번 재전송의 최초 응답, 보내지 않았으면 null
   lastInquiryAt: string | null;
   lastInquiryFailed: boolean;
+  refund: Awaited<ReturnType<RefundRepository['findRefundSummary']>>; // 권한에 맞춘 최신 환불 정보
 };
 
 /**
@@ -24,6 +25,7 @@ export class RefundPgCheckService {
     private readonly refundRepository: RefundRepository,
     private readonly recoveryService: RefundRecoveryService,
     private readonly configService: ConfigService,
+    private readonly accessService: RefundAccessService,
   ) {}
 
   /**
@@ -38,7 +40,25 @@ export class RefundPgCheckService {
     refundId: string,
     now: Date,
   ): Promise<PgCheckResult> {
-    void actor;
+    // 현재 점주인 OWNER(자기 매장)와 MANAGER만, 범위 밖 환불은 존재를 드러내지 않고 404
+    await this.accessService.assertRefundScope(actor, refundId);
+    const result = await this.checkInScope(refundId, now);
+    return {
+      ...result,
+      refund: await this.refundRepository.findRefundSummary(refundId),
+    };
+  }
+
+  /**
+   * 권한을 확인한 환불의 PG 결과를 개별 확인한다
+   * @param refundId 확인할 환불
+   * @param now 요청 시각
+   * @returns 환불 요약을 뺀 확인 결과
+   */
+  private async checkInScope(
+    refundId: string,
+    now: Date,
+  ): Promise<Omit<PgCheckResult, 'refund'>> {
     // 지정한 환불의 미확정 PG 취소 요청 한 건만 조회한다(자동 조회 예정 시각과 무관)
     const pending =
       await this.refundRepository.findPendingAttemptOfRefund(refundId);
@@ -85,7 +105,7 @@ export class RefundPgCheckService {
       lastInquiryAt: Date | null;
       lastInquiryError: string | null;
     } | null,
-  ): PgCheckResult {
+  ): Omit<PgCheckResult, 'refund'> {
     return {
       checkStatus,
       inquiryResult: null,

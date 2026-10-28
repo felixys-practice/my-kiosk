@@ -20,8 +20,10 @@ import {
   RefundDto,
   PgRefundCallbackDto,
   StoreRefundDto,
+  EmptyBodyDto,
 } from './dto';
 import { RefundStoreService } from './refund-store.service';
+import { RefundPgCheckService } from './refund-pg-check.service';
 import { RefundAcceptanceService } from './refund-acceptance.service';
 import { RefundResultService } from './refund-result.service';
 
@@ -32,6 +34,7 @@ export class RefundController {
     private readonly refundAcceptanceService: RefundAcceptanceService,
     private readonly refundResultService: RefundResultService,
     private readonly refundStoreService: RefundStoreService,
+    private readonly refundPgCheckService: RefundPgCheckService,
   ) {}
 
   /**
@@ -94,6 +97,30 @@ export class RefundController {
     );
     res.status(result.status);
     return result.body;
+  }
+
+  /**
+   * 점주·운영자가 환불의 PG 결과를 개별 확인한다 (API 계약 §8 POST /refund/:refundId/pg-check)
+   * @param user 요청한 사용자(JWT)
+   * @param refundId 확인할 환불
+   * @param _body 본문 없음/{}만 허용(금액·시도 ID·결과는 입력받지 않는다)
+   * @param res 응답 상태 지정용(진행 중 202, 그 밖 200)
+   * @returns 확인 결과와 최신 환불 정보
+   */
+  @Post(':refundId/pg-check')
+  async pgCheck(
+    @CurrentUser() user: JwtValidationResult,
+    @Param('refundId', ParseUUIDPipe) refundId: string,
+    @Body() _body: EmptyBodyDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.refundPgCheckService.check(
+      { userId: user.userId, role: user.role },
+      refundId,
+      new Date(),
+    );
+    res.status(result.checkStatus === 'ALREADY_RUNNING' ? 202 : 200);
+    return result;
   }
 
   /**

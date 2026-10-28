@@ -132,3 +132,13 @@ export class TicketInUseError extends DomainConflictError {
     this.name = 'TicketInUseError';
   }
 }
+
+/** 요청자의 범위 밖이거나 없는 환불 (404) */
+export class RefundNotFoundError extends DomainNotFoundError {
+  readonly code = 'REFUND_NOT_FOUND';
+
+  constructor() {
+    super('환불을 찾을 수 없습니다');
+    this.name = 'RefundNotFoundError';
+  }
+}

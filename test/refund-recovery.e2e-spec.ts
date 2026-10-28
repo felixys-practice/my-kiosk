@@ -176,4 +176,62 @@ describe('PG 결과 조회·재전송·장애 복구 (E2E)', () => {
     });
     expect(res.body.data.queryFailedCount).toBeGreaterThanOrEqual(1);
   });
+
+  /**
+   * 주 매장 고객 환불을 확정해 PG 결과를 기다리는 상태로 만든다
+   * @returns 환불 ID
+   */
+  async function pendingRefund(): Promise<string> {
+    const issued = await ctx.issuePeriodTicket();
+    pgStub.respondToSend({ result: 'UNKNOWN', reason: '응답 시간 초과' });
+    const { body } = await request(ctx.server)
+      .post('/refund')
+      .set('Authorization', `Bearer ${ctx.customer.token}`)
+      .send({ ticketId: issued.ticketId, consentToTerminateTicket: true })
+      .expect(202);
+    return body.data.refundId as string;
+  }
+
+  /**
+   * 개별 확인을 요청한다
+   * @param refundId 환불 ID
+   * @param token 로그인 토큰(없으면 미로그인)
+   * @param body 요청 본문
+   * @returns supertest 요청
+   */
+  function pgCheck(refundId: string, token?: string, body: object = {}) {
+    const req = request(ctx.server).post(`/refund/${refundId}/pg-check`);
+    if (token) req.set('Authorization', `Bearer ${token}`);
+    return req.send(body);
+  }
+
+  it('다른 매장 점주는 찾을 수 없음, 일반 고객은 권한 오류, 미로그인은 인증 오류로 거부되고 PG를 호출하지 않는다 (QS-5-17)', async () => {
+    const refundId = await pendingRefund();
+    pgStub.reset();
+
+    const otherOwner = await pgCheck(refundId, ctx.otherShopOwner.token);
+    const customer = await pgCheck(refundId, ctx.customer.token);
+    const anonymous = await pgCheck(refundId);
+
+    expect({
+      otherOwner: [otherOwner.status, otherOwner.body.error?.code],
+      customer: [customer.status, customer.body.error?.code],
+      anonymous: anonymous.status,
+      inquiries: pgStub.inquiryCalls.length,
+    }).toEqual({
+      otherOwner: [404, 'REFUND_NOT_FOUND'],
+      customer: [403, 'REFUND_FORBIDDEN'],
+      anonymous: 401,
+      inquiries: 0,
+    });
+  });
+
+  it('개별 확인 본문에 금액 필드가 있으면 400을 받고 PG를 호출하지 않는다', async () => {
+    const refundId = await pendingRefund();
+    pgStub.reset();
+
+    await pgCheck(refundId, ctx.manager.token, { amount: 5000 }).expect(400);
+
+    expect(pgStub.inquiryCalls.length).toBe(0);
+  });
 });

@@ -725,6 +725,38 @@ export class RefundRepository {
   }
 
   /**
+   * 환불이 속한 매장(원래 주문의 매장)을 찾는다
+   * @param refundId 환불 ID
+   * @returns 매장 ID, 환불이 없으면 null
+   */
+  async findRefundShopId(refundId: string): Promise<string | null> {
+    const refund = await this.prisma.refund.findUnique({
+      where: { id: refundId },
+      select: { payment: { select: { order: { select: { shopId: true } } } } },
+    });
+    return refund?.payment.order.shopId ?? null;
+  }
+
+  /**
+   * 개별 확인 응답에 담을 환불의 최신 지급 상태를 읽는다
+   * @param refundId 환불 ID
+   * @returns 환불 요약
+   */
+  async findRefundSummary(refundId: string) {
+    return this.prisma.refund.findUniqueOrThrow({
+      where: { id: refundId },
+      select: {
+        id: true,
+        decisionStatus: true,
+        amount: true,
+        paidAmount: true,
+        payoutStatus: true,
+        actionCode: true,
+      },
+    });
+  }
+
+  /**
    * 사용자가 지금 이 매장의 점주(ShopOwner)인지 확인한다
    * @param shopId 매장 ID
    * @param userId 사용자 ID
