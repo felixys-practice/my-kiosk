@@ -693,4 +693,25 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       RefundNotificationAudience.SHOP,
     ]);
   });
+
+  it('PG 실제액 불일치는 운영자 알림을 저장한다', async () => {
+    const pending = await createPendingRefund();
+
+    await succeed(pending.paymentCancelId, refundAmount - 3000);
+
+    const notifications = await prisma.refundNotification.findMany({
+      where: { refundId: pending.refundId, kind: 'AMOUNT_MISMATCH' },
+    });
+    expect(
+      notifications.map((n) => ({
+        audience: n.audience,
+        paymentCancelId: n.paymentCancelId,
+      })),
+    ).toEqual([
+      {
+        audience: RefundNotificationAudience.OPERATOR,
+        paymentCancelId: pending.paymentCancelId,
+      },
+    ]);
+  });
 });

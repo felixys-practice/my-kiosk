@@ -187,6 +187,10 @@ export class RefundResultService {
                 actionCode: 'AMOUNT_MISMATCH',
               },
       );
+      // 실제액 불일치는 운영자가 부족액·초과액을 처리해야 하므로 알린다(FR-027)
+      if (!amountMatches) {
+        await this.notifyOperator(tx, attempt, 'AMOUNT_MISMATCH');
+      }
       return {
         applied: true,
         attemptStatus: PaymentCancelStatus.SUCCEEDED,
@@ -220,6 +224,40 @@ export class RefundResultService {
   }
 
   /**
+   * PG 취소 요청 사건 알림의 공통 내용을 만든다
+   * - eventKey는 사건 종류와 PG 취소 요청으로 정해 같은 사건은 한 번만 저장된다
+   * @param attempt 사건이 생긴 PG 취소 요청과 그 환불
+   * @param kind 알림 종류
+   * @returns 수신 대상을 뺀 알림 내용
+   */
+  private notificationBase(attempt: AttemptForResult, kind: string) {
+    return {
+      refundId: attempt.refund.id,
+      paymentCancelId: attempt.id,
+      kind,
+      shopId: attempt.refund.shopId,
+      eventKey: `${kind}:${attempt.id}`,
+    };
+  }
+
+  /**
+   * 운영자 알림을 저장한다
+   * @param tx 지급 결과 반영 트랜잭션
+   * @param attempt 사건이 생긴 PG 취소 요청과 그 환불
+   * @param kind 알림 종류
+   */
+  private async notifyOperator(
+    tx: TransactionClient,
+    attempt: AttemptForResult,
+    kind: string,
+  ): Promise<void> {
+    await this.eventRepository.recordNotification(tx, {
+      ...this.notificationBase(attempt, kind),
+      audience: RefundNotificationAudience.OPERATOR,
+    });
+  }
+
+  /**
    * 미지급 조치 필요 사건을 수신 대상별 알림으로 저장한다 (FR-037)
    * - 운영자에게 알리고, 고객 환불이면 고객 본인과 점주에게도 알린다
    * @param tx 지급 결과 반영 트랜잭션
@@ -231,25 +269,15 @@ export class RefundResultService {
     attempt: AttemptForResult,
     kind: string,
   ): Promise<void> {
-    const base = {
-      refundId: attempt.refund.id,
-      paymentCancelId: attempt.id,
-      kind,
-      shopId: attempt.refund.shopId,
-      eventKey: `${kind}:${attempt.id}`,
-    };
+    await this.notifyOperator(tx, attempt, kind);
     await this.eventRepository.recordNotification(tx, {
-      ...base,
-      audience: RefundNotificationAudience.OPERATOR,
-    });
-    await this.eventRepository.recordNotification(tx, {
-      ...base,
+      ...this.notificationBase(attempt, kind),
       audience: RefundNotificationAudience.SHOP,
     });
     // 고객 본인에게는 고객 환불일 때만 알린다(매장 환불은 점주가 처리한 건)
     if (attempt.refund.source !== RefundSource.CUSTOMER) return;
     await this.eventRepository.recordNotification(tx, {
-      ...base,
+      ...this.notificationBase(attempt, kind),
       audience: RefundNotificationAudience.CUSTOMER,
       recipientUserId: attempt.refund.customerId,
     });
@@ -272,13 +300,6 @@ export class RefundResultService {
       reviewRequired: true,
       actionCode: 'PG_RESULT_CONFLICT',
     });
-    await this.eventRepository.recordNotification(tx, {
-      refundId: attempt.refund.id,
-      paymentCancelId: attempt.id,
-      kind: 'PG_RESULT_CONFLICT',
-      audience: RefundNotificationAudience.OPERATOR,
-      shopId: attempt.refund.shopId,
-      eventKey: `pg-result-conflict:${attempt.id}`,
-    });
+    await this.notifyOperator(tx, attempt, 'PG_RESULT_CONFLICT');
   }
 }
