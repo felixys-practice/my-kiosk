@@ -148,6 +148,20 @@ describe('PgService', () => {
       });
     });
 
+    it('실패 상태 없이 오류 문자열만 있는 조회 응답은 거절 확정이 아니라 QUERY_ERROR로 분류된다', async () => {
+      client.inquireResponse = () =>
+        Promise.resolve({
+          httpStatus: 200,
+          body: { reason: '취소 처리 중 오류가 발생했습니다' },
+        });
+
+      await expect(service.inquireCancel(cancelRequest)).resolves.toMatchObject(
+        {
+          result: 'QUERY_ERROR',
+        },
+      );
+    });
+
     it('처리 중 응답은 IN_PROGRESS로 분류된다', async () => {
       client.inquireResponse = () =>
         Promise.resolve({ httpStatus: 200, body: { status: 'IN_PROGRESS' } });

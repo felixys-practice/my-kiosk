@@ -2586,5 +2586,70 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
         contradictionRecorded,
       );
     });
+
+    it('지급 방식이 별도 지급(MANUAL)인 환불은 개별 확인으로 새 요청을 만들지 않고 PG를 호출하지 않는다', async () => {
+      const failed = await createFailedRefund(
+        PaymentCancelFailureCode.RETRY_EXHAUSTED,
+      );
+      // 별도 지급 예약을 실패로 종료해 지급 방식이 MANUAL로 남은 환불
+      await prisma.refund.update({
+        where: { id: failed.refundId },
+        data: { payoutMethod: RefundPayoutMethod.MANUAL },
+      });
+      pgGateway.inquireCancel.mockResolvedValueOnce({
+        result: 'NOT_FOUND',
+        authoritative: true,
+      });
+
+      const result = await app
+        .get(RefundPgCheckService)
+        .check(manager(), failed.refundId, new Date());
+
+      const attempts = await prisma.paymentCancel.count({
+        where: { refundId: failed.refundId },
+      });
+      expect({
+        checkStatus: result.checkStatus,
+        attempts,
+        inquiries: pgGateway.inquireCancel.mock.calls.length,
+        sends: pgGateway.sendCancel.mock.calls.length,
+      }).toEqual({
+        checkStatus: 'NO_PENDING_ATTEMPT',
+        attempts: 1,
+        inquiries: 0,
+        sends: 0,
+      });
+    });
+
+    it('개별 확인으로 만든 새 요청은 실패한 요청의 최근 조회 시각을 승계하고 실행자·개별 확인 재시도임을 기록한다', async () => {
+      const failed = await createFailedRefund(
+        PaymentCancelFailureCode.RETRY_EXHAUSTED,
+      );
+      pgGateway.inquireCancel.mockResolvedValueOnce({
+        result: 'NOT_FOUND',
+        authoritative: true,
+      });
+      pgGateway.sendCancel.mockResolvedValueOnce({ result: 'ACCEPTED' });
+      const now = new Date();
+
+      await app
+        .get(RefundPgCheckService)
+        .check(manager(), failed.refundId, now);
+
+      const created = await prisma.paymentCancel.findFirstOrThrow({
+        where: { refundId: failed.refundId, attemptNumber: 2 },
+      });
+      expect({
+        lastInquiryAt: created.lastInquiryAt?.getTime(),
+        requestedById: created.requestedById,
+        retryReason: created.retryReason,
+        manualResendCount: created.manualResendCount,
+      }).toEqual({
+        lastInquiryAt: now.getTime(),
+        requestedById: managerId,
+        retryReason: '개별 확인에서 PG 미접수 확인 후 재시도',
+        manualResendCount: 0,
+      });
+    });
   });
 });
