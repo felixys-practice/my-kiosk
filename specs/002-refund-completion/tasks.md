@@ -134,18 +134,18 @@
 
 ### HTTP 인수 테스트
 
-- [ ] T057 [US3] [A27] E2E: `test/refund-entry.e2e-spec.ts`에 명세 3-1의 Given/When으로 요청하고 다음 결과를 검증한다: 이용 종료 오류로 거부된다. 테스트 이름 끝에 `(QS-3-1)`를 붙인다.
-- [ ] T058 [US3] [A28] E2E: `test/refund-entry.e2e-spec.ts`에 명세 3-2의 Given/When으로 요청하고 다음 결과를 검증한다: 환불금 지급 완료 여부와 관계없이 이용 종료 오류로 거부된다. 테스트 이름 끝에 `(QS-3-2)`를 붙인다.
-- [ ] T059 [US3] [A29] E2E: `test/refund-entry.e2e-spec.ts`에 명세 3-3의 Given/When으로 요청하고 다음 결과를 검증한다: 이용 종료 오류로 거부된다. 환불금 지급 실패를 이유로 이용권·고정석을 복구하지 않는다. 테스트 이름 끝에 `(QS-3-3)`를 붙인다.
+- [X] T057 [US3] [A27] E2E: `test/refund-entry.e2e-spec.ts`에 명세 3-1의 Given/When으로 요청하고 다음 결과를 검증한다: 이용 종료 오류로 거부된다. 테스트 이름 끝에 `(QS-3-1)`를 붙인다.
+- [X] T058 [US3] [A28] E2E: `test/refund-entry.e2e-spec.ts`에 명세 3-2의 Given/When으로 요청하고 다음 결과를 검증한다: 환불금 지급 완료 여부와 관계없이 이용 종료 오류로 거부된다. 테스트 이름 끝에 `(QS-3-2)`를 붙인다.
+- [X] T059 [US3] [A29] E2E: `test/refund-entry.e2e-spec.ts`에 명세 3-3의 Given/When으로 요청하고 다음 결과를 검증한다: 이용 종료 오류로 거부된다. 환불금 지급 실패를 이유로 이용권·고정석을 복구하지 않는다. 테스트 이름 끝에 `(QS-3-3)`를 붙인다.
 
 ### 단위 테스트와 구현
 
-- [ ] T060 [US3] [U122] [U123] [U124] [U125] [U126] [U127] [U128] `src/usage-session/usage-session.service.spec.ts`, `src/ticket/ticket-pause/ticket-pause.service.spec.ts`, `src/ticket/ticket-seat/ticket-seat.service.spec.ts`에 환불 후 입실·정지 재개·좌석 변경 및 자동 종료 경쟁 테스트를 먼저 추가한다.
-- [ ] T061 [US3] [U122] [U123] [U126] `src/usage-session/usage-session.service.ts`, `src/usage-session/usage-session.repository.ts`에 세션 생성과 첫 활성화 전에 Ticket 잠금 후 REVOKED 재검증을 구현한다. 환불금 지급 상태와 무관하게 TICKET_TERMINATED로 거절하고 기존 좌석 타입 검증을 유지한다.
-- [ ] T062 [US3] [U124] [U125] `src/ticket/ticket-pause/ticket-pause.repository.ts`, `src/ticket/ticket-pause/ticket-pause.service.ts`, `src/ticket/ticket-seat/ticket-seat.repository.ts`, `src/ticket/ticket-seat/ticket-seat.service.ts`, `src/seat-assignment/seat-assignment.repository.ts`의 잠금 순서와 종료 재검사를 맞춘다. 종료된 이용권을 재활성화하거나 좌석을 재배정하지 않는다.
-- [ ] T063 [US3] [U127] [U128] `src/session-lifecycle/session-lifecycle.service.ts`, `src/usage-session/usage-session-processor.ts`에서 환불 이후 도착한 자동 종료 작업의 상태 덮어쓰기와 중복 시간 차감을 막고 `test/refund-entry.e2e-spec.ts`에서 입실 먼저/환불 먼저의 두 순서를 검증한다.
+- [X] T060 [US3] [U122] [U123] [U124] [U125] [U126] [U127] [U128] `src/usage-session/usage-session.service.spec.ts`, `src/ticket/ticket-pause/ticket-pause.service.spec.ts`, `src/ticket/ticket-seat/ticket-seat.service.spec.ts`에 환불 후 입실·정지 재개·좌석 변경 및 자동 종료 경쟁 테스트를 먼저 추가한다.
+- [X] T061 [US3] [U122] [U123] [U126] `src/usage-session/usage-session.service.ts`, `src/usage-session/usage-session.repository.ts`에 세션 생성과 첫 활성화 전에 Ticket 잠금 후 REVOKED 재검증을 구현한다. 환불금 지급 상태와 무관하게 TICKET_TERMINATED로 거절하고 기존 좌석 타입 검증을 유지한다.
+- [X] T062 [US3] [U124] [U125] `src/ticket/ticket-pause/ticket-pause.repository.ts`, `src/ticket/ticket-pause/ticket-pause.service.ts`, `src/ticket/ticket-seat/ticket-seat.repository.ts`, `src/ticket/ticket-seat/ticket-seat.service.ts`, `src/seat-assignment/seat-assignment.repository.ts`의 잠금 순서와 종료 재검사를 맞춘다. 종료된 이용권을 재활성화하거나 좌석을 재배정하지 않는다.
+- [X] T063 [US3] [U127] [U128] `src/session-lifecycle/session-lifecycle.service.ts`, `src/usage-session/usage-session-processor.ts`에서 환불 이후 도착한 자동 종료 작업의 상태 덮어쓰기와 중복 시간 차감을 막고 `test/refund-entry.e2e-spec.ts`에서 입실 먼저/환불 먼저의 두 순서를 검증한다.
 
-- [ ] T181 [US3] [A27] [A28] [A29] `test/refund-entry.e2e-spec.ts`의 사용자 스토리 3 인수 테스트 A27부터 A29까지 3개가 모두 통과하는지 실행해 확인한 뒤에만 이 스토리를 완료로 표시한다.
+- [X] T181 [US3] [A27] [A28] [A29] `test/refund-entry.e2e-spec.ts`의 사용자 스토리 3 인수 테스트 A27부터 A29까지 3개가 모두 통과하는지 실행해 확인한 뒤에만 이 스토리를 완료로 표시한다.
 
 **검수 관문**: T057부터 T063까지의 작업과 T181 작업을 마치면 실행 규칙의 Phase 검수 절차에 따라 Codex 검수를 받는다. "통과" 판정 전에는 다음 Phase로 넘어가지 않는다.
 

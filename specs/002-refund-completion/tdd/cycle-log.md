@@ -858,3 +858,22 @@ U10~U15를 마친 뒤, 관계 검증의 비교 대상 설정을 생략하면 정
 ## Phase 4 완료
 
 - T035~T056·T180 완료, Codex 재검수 통과. 권장 구현 순서상 다음은 Phase 5(US3 종료된 이용권의 입실 차단)다.
+
+## Phase 5 (US3 종료된 이용권의 입실 차단) 사이클 (2026-10-28)
+
+- 바깥 루프: A27(QS-3-1)을 먼저 작성해 red를 확인하고(`expected 409 "Conflict", got 400 "Bad Request"`, 고정석 배정 없음 오류가 먼저 나옴) 보관한 뒤 안쪽 루프를 진행했다.
+
+| 동작 | red | green·검증 | 커밋 |
+|---|---|---|---|
+| U122 REVOKED 입실 → TICKET_TERMINATED | Received constructor: TicketSeatUnassignedError | `TicketTerminatedError`(409) 추가, 입실 첫 단계에서 거절(좌석 검증보다 먼저) | `a91f4e9` |
+| U126 (실제 DB 경쟁) 입실이 먼저 이용권을 잠그면 뒤이은 고객 환불은 USED_TICKET | entry rejected·refund fulfilled | 세션 생성 트랜잭션 첫 단계에서 이용권 `FOR UPDATE` 후 REVOKED 재확인(공유 잠금 순서) | `f4ab826` |
+| U124 REVOKED 정지 재개 → TICKET_TERMINATED | Received constructor: DomainBadRequestError(정지 아님이 먼저) | 잠근 이용권이 REVOKED면 진행 중 정지 확인보다 먼저 거절 | `ca5b233` |
+| U125 REVOKED 좌석 타입 변경 → TICKET_TERMINATED(409) | Received constructor: TicketClosedError | REVOKED만 `TicketTerminatedError`, EXPIRED·EXHAUSTED는 400 유지 | `0abf635`(+ 정리 `eb66a31`) |
+| U123 지급 조치 필요 환불의 종료 이용권도 입실 거절 | 첫 통과(재확인은 지급 상태를 보지 않음) → 뮤턴트(잠금 아래 재확인 제거) 1 failed | 저장소를 직접 호출해 잠금 아래 재확인만 검증 | `b3ccaf2` |
+| U127·U128 환불 뒤 도착한 자동 종료 작업: 종료 시각을 덮어쓰지 않음·다시 차감하지 않음 | 첫 통과(endSession 멱등) → 뮤턴트(멱등 분기 제거) 2 failed | 처리기와 같은 `UsageSessionService.endUsageSession` 호출로 재현. 처리기 코드는 바꾸지 않음 | `caf22f2` |
+| A27~A29, 입실 먼저 순서 (QS-3-1~3-3) | A27은 위 red. A28(2개)·A29·입실 먼저는 사후 작성, 첫 통과 → 뮤턴트(입실 종료 확인 모두 제거) QS-3 4 failed, 뮤턴트(사용 이력 판정 제거) 입실 먼저 1 failed | — | `08d4370` |
+
+- 사용자 결정(U125): "계약대로 409, 기존 테스트 수정". 좌석 기능의 기존 it.each(EXPIRED·EXHAUSTED·REVOKED → TicketClosedError)에서 REVOKED를 빼고 U125 테스트로 옮겼다. 테스트 변경은 구현 전에 했다.
+- 이탈: U125 커밋 때 python 문자열 불일치로 `closedStatuses` 정리가 빠졌다. 구조 변경 커밋 `eb66a31`로 따로 반영했다(동작 동일).
+- 잠금 순서: 정지·재개(`ticket-pause.repository`)와 좌석 변경(`ticket-seat.repository`)은 이미 이용권을 먼저 `FOR UPDATE`한다. 입실은 이번에 이용권 → 좌석·배정 순서가 됐다. 세션 종료는 Phase 4에서 이용권 → 세션 순서로 맞췄다. 그래서 T062의 저장소 코드는 따로 바꿀 것이 없었다.
+- 결과: 단위 435 passed, E2E 100 passed(`08d4370`).

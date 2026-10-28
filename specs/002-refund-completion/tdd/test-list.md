@@ -60,9 +60,9 @@ suite_baseline: green
 | A24 | Given 고객이 그 이용권으로 지금 이용 중일 때, When 점주가 퇴실 동의를 담아 다시 요청하면, | QS-2-11 | example | DONE | `test/refund-store.e2e-spec.ts` |
 | A25 | Given 고객이 이용 중일 때, When 점주가 퇴실 동의를 담았지만 실결제액보다 큰 금액으로 요청하면, | QS-2-12 | example | DONE | `test/refund-store.e2e-spec.ts` |
 | A26 | Given 11번으로 이용 종료·환불이 확정된 뒤 환불금 지급 처리 중일 때, When PG가 취소 실패를 확정하면, | QS-2-13 | example | DONE | `test/refund-store.e2e-spec.ts` |
-| A27 | Given 환불 확정으로 이용이 종료됐고 지급도 완료된 이용권일 때, When 입실하려 하면, Then 이용 종료 오류로 거부된다. | QS-3-1 | example | PENDING | |
-| A28 | Given 환불 확정으로 이용이 종료됐고 환불금 지급 처리 중이거나 PG 취소 결과 확인 실패인 이용권일 때, When 입실하려 하면, Then 환불금 지급 완료 여부와 관계없이 이용 종료 오류로 거부된다. | QS-3-2 | example | PENDING | |
-| A29 | Given 환불 확정 후 PG 취소 요청이 실패한 이용권일 때, When 입실하려 하면, Then 이용 종료 오류로 거부된다. 환불금 지급 실패를 이유로 이용권·고정석을 복구하지 않는다. | QS-3-3 | example | PENDING | |
+| A27 | Given 환불 확정으로 이용이 종료됐고 지급도 완료된 이용권일 때, When 입실하려 하면, Then 이용 종료 오류로 거부된다. | QS-3-1 | example | DONE | `test/refund-entry.e2e-spec.ts` |
+| A28 | Given 환불 확정으로 이용이 종료됐고 환불금 지급 처리 중이거나 PG 취소 결과 확인 실패인 이용권일 때, When 입실하려 하면, Then 환불금 지급 완료 여부와 관계없이 이용 종료 오류로 거부된다. | QS-3-2 | example | DONE | `test/refund-entry.e2e-spec.ts` |
+| A29 | Given 환불 확정 후 PG 취소 요청이 실패한 이용권일 때, When 입실하려 하면, Then 이용 종료 오류로 거부된다. 환불금 지급 실패를 이유로 이용권·고정석을 복구하지 않는다. | QS-3-3 | example | DONE | `test/refund-entry.e2e-spec.ts` |
 | A30 | Given 환불금 지급 처리 중인 환불이 있을 때, When PG가 취소를 확정하면, | QS-4-1 | example | DONE | `test/refund-ledger.e2e-spec.ts` |
 | A31 | Given 1번으로 실제 지급과 원장 기록이 반영됐을 때, When 같은 지급 확정 통보가 다시 오거나 거래조회로 다시 반영을 시도하면, | QS-4-2 | example | DONE | `test/refund-ledger.e2e-spec.ts` |
 | A32 | Given 환불금 지급 처리 중인 환불이 있을 때, When PG가 PG 취소 요청 실패를 확정하면, Then 원장에는 아무 기록도 생기지 않는다. | QS-4-3 | example | DONE | `test/refund-ledger.e2e-spec.ts` |
@@ -385,13 +385,13 @@ suite_baseline: green
 
 | id | behavior | traces | kind | state | test |
 |---|---|---|---|---|---|
-| U122 | REVOKED 이용권의 입실은 TICKET_TERMINATED로 거절된다 | FR-017 | example | PENDING | |
-| U123 | 지급 상태가 ACTION_REQUIRED인 REVOKED 이용권의 입실도 TICKET_TERMINATED로 거절된다 | FR-017 | example | PENDING | |
-| U124 | REVOKED 이용권의 정지 재개는 TICKET_TERMINATED로 거절된다 | FR-017 | example | PENDING | |
-| U125 | REVOKED 이용권의 좌석 타입 변경은 TICKET_TERMINATED로 거절된다 | FR-017 | example | PENDING | |
-| U126 | 입실이 먼저 이용권 잠금을 얻으면 뒤이은 고객 환불은 USED_TICKET으로 거절된다 | FR-003 | example | PENDING | |
-| U127 | 환불 뒤 도착한 자동 종료 작업은 세션 종료 상태를 덮어쓰지 않는다 | FR-042 | example | PENDING | |
-| U128 | 환불 뒤 도착한 자동 종료 작업은 사용 시간을 다시 차감하지 않는다 | FR-042 | example | PENDING | |
+| U122 | REVOKED 이용권의 입실은 TICKET_TERMINATED로 거절된다 | FR-017 | example | DONE | `src/usage-session/usage-session.service.spec.ts` |
+| U123 | 지급 상태가 ACTION_REQUIRED인 REVOKED 이용권의 입실도 TICKET_TERMINATED로 거절된다 | FR-017 | example | DONE | `src/refund/refund-acceptance.integration.spec.ts`(실제 DB) |
+| U124 | REVOKED 이용권의 정지 재개는 TICKET_TERMINATED로 거절된다 | FR-017 | example | DONE | `src/ticket/ticket-pause/ticket-pause.service.spec.ts` |
+| U125 | REVOKED 이용권의 좌석 타입 변경은 TICKET_TERMINATED로 거절된다 | FR-017 | example | DONE | `src/ticket/ticket-seat/ticket-seat.service.spec.ts` |
+| U126 | 입실이 먼저 이용권 잠금을 얻으면 뒤이은 고객 환불은 USED_TICKET으로 거절된다 | FR-003 | example | DONE | `src/refund/refund-acceptance.integration.spec.ts`(실제 DB) |
+| U127 | 환불 뒤 도착한 자동 종료 작업은 세션 종료 상태를 덮어쓰지 않는다 | FR-042 | example | DONE | `src/refund/refund-store.integration.spec.ts`(실제 DB) |
+| U128 | 환불 뒤 도착한 자동 종료 작업은 사용 시간을 다시 차감하지 않는다 | FR-042 | example | DONE | `src/refund/refund-store.integration.spec.ts`(실제 DB) |
 
 ### `src/refund/refund-result.service.ts, src/ledger/refund-ledger.repository.ts`
 
