@@ -195,6 +195,16 @@ describe('evaluateCustomerRefund', () => {
   describe('정기권 활성화 기한', () => {
     const activationDeadline = new Date('2026-11-27T12:00:00.000Z');
 
+    it('신청 시각이 활성화 기한과 같으면 기한 안으로 허용된다', () => {
+      const decision = evaluateCustomerRefund(
+        candidate({}, { activationDeadline }),
+        customerId,
+        new Date(activationDeadline.getTime()),
+      );
+
+      expect(decision).toMatchObject({ eligible: true });
+    });
+
     it('신청 시각이 활성화 기한보다 1ms 늦으면 EXPIRED_TICKET으로 판정된다', () => {
       const decision = evaluateCustomerRefund(
         candidate({}, { activationDeadline }),
