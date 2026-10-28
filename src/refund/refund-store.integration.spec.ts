@@ -5,6 +5,7 @@ import { Test } from '@nestjs/testing';
 import {
   PaymentStatus,
   PaymentType,
+  RefundPayoutStatus,
   RefundSource,
   TicketStatus,
   TicketType,
@@ -275,5 +276,68 @@ describe('매장 환불 확정 저장 (실제 DB)', () => {
       where: { id: issued.ticketId },
     });
     expect(ticket.status).toBe(TicketStatus.ACTIVE);
+  });
+
+  /**
+   * 사용 이력이 있는 이용권을 0원·사유로 매장 환불한다
+   * @returns 발급 정보와 접수 응답
+   */
+  async function acceptZeroStoreRefund() {
+    const issued = await createUsedPeriodTicket();
+    const accepted = await service.acceptStoreRefund(
+      { userId: ownerId, role: UserRole.OWNER },
+      shopId,
+      {
+        ticketId: issued.ticketId,
+        amount: 0,
+        reason: '환불금 없이 이용 종료',
+        consentToTerminateTicket: true,
+      },
+    );
+    return { issued, accepted };
+  }
+
+  it('0원 매장 환불은 PG 취소 요청 기록을 만들지 않고 PG를 호출하지 않는다', async () => {
+    const { accepted } = await acceptZeroStoreRefund();
+
+    const attempts = await prisma.paymentCancel.count({
+      where: { refundId: accepted.body.refundId },
+    });
+    expect({
+      attempts,
+      pgCalls: pgGateway.sendCancel.mock.calls.length,
+    }).toEqual({ attempts: 0, pgCalls: 0 });
+  });
+
+  it('0원 매장 환불은 지급 완료(PAID)와 0원 원장 1건을 함께 저장한다', async () => {
+    const { accepted } = await acceptZeroStoreRefund();
+
+    const refund = await prisma.refund.findUniqueOrThrow({
+      where: { id: accepted.body.refundId },
+      include: { ledgers: true },
+    });
+    expect({
+      payoutStatus: refund.payoutStatus,
+      paidAt: refund.paidAt instanceof Date,
+      ledgerAmounts: refund.ledgers.map((ledger) => ledger.amount),
+    }).toEqual({
+      payoutStatus: RefundPayoutStatus.PAID,
+      paidAt: true,
+      ledgerAmounts: [0],
+    });
+  });
+
+  it('0원 매장 환불 응답은 200과 지급 완료 상태다', async () => {
+    const { accepted } = await acceptZeroStoreRefund();
+
+    expect({
+      status: accepted.status,
+      payoutStatus: accepted.body.payoutStatus,
+      paymentCancelId: accepted.body.paymentCancelId,
+    }).toEqual({
+      status: 200,
+      payoutStatus: RefundPayoutStatus.PAID,
+      paymentCancelId: null,
+    });
   });
 });
