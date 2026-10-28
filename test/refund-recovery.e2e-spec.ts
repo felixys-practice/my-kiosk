@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
 import request from 'supertest';
 import {
   PaymentCancelFailureCode,
@@ -14,6 +14,7 @@ import {
   RefundTestContext,
 } from './helpers/refund-test-context';
 import { RefundPgStub } from './helpers/refund-pg.stub';
+import { RefundRecoveryService } from '../src/refund/refund-recovery.service';
 
 /**
  * 사용자 스토리 5: PG 결과 조회·재전송·장애 복구 (E2E)
@@ -77,4 +78,77 @@ describe('PG 결과 조회·재전송·장애 복구 (E2E)', () => {
       ticket: TicketStatus.REVOKED,
     });
   });
+
+  /**
+   * 고객 환불을 확정하고 그 PG 취소 요청을 결과 확인 실패(QUERY_FAILED) 상태로 만든다
+   * @returns 환불·PG 취소 요청 ID
+   */
+  async function queryFailedRefund(): Promise<{
+    refundId: string;
+    paymentCancelId: string;
+  }> {
+    const issued = await ctx.issuePeriodTicket();
+    pgStub.respondToSend({ result: 'UNKNOWN', reason: '응답 시간 초과' });
+    const { body } = await request(ctx.server)
+      .post('/refund')
+      .set('Authorization', `Bearer ${ctx.customer.token}`)
+      .send({ ticketId: issued.ticketId, consentToTerminateTicket: true })
+      .expect(202);
+    const paymentCancelId = body.data.paymentCancelId as string;
+    await ctx.prisma.paymentCancel.update({
+      where: { id: paymentCancelId },
+      data: {
+        status: PaymentCancelStatus.QUERY_FAILED,
+        inquiryFailureCount: 5,
+        queryFailedAt: new Date(Date.now() - 60_000),
+        nextInquiryAt: null,
+      },
+    });
+    return { refundId: body.data.refundId as string, paymentCancelId };
+  }
+
+  it('결과 확인 실패 건이 쌓였을 때 운영자가 전체 재확인을 실행하면 예정 시각을 기다리지 않고 결과 확인 실패 건을 처리 단위로 조회하며 지급 완료를 뜻하지 않는다 (QS-5-10a)', async () => {
+    await ctx.prisma.refundRecoveryControl.deleteMany({});
+    const failed = await queryFailedRefund();
+    pgStub.respondByDefault({ inquiry: { result: 'IN_PROGRESS' } });
+
+    const res = await request(ctx.server)
+      .post('/refund/recovery/resume')
+      .set('Authorization', `Bearer ${ctx.manager.token}`)
+      .send({})
+      .expect(202);
+    // 테스트 환경은 자동 작업자를 끄므로 예약된 실행을 직접 한 번 돌린다
+    await ctx.app.get(RefundRecoveryService).recoverQueryFailed(new Date());
+
+    const refund = await ctx.prisma.refund.findUniqueOrThrow({
+      where: { id: failed.refundId },
+    });
+    expect({
+      status: res.body.data.status,
+      inquired: pgStub.inquiryCalls.some(
+        (call) => call.paymentCancelId === failed.paymentCancelId,
+      ),
+      payoutStatus: refund.payoutStatus,
+    }).toEqual({
+      status: 'SCHEDULED',
+      inquired: true,
+      payoutStatus: RefundPayoutStatus.PENDING,
+    });
+  });
+
+  it.each([
+    ['점주', 'owner'],
+    ['고객', 'customer'],
+  ] as const)(
+    '고객지원 계정이 아닌 %s이 전체 재확인을 실행하면 권한 오류로 거부된다 (QS-5-10b)',
+    async (_label, actor) => {
+      const res = await request(ctx.server)
+        .post('/refund/recovery/resume')
+        .set('Authorization', `Bearer ${ctx[actor].token}`)
+        .send({})
+        .expect(403);
+
+      expect(res.body.error.code).toBe('REFUND_FORBIDDEN');
+    },
+  );
 });

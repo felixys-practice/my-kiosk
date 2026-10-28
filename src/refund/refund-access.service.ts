@@ -30,6 +30,15 @@ export class RefundAccessService {
   }
 
   /**
+   * 운영자(고객지원 계정) 전용 기능의 호출자인지 확인한다
+   * @param actor 호출한 사용자
+   * @throws RefundForbiddenError MANAGER가 아닐 때(403)
+   */
+  assertOperator(actor: RefundActor): void {
+    if (actor.role !== UserRole.MANAGER) throw new RefundForbiddenError();
+  }
+
+  /**
    * 매장 범위 조회 권한을 확인한다
    * @param actor 호출한 사용자
    * @param shopId 조회할 매장
