@@ -105,4 +105,10 @@ describe('RefundAcceptanceService', () => {
     expect(repository.createAcceptedRefund).not.toHaveBeenCalled();
     expect(pgGateway.sendCancel).not.toHaveBeenCalled();
   });
+
+  it('종료 동의 필드가 없으면 REFUND_TERMINATION_CONSENT_REQUIRED로 거절된다', async () => {
+    await expect(
+      service.acceptCustomerRefund(customer, { ticketId }),
+    ).rejects.toBeInstanceOf(RefundTerminationConsentRequiredError);
+  });
 });
