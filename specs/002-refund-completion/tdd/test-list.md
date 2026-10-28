@@ -485,11 +485,11 @@ suite_baseline: green
 | id | behavior | traces | kind | state | test |
 |---|---|---|---|---|---|
 | U173 | 승인 금액이 요청 금액과 다르면 결제가 FAILED가 된다 | FR-030 | example | PENDING | |
-| U174 | 승인 금액이 요청 금액과 다르면 이용권이 발행되지 않는다 | FR-030 | example | PENDING | |
-| U175 | 승인 금액이 요청 금액과 다르면 좌석 선점이 해제된다 | FR-030 | example | PENDING | |
+| U174 | 승인 금액이 요청 금액과 다르면 이용권이 발행되지 않는다 | FR-030 | example | DONE | `src/payment/payment.service.spec.ts` › 승인 금액이 다르면 이용권을 발행하지 않는다 |
+| U175 | 승인 금액이 요청 금액과 다르면 좌석 선점이 해제된다 | FR-030 | example | DONE | `src/payment/payment.service.spec.ts` › 승인 금액이 다르면 선점을 PAYMENT_FAILED로 해제하고 콜백은 수신 확인으로 끝난다 |
 | U176 | 승인 금액 불일치 시 approvedAmount와 승인액 전액의 SYSTEM·PAYMENT 대상 환불·최초 PG 취소 요청이 저장된다 | FR-030 | example | DONE | `src/payment/payment.service.spec.ts` › 승인 금액이 다르면 같은 트랜잭션에서 실제 승인액을 보존하고…(저장 결과는 QS-6-1 E2E) |
-| U177 | 승인 금액이 요청 금액과 같으면 기존대로 이용권이 발행된다 | QS-6-4 | example | PENDING | |
-| U178 | 같은 승인 불일치 콜백이 반복돼도 SYSTEM 환불은 1건이다 | FR-030 | example | PENDING | |
+| U177 | 승인 금액이 요청 금액과 같으면 기존대로 이용권이 발행된다 | QS-6-4 | example | DONE | `src/payment/payment.service.spec.ts` › 승인 성공 시 이용권 좌석 타입은 주문 항목 스냅샷을 따른다 등 기존 승인 테스트(기존 발행 흐름 유지) |
+| U178 | 같은 승인 불일치 콜백이 반복돼도 SYSTEM 환불은 1건이다 | FR-030 | example | DONE | `src/payment/payment.service.spec.ts` › 이미 반영한 같은 승인 금액 불일치 콜백이 다시 오면 예외 없이 끝나고 시스템 환불을 다시 만들지 않는다(동시 콜백은 결제 잠금 뒤 재확인) |
 | U179 | 좌석 배정 실패 결제는 주문 항목 대상 SYSTEM 환불로 지급을 시작한다 | FR-028 | example | PENDING | |
 | U180 | 자동 취소 PG 성공 뒤에도 결제는 FAILED로 남는다 | FR-030 | example | PENDING | |
 | U181 | 자동 취소 저장 중 중단되면 결제·이용권·환불 어느 것도 바뀌지 않는다 | FR-030 | example | PENDING | |

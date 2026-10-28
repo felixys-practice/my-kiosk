@@ -282,6 +282,31 @@ describe('PaymentService', () => {
       });
     });
 
+    it('승인 금액이 다르면 이용권을 발행하지 않는다', async () => {
+      await service.callbackPayment({ ...successPayload, amount: 15000 });
+
+      expect({
+        tickets: paymentRepository.createTickets.mock.calls.length,
+        approved: paymentRepository.approvePayment.mock.calls.length,
+      }).toEqual({ tickets: 0, approved: 0 });
+    });
+
+    it('이미 반영한 같은 승인 금액 불일치 콜백이 다시 오면 예외 없이 끝나고 시스템 환불을 다시 만들지 않는다', async () => {
+      paymentRepository.getPaymentByPgTransactionId.mockResolvedValue({
+        id: 'payment-1',
+        amount: 20000,
+        approvedAmount: 15000,
+        status: PaymentStatus.FAILED,
+        order: { id: 'order-1', userId: 'user-1' },
+      });
+
+      await expect(
+        service.callbackPayment({ ...successPayload, amount: 15000 }),
+      ).resolves.toBeUndefined();
+
+      expect(refundSystemService.acceptPaymentMismatch).not.toHaveBeenCalled();
+    });
+
     it('승인 금액이 다르면 선점을 PAYMENT_FAILED로 해제하고 콜백은 수신 확인으로 끝난다', async () => {
       await expect(
         service.callbackPayment({ ...successPayload, amount: 1 }),

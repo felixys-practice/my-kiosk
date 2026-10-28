@@ -107,6 +107,14 @@ export class PaymentService {
     if (payment.status === 'SUCCESS') {
       return;
     } else if (payment.status === 'CANCELLED' || payment.status === 'FAILED') {
+      // 이미 반영한 승인 금액 불일치 사건이 다시 오면 수신 확인만 한다(같은 승인 사건은 한 번만 반영, API 계약 §7)
+      if (
+        payload.success &&
+        payment.status === 'FAILED' &&
+        payment.approvedAmount === payload.amount
+      ) {
+        return;
+      }
       if (payload.success) {
         throw new PaymentAlreadyClosedError(payment.id, payment.status);
       }

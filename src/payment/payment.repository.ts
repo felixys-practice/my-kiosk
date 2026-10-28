@@ -205,6 +205,7 @@ export class PaymentRepository {
       select: {
         id: true,
         amount: true,
+        approvedAmount: true,
         status: true,
         order: {
           select: {
