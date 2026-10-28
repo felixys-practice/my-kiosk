@@ -1530,4 +1530,33 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       nextInquiryAt: now.getTime() + 15_000,
     });
   });
+
+  it('PROBE 조회가 정상 응답이면 BATCH 모드로 바뀌고 다음 실행에서 남은 결과 확인 실패 건을 처리 단위만큼 조회한다', async () => {
+    await resetRecoveryControl();
+    const year = recoveryYear--;
+    const oldest = await createQueryFailed(new Date(Date.UTC(year, 0, 1)));
+    const second = await createQueryFailed(new Date(Date.UTC(year, 0, 2)));
+    const third = await createQueryFailed(new Date(Date.UTC(year, 0, 3)));
+    pgGateway.inquireCancel.mockResolvedValue({ result: 'IN_PROGRESS' });
+    const recovery = app.get(RefundRecoveryService);
+    const now = new Date(Date.UTC(year, 1, 1));
+
+    await recovery.recoverQueryFailed(now);
+    const control = await prisma.refundRecoveryControl.findFirstOrThrow();
+    await recovery.recoverQueryFailed(new Date(now.getTime() + 1_000));
+
+    expect({
+      mode: control.mode,
+      inquired: pgGateway.inquireCancel.mock.calls.map(
+        ([request]: [{ paymentCancelId: string }]) => request.paymentCancelId,
+      ),
+    }).toEqual({
+      mode: 'BATCH',
+      inquired: [
+        oldest.paymentCancelId,
+        second.paymentCancelId,
+        third.paymentCancelId,
+      ],
+    });
+  });
 });

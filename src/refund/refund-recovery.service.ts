@@ -1,6 +1,10 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { PaymentCancelFailureCode, PaymentCancelStatus } from '@prisma/client';
+import {
+  PaymentCancelFailureCode,
+  PaymentCancelStatus,
+  RefundRecoveryMode,
+} from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { REFUND_PG_GATEWAY } from 'src/pg/refund-pg.gateway';
 import type { RefundPgGateway } from 'src/pg/refund-pg.gateway';
@@ -55,19 +59,67 @@ export class RefundRecoveryService {
    */
   async recoverQueryFailed(now: Date): Promise<void> {
     const control = await this.workRepository.getRecoveryControl();
+    if (control.mode === RefundRecoveryMode.BATCH) {
+      await this.runRecoveryBatch(control.batchCutoffAt ?? now, now);
+      return;
+    }
     // PROBE: 다음 확인 시각이 되면 가장 오래된 1건만 조회한다
     if (control.nextProbeAt && control.nextProbeAt > now) return;
     const [oldest] = await this.workRepository.findQueryFailed(now, 1);
     if (!oldest) return;
     const result = await this.inquireAttempt(oldest, now);
-    // 조회 장애가 이어지면 다음 확인 시각까지 기다린다
-    if (result === 'QUERY_ERROR') {
+    if (result === null) return;
+    // 조회 장애가 이어지면 다음 확인 시각까지 기다리고, 정상 응답이면 나머지를 처리 단위씩 확인한다
+    await this.workRepository.updateRecoveryControl(
+      result === 'QUERY_ERROR'
+        ? { nextProbeAt: this.nextProbeAt(now) }
+        : {
+            mode: RefundRecoveryMode.BATCH,
+            batchCutoffAt: now,
+            nextProbeAt: null,
+          },
+    );
+  }
+
+  /**
+   * BATCH: 기준 시각 이전의 결과 확인 실패 건을 처리 단위만큼 조회한다
+   * - 조회 장애가 다시 나면 PROBE로 돌아가고, 남은 건이 없으면 PROBE 대기로 돌아간다
+   * @param cutoff BATCH 대상 기준 시각
+   * @param now 실행 시각
+   */
+  private async runRecoveryBatch(cutoff: Date, now: Date): Promise<void> {
+    const batch = await this.workRepository.findQueryFailed(
+      cutoff,
+      this.config('recoveryBatchSize'),
+    );
+    if (batch.length === 0) {
       await this.workRepository.updateRecoveryControl({
-        nextProbeAt: new Date(
-          now.getTime() + this.config('recoveryProbeSeconds') * 1000,
-        ),
+        mode: RefundRecoveryMode.PROBE,
+        batchCutoffAt: null,
+        nextProbeAt: null,
       });
+      return;
     }
+    for (const paymentCancelId of batch) {
+      const result = await this.inquireAttempt(paymentCancelId, now);
+      if (result === 'QUERY_ERROR') {
+        await this.workRepository.updateRecoveryControl({
+          mode: RefundRecoveryMode.PROBE,
+          batchCutoffAt: null,
+          nextProbeAt: this.nextProbeAt(now),
+        });
+        return;
+      }
+    }
+  }
+
+  /**
+   * 다음 PROBE 확인 시각
+   * @param now 기준 시각
+   * @returns now + REFUND_RECOVERY_PROBE_SECONDS
+   */
+  private nextProbeAt(now: Date): Date {
+    return new Date(now.getTime() + this.config('recoveryProbeSeconds') * 1000);
   }
 
   /**
