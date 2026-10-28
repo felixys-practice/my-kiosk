@@ -9,6 +9,7 @@ import { TransactionClient } from 'src/prisma/prisma.service';
 import { RefundLedgerRepository } from 'src/ledger/refund-ledger.repository';
 import { AttemptForResult, RefundRepository } from './refund.repository';
 import { RefundEventRepository } from './refund-event.repository';
+import { PgCallbackTargetNotFoundError } from './errors';
 import { RefundLockingRepository } from './refund-locking.repository';
 
 /** PG가 확정한 PG 취소 요청 결과 */
@@ -21,6 +22,16 @@ const unresolvedAttemptStatuses: readonly PaymentCancelStatus[] = [
   PaymentCancelStatus.REQUESTED,
   PaymentCancelStatus.QUERY_FAILED,
 ];
+
+/** PG 취소 결과 콜백 본문 */
+export type RefundCallbackInput = {
+  success: boolean;
+  paymentCancelId: string;
+  pgTransactionId: string; // PG 취소 거래 ID
+  orderItemId: string | null; // PAYMENT 대상이면 null
+  amount: number; // 성공이면 실제 취소액
+  reason?: string | null;
+};
 
 /** 결과 반영 결과 */
 export type ApplyPgResultOutcome = {
@@ -151,6 +162,29 @@ export class RefundResultService {
         payoutStatus,
       };
     });
+  }
+
+  /**
+   * PG 취소 결과 콜백을 대상과 대조한 뒤 공통 결과 처리로 반영한다 (API 계약 §7 POST /refund/callback)
+   * @param callback 콜백 본문
+   * @returns 반영 결과
+   */
+  async applyCallback(
+    callback: RefundCallbackInput,
+  ): Promise<ApplyPgResultOutcome> {
+    const outcome: PgCancelOutcome = callback.success
+      ? {
+          kind: 'SUCCEEDED',
+          pgTransactionId: callback.pgTransactionId,
+          actualAmount: callback.amount,
+        }
+      : { kind: 'FAILED', reason: callback.reason ?? '' };
+    const result = await this.applyPgResult({
+      paymentCancelId: callback.paymentCancelId,
+      outcome,
+    });
+    if (!result) throw new PgCallbackTargetNotFoundError();
+    return result;
   }
 
   /**

@@ -19,8 +19,10 @@ import {
 } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { AppModule } from 'src/app.module';
+import { DomainNotFoundError } from 'src/common/errors';
 import { REFUND_PG_GATEWAY } from 'src/pg/refund-pg.gateway';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { PgCallbackTargetNotFoundError } from './errors';
 import { RefundRepository } from './refund.repository';
 import { RefundResultService } from './refund-result.service';
 
@@ -454,6 +456,26 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       paidAmount: 0,
       attemptStatus: PaymentCancelStatus.REQUESTED,
       ledgers: 0,
+    });
+  });
+
+  it('콜백의 PG 취소 요청이 없으면 PG_CALLBACK_TARGET_NOT_FOUND(404)로 거절된다', async () => {
+    const rejection = service.applyCallback({
+      success: true,
+      paymentCancelId: randomUUID(),
+      pgTransactionId: `pg-cancel-${randomUUID()}`,
+      orderItemId: randomUUID(),
+      amount: refundAmount,
+      reason: null,
+    });
+
+    // DomainNotFoundError는 HttpExceptionFilter에서 404로 바뀐다
+    await expect(rejection).rejects.toBeInstanceOf(
+      PgCallbackTargetNotFoundError,
+    );
+    await expect(rejection).rejects.toBeInstanceOf(DomainNotFoundError);
+    await expect(rejection).rejects.toMatchObject({
+      code: 'PG_CALLBACK_TARGET_NOT_FOUND',
     });
   });
 });

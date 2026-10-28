@@ -80,3 +80,13 @@ export class RefundNotEligibleError extends DomainConflictError {
     this.name = 'RefundNotEligibleError';
   }
 }
+
+/** PG 콜백의 PG 취소 요청이 없음 (404) */
+export class PgCallbackTargetNotFoundError extends DomainNotFoundError {
+  readonly code = 'PG_CALLBACK_TARGET_NOT_FOUND';
+
+  constructor() {
+    super('콜백의 PG 취소 요청을 찾을 수 없습니다');
+    this.name = 'PgCallbackTargetNotFoundError';
+  }
+}
