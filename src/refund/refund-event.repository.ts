@@ -9,6 +9,7 @@ export type RefundNotificationInput = {
   kind: string; // 알림 종류
   audience: RefundNotificationAudience;
   shopId: string; // 원래 주문의 매장
+  recipientUserId?: string; // 특정 사용자 한 명에게 보낼 때(고객 본인), 범위 알림이면 생략
   eventKey: string; // 같은 사건의 중복 알림을 막는 키
 };
 

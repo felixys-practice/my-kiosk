@@ -374,8 +374,13 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       ledgers: refund.ledgers.length,
       reviewRequired: refund.reviewRequired,
       actionCode: refund.actionCode,
-      operatorNotifications: refund.notifications
-        .filter((n) => n.audience === RefundNotificationAudience.OPERATOR)
+      // 거절 반영 때의 알림(U316)과 구분해 운영자 모순 알림만 확인한다
+      conflictNotifications: refund.notifications
+        .filter(
+          (n) =>
+            n.audience === RefundNotificationAudience.OPERATOR &&
+            n.kind === 'PG_RESULT_CONFLICT',
+        )
         .map((n) => ({ kind: n.kind, paymentCancelId: n.paymentCancelId })),
     }).toEqual({
       attemptStatus: PaymentCancelStatus.FAILED,
@@ -383,7 +388,7 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       ledgers: 0,
       reviewRequired: true,
       actionCode: 'PG_RESULT_CONFLICT',
-      operatorNotifications: [
+      conflictNotifications: [
         {
           kind: 'PG_RESULT_CONFLICT',
           paymentCancelId: pending.paymentCancelId,
@@ -625,5 +630,47 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       paidAmount: refundAmount,
       reviewRequired: true,
     });
+  });
+
+  it('고객 환불의 PG 거절은 고객 본인·점주·운영자 알림을 저장한다', async () => {
+    const pending = await createPendingRefund();
+
+    await service.applyPgResult({
+      paymentCancelId: pending.paymentCancelId,
+      outcome: { kind: 'FAILED', reason: '취소 가능 기간 경과' },
+    });
+
+    const notifications = await prisma.refundNotification.findMany({
+      where: { refundId: pending.refundId, kind: 'PG_REJECTED' },
+    });
+    expect(
+      notifications
+        .map((n) => ({
+          audience: n.audience,
+          recipientUserId: n.recipientUserId,
+          shopId: n.shopId,
+          paymentCancelId: n.paymentCancelId,
+        }))
+        .sort((a, b) => a.audience.localeCompare(b.audience)),
+    ).toEqual([
+      {
+        audience: RefundNotificationAudience.CUSTOMER,
+        recipientUserId: customerId,
+        shopId,
+        paymentCancelId: pending.paymentCancelId,
+      },
+      {
+        audience: RefundNotificationAudience.OPERATOR,
+        recipientUserId: null,
+        shopId,
+        paymentCancelId: pending.paymentCancelId,
+      },
+      {
+        audience: RefundNotificationAudience.SHOP,
+        recipientUserId: null,
+        shopId,
+        paymentCancelId: pending.paymentCancelId,
+      },
+    ]);
   });
 });

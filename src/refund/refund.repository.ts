@@ -46,6 +46,8 @@ export type AttemptForResult = {
     payoutStatus: RefundPayoutStatus;
     reviewRequired: boolean; // 운영자 검토가 끝나지 않았으면 true
     orderItemId: string | null; // 환불 대상 주문 상품(PAYMENT 대상이면 null)
+    source: RefundSource; // 고객·매장·시스템 경로(알림 수신 범위를 정한다)
+    customerId: string; // 원래 주문한 고객
     orderId: string;
     shopId: string;
   };
@@ -303,8 +305,11 @@ export class RefundRepository {
             payoutStatus: true,
             reviewRequired: true,
             orderItemId: true,
+            source: true,
             payment: {
-              select: { order: { select: { id: true, shopId: true } } },
+              select: {
+                order: { select: { id: true, shopId: true, userId: true } },
+              },
             },
           },
         },
@@ -324,6 +329,8 @@ export class RefundRepository {
         payoutStatus: attempt.refund.payoutStatus,
         reviewRequired: attempt.refund.reviewRequired,
         orderItemId: attempt.refund.orderItemId,
+        source: attempt.refund.source,
+        customerId: attempt.refund.payment.order.userId,
         orderId: attempt.refund.payment.order.id,
         shopId: attempt.refund.payment.order.shopId,
       },

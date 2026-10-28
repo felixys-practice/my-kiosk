@@ -144,6 +144,7 @@ export class RefundResultService {
           payoutStatus: RefundPayoutStatus.ACTION_REQUIRED,
           actionCode: 'PG_REJECTED',
         });
+        await this.notifyPayoutAction(tx, attempt, 'PG_REJECTED');
         return {
           applied: true,
           attemptStatus: PaymentCancelStatus.FAILED,
@@ -215,6 +216,40 @@ export class RefundResultService {
     });
     if (!result) throw new PgCallbackTargetNotFoundError();
     return result;
+  }
+
+  /**
+   * 미지급 조치 필요 사건을 수신 대상별 알림으로 저장한다 (FR-037)
+   * - 운영자에게 알리고, 고객 환불이면 고객 본인과 점주에게도 알린다
+   * @param tx 지급 결과 반영 트랜잭션
+   * @param attempt 사건이 생긴 PG 취소 요청과 그 환불
+   * @param kind 알림 종류(조치 사유 코드)
+   */
+  private async notifyPayoutAction(
+    tx: TransactionClient,
+    attempt: AttemptForResult,
+    kind: string,
+  ): Promise<void> {
+    const base = {
+      refundId: attempt.refund.id,
+      paymentCancelId: attempt.id,
+      kind,
+      shopId: attempt.refund.shopId,
+      eventKey: `${kind}:${attempt.id}`,
+    };
+    await this.eventRepository.recordNotification(tx, {
+      ...base,
+      audience: RefundNotificationAudience.OPERATOR,
+    });
+    await this.eventRepository.recordNotification(tx, {
+      ...base,
+      audience: RefundNotificationAudience.SHOP,
+    });
+    await this.eventRepository.recordNotification(tx, {
+      ...base,
+      audience: RefundNotificationAudience.CUSTOMER,
+      recipientUserId: attempt.refund.customerId,
+    });
   }
 
   /**
