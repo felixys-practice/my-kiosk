@@ -859,4 +859,100 @@ describe('PG 결과 조회·재전송·장애 복구 (E2E)', () => {
       },
     });
   });
+
+  /**
+   * 승인 금액 불일치로 시스템 자동 취소가 시작된 결제를 만든다
+   * @param firstSend 최초 PG 전송 결과
+   * @returns 결제·자동 취소 환불·PG 취소 요청·승인액
+   */
+  async function systemAutoCancel(
+    firstSend: Parameters<RefundPgStub['respondToSend']>[0],
+  ) {
+    const awaiting = await ctx.orderPeriodAwaitingApproval();
+    const approvedAmount = awaiting.amount - 1000;
+    pgStub.respondToSend(firstSend);
+    await request(ctx.server)
+      .post('/payments/callback')
+      .set('Authorization', `Bearer ${ctx.customer.token}`)
+      .send({
+        success: true,
+        pgTransactionId: awaiting.pgTransactionId,
+        amount: approvedAmount,
+        reason: null,
+      })
+      .expect(201);
+    const refund = await ctx.prisma.refund.findFirstOrThrow({
+      where: { paymentId: awaiting.paymentId },
+      include: { paymentCancels: true },
+    });
+    return {
+      awaiting,
+      refundId: refund.id,
+      paymentCancelId: refund.paymentCancels[0].id,
+      approvedAmount,
+    };
+  }
+
+  it('시스템 자동 취소의 PG 응답이 없을 때 거래조회로 미접수가 확인되고 재전송 한도가 남아 있으면 같은 금액을 다시 보낸다 (QS-5-5)', async () => {
+    const auto = await systemAutoCancel({
+      result: 'UNKNOWN',
+      reason: '응답 시간 초과',
+    });
+    pgStub
+      .respondToInquiry({ result: 'NOT_FOUND', authoritative: true })
+      .respondToSend({ result: 'ACCEPTED' });
+
+    await inquireLater(auto.paymentCancelId, 61);
+
+    const attempt = await ctx.prisma.paymentCancel.findUniqueOrThrow({
+      where: { id: auto.paymentCancelId },
+    });
+    expect({
+      sent: pgStub.sendCalls.map((call) => [call.paymentCancelId, call.amount]),
+      resendCount: attempt.resendCount,
+    }).toEqual({
+      sent: [
+        [auto.paymentCancelId, auto.approvedAmount],
+        [auto.paymentCancelId, auto.approvedAmount],
+      ],
+      resendCount: 1,
+    });
+  });
+
+  it('시스템 자동 취소 건의 지급 결과를 받지 못하면 같은 조회·미지급 관리 규칙을 적용해 거래조회의 PG 거절은 실패·조치 필요·운영자 알림으로 남기고, 승인 금액 불일치 건은 이용권을 만들지 않는다 (QS-5-12)', async () => {
+    const auto = await systemAutoCancel({
+      result: 'UNKNOWN',
+      reason: '응답 시간 초과',
+    });
+    pgStub.respondToInquiry({ result: 'FAILED', reason: '카드사 거절' });
+
+    await inquireLater(auto.paymentCancelId, 61);
+
+    const refund = await ctx.prisma.refund.findUniqueOrThrow({
+      where: { id: auto.refundId },
+      include: { paymentCancels: true, notifications: true },
+    });
+    const tickets = await ctx.prisma.ticket.count({
+      where: { orderItem: { orderId: auto.awaiting.orderId } },
+    });
+    expect({
+      attempt: [
+        refund.paymentCancels[0].status,
+        refund.paymentCancels[0].failureCode,
+      ],
+      payoutStatus: refund.payoutStatus,
+      operatorNotified: refund.notifications.some(
+        (n) => n.audience === RefundNotificationAudience.OPERATOR,
+      ),
+      tickets,
+    }).toEqual({
+      attempt: [
+        PaymentCancelStatus.FAILED,
+        PaymentCancelFailureCode.PG_REJECTED,
+      ],
+      payoutStatus: RefundPayoutStatus.ACTION_REQUIRED,
+      operatorNotified: true,
+      tickets: 0,
+    });
+  });
 });

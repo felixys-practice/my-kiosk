@@ -42,6 +42,16 @@ export type IssuedTicket = {
   seatId?: string; // 고정석 이용권이면 배정된 좌석 ID
 };
 
+/** 승인 콜백을 기다리는 결제(주문·결제 요청까지 마친 상태) */
+export type AwaitingPayment = {
+  orderId: string;
+  paymentId: string;
+  pgTransactionId: string; // 결제 콜백에 보낼 PG 거래 ID
+  productId: string;
+  amount: number; // 결제 요청 금액(원)
+  seatId?: string; // 고정석 주문이면 선점한 좌석 ID
+};
+
 /** 이용권 발급 조건 */
 export type IssueTicketOptions = {
   shop?: TestShop; // 기본: 주 매장
@@ -77,6 +87,10 @@ export type RefundTestContext = {
   issueTimeTicket(options?: IssueTicketOptions): Promise<IssuedTicket>;
   /** 정기권(30일)을 주문·결제해 발급한다 */
   issuePeriodTicket(options?: IssueTicketOptions): Promise<IssuedTicket>;
+  /** 정기권(30일)을 주문하고 결제를 요청해 승인 콜백 직전 상태로 둔다 */
+  orderPeriodAwaitingApproval(
+    options?: IssueTicketOptions,
+  ): Promise<AwaitingPayment>;
   /** 이 컨텍스트가 만든 데이터를 지우고 앱을 닫는다 */
   close(): Promise<void>;
 };
@@ -210,15 +224,15 @@ export async function createRefundTestContext(options: {
   }
 
   /**
-   * 상품을 등록하고 주문·결제해 이용권을 발급한다
+   * 상품을 등록하고 주문한 뒤 결제를 요청한다(PG 승인 콜백 직전)
    * @param ticketType 이용권 종류
    * @param issueOptions 발급 조건
-   * @returns 발급한 이용권과 주문·결제 식별자
+   * @returns 승인 콜백을 기다리는 결제
    */
-  async function issueTicket(
+  async function orderAwaitingApproval(
     ticketType: TicketType,
     issueOptions: IssueTicketOptions = {},
-  ): Promise<IssuedTicket> {
+  ): Promise<AwaitingPayment> {
     const targetShop = issueOptions.shop ?? shop;
     const productOwner =
       issueOptions.owner ??
@@ -266,7 +280,7 @@ export async function createRefundTestContext(options: {
       .expect(201);
     const orderId = order.data.id as string;
 
-    // 결제 요청 후 PG 승인 콜백(현재 결제 콜백은 JWT 인증, US7에서 서명 인증으로 바뀌면 함께 수정)
+    // 결제 요청
     const { body: paymentRes } = await request(server)
       .post('/payments')
       .set('Authorization', `Bearer ${buyer.token}`)
@@ -276,13 +290,38 @@ export async function createRefundTestContext(options: {
     const payment = await prisma.payment.findUniqueOrThrow({
       where: { id: paymentId },
     });
+    return {
+      orderId,
+      paymentId,
+      pgTransactionId: payment.pgTransactionId!,
+      productId,
+      amount,
+      seatId,
+    };
+  }
+
+  /**
+   * 상품을 등록하고 주문·결제해 이용권을 발급한다
+   * @param ticketType 이용권 종류
+   * @param issueOptions 발급 조건
+   * @returns 발급한 이용권과 주문·결제 식별자
+   */
+  async function issueTicket(
+    ticketType: TicketType,
+    issueOptions: IssueTicketOptions = {},
+  ): Promise<IssuedTicket> {
+    const buyer = issueOptions.buyer ?? customer;
+    const { orderId, paymentId, pgTransactionId, productId, amount, seatId } =
+      await orderAwaitingApproval(ticketType, issueOptions);
+
+    // PG 승인 콜백(현재 결제 콜백은 JWT 인증, US7에서 서명 인증으로 바뀌면 함께 수정)
     await request(server)
       .post('/payments/callback')
       .set('Authorization', `Bearer ${buyer.token}`)
       .send({
         success: true,
-        pgTransactionId: payment.pgTransactionId,
-        amount: payment.amount,
+        pgTransactionId,
+        amount,
         reason: null,
       })
       .expect(201);
@@ -365,6 +404,8 @@ export async function createRefundTestContext(options: {
     createSeat,
     issueTimeTicket: (o) => issueTicket(TicketType.TIME, o),
     issuePeriodTicket: (o) => issueTicket(TicketType.PERIOD, o),
+    orderPeriodAwaitingApproval: (o) =>
+      orderAwaitingApproval(TicketType.PERIOD, o),
     close,
   };
 }
