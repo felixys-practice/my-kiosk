@@ -2,7 +2,12 @@ import { Injectable } from '@nestjs/common';
 import {
   PaymentCancelFailureCode,
   PaymentCancelStatus,
+  PaymentStatus,
+  RefundDecisionStatus,
+  RefundPayoutStatus,
   RefundSource,
+  RefundTargetKind,
+  SeatAssignmentStatus,
   TicketStatus,
   UsageSessionStatus,
 } from '@prisma/client';
@@ -10,6 +15,9 @@ import { CustomerRefundCandidate } from './refund-policy';
 import { AcceptanceLockTargets } from './refund-locking.repository';
 import { PrismaService, TransactionClient } from 'src/prisma/prisma.service';
 import { DomainConflictError } from 'src/common/errors';
+
+/** 신규 환불 확정에 기록하는 정책 버전 */
+export const refundPolicyVersion = 'v0.4';
 
 /** 고객 환불 판정 후보와 잠글 행 */
 export type CustomerRefundTarget = {
@@ -46,9 +54,80 @@ export class RefundRepository {
     ticketId: string,
     tx: TransactionClient,
   ): Promise<CustomerRefundTarget | null> {
-    void ticketId;
-    void tx;
-    return Promise.resolve(null);
+    const ticket = await tx.ticket.findUnique({
+      where: { id: ticketId },
+      select: {
+        id: true,
+        userId: true,
+        type: true,
+        activatedAt: true,
+        activationDeadline: true,
+        purchasedMinutes: true,
+        remainingMinutes: true,
+        minuteExpireDeadline: true,
+        usageSessions: {
+          where: { status: UsageSessionStatus.ACTIVE },
+          select: { id: true },
+        },
+        ticketPauses: {
+          where: { resumedAt: null, closedAt: null },
+          select: { id: true },
+        },
+        seatAssignments: {
+          where: { status: SeatAssignmentStatus.ACTIVE },
+          select: { id: true },
+        },
+        orderItem: {
+          select: {
+            id: true,
+            amount: true,
+            refunds: { select: { decisionStatus: true, payoutStatus: true } },
+            order: {
+              select: {
+                payments: {
+                  select: { id: true, status: true },
+                  orderBy: { createdAt: 'desc' },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!ticket) return null;
+
+    // 원래 결제: 성공한 결제가 있으면 그것, 없으면 가장 최근 결제로 상태를 판정한다
+    const payments = ticket.orderItem.order.payments;
+    const payment =
+      payments.find((p) => p.status === PaymentStatus.SUCCESS) ?? payments[0];
+    if (!payment) return null;
+
+    return {
+      paymentId: payment.id,
+      orderItemId: ticket.orderItem.id,
+      lockTargets: {
+        paymentId: payment.id,
+        ticketId: ticket.id,
+        ticketPauseIds: ticket.ticketPauses.map((pause) => pause.id),
+        usageSessionIds: ticket.usageSessions.map((session) => session.id),
+        seatAssignmentIds: ticket.seatAssignments.map((row) => row.id),
+      },
+      candidate: {
+        ownerId: ticket.userId,
+        paymentStatus: payment.status,
+        paidAmount: ticket.orderItem.amount,
+        existingRefunds: ticket.orderItem.refunds,
+        ticket: {
+          type: ticket.type,
+          inUse: ticket.usageSessions.length > 0,
+          activatedAt: ticket.activatedAt,
+          activationDeadline: ticket.activationDeadline,
+          purchasedMinutes: ticket.purchasedMinutes,
+          remainingMinutes: ticket.remainingMinutes,
+          minuteExpireDeadline: ticket.minuteExpireDeadline,
+        },
+      },
+    };
   }
 
   /**
@@ -95,9 +174,42 @@ export class RefundRepository {
     input: AcceptedRefundInput,
     tx: TransactionClient,
   ): Promise<{ refundId: string; paymentCancelId: string }> {
-    void input;
-    void tx;
-    return Promise.reject(new Error('미구현'));
+    // 업무 확정(Refund)과 최초 PG 취소 요청(시도 1)을 함께 만든다
+    const refund = await tx.refund.create({
+      data: {
+        paymentId: input.paymentId,
+        orderItemId: input.orderItemId,
+        targetKind: RefundTargetKind.ORDER_ITEM,
+        source: input.source,
+        decisionStatus: RefundDecisionStatus.ACCEPTED,
+        policyVersion: refundPolicyVersion,
+        amount: input.amount,
+        payoutStatus: RefundPayoutStatus.PENDING,
+        requestedAt: input.now,
+        acceptedAt: input.now,
+        terminatedAt: input.now,
+        requestedById: input.requestedById,
+        terminationConsentedAt: input.now,
+        exitConsentedAt: input.exitConsentedAt,
+        reason: input.reason,
+        endedSessionId: input.endedSessionId,
+        paymentCancels: {
+          create: {
+            paymentId: input.paymentId,
+            orderItemId: input.orderItemId,
+            attemptNumber: 1,
+            amount: input.amount,
+            status: PaymentCancelStatus.REQUESTED,
+            requestedAt: input.now,
+          },
+        },
+      },
+      select: { id: true, paymentCancels: { select: { id: true } } },
+    });
+    return {
+      refundId: refund.id,
+      paymentCancelId: refund.paymentCancels[0].id,
+    };
   }
 
   /**

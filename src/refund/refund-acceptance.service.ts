@@ -1,4 +1,9 @@
 import { Inject, Injectable } from '@nestjs/common';
+import {
+  RefundDecisionStatus,
+  RefundPayoutStatus,
+  RefundSource,
+} from '@prisma/client';
 import { REFUND_PG_GATEWAY } from 'src/pg/refund-pg.gateway';
 import type { RefundPgGateway } from 'src/pg/refund-pg.gateway';
 import { SeatAssignmentService } from 'src/seat-assignment/seat-assignment.service';
@@ -94,7 +99,33 @@ export class RefundAcceptanceService {
         if (command.consentToTerminateTicket !== true) {
           throw new RefundTerminationConsentRequiredError();
         }
-        return Promise.reject(new Error('미구현'));
+
+        // 확정된 환불과 최초 PG 취소 요청을 저장한다
+        const created = await this.refundRepository.createAcceptedRefund(
+          {
+            paymentId: target!.paymentId,
+            orderItemId: target!.orderItemId,
+            source: RefundSource.CUSTOMER,
+            amount: decision.amount,
+            requestedById: actor.userId,
+            now,
+          },
+          tx,
+        );
+        return {
+          status: 202,
+          refundId: created.refundId,
+          body: {
+            refundId: created.refundId,
+            decisionStatus: RefundDecisionStatus.ACCEPTED,
+            ticketId: command.ticketId,
+            amount: decision.amount,
+            payoutStatus: RefundPayoutStatus.PENDING,
+            paymentCancelId: created.paymentCancelId,
+            acceptedAt: now.toISOString(),
+            terminatedAt: now.toISOString(),
+          },
+        };
       },
     );
   }

@@ -10,6 +10,7 @@ import { RefundIdempotencyRepository } from './refund-idempotency.repository';
 import { RefundIdempotencyService } from './refund-idempotency.service';
 import { RefundAccessService } from './refund-access.service';
 import { RefundLockingRepository } from './refund-locking.repository';
+import { RefundAcceptanceService } from './refund-acceptance.service';
 
 @Module({
   imports: [LoggerModule, PgModule, SeatAssignmentModule],
@@ -22,6 +23,8 @@ import { RefundLockingRepository } from './refund-locking.repository';
     RefundIdempotencyService,
     RefundAccessService,
     RefundLockingRepository,
+    // 환불 확정(US1~)
+    RefundAcceptanceService,
   ],
   controllers: [RefundController],
   exports: [RefundService],
