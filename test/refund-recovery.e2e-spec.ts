@@ -151,4 +151,29 @@ describe('PG 결과 조회·재전송·장애 복구 (E2E)', () => {
       expect(res.body.error.code).toBe('REFUND_FORBIDDEN');
     },
   );
+
+  it('운영자는 복구 현황(모드·실행 여부·건수·가장 오래된 결과 확인 실패 시각·다음 확인 시각)을 조회하고 다른 역할은 거부된다', async () => {
+    await queryFailedRefund();
+
+    const res = await request(ctx.server)
+      .get('/refund/recovery/status')
+      .set('Authorization', `Bearer ${ctx.manager.token}`)
+      .expect(200);
+    await request(ctx.server)
+      .get('/refund/recovery/status')
+      .set('Authorization', `Bearer ${ctx.owner.token}`)
+      .expect(403);
+
+    expect(res.body.data).toEqual({
+      mode: expect.stringMatching(/^(PROBE|BATCH)$/),
+      running: expect.any(Boolean),
+      requestedCount: expect.any(Number),
+      queryFailedCount: expect.any(Number),
+      actionRequiredCount: expect.any(Number),
+      reservedManualCount: expect.any(Number),
+      oldestQueryFailedAt: expect.any(String),
+      nextProbeAt: null,
+    });
+    expect(res.body.data.queryFailedCount).toBeGreaterThanOrEqual(1);
+  });
 });

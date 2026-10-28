@@ -107,6 +107,22 @@ export class RefundRecoveryService {
   }
 
   /**
+   * 복구 현황을 읽는다 (API 계약 §8 GET /refund/recovery/status)
+   * @param now 현재 시각(실행 중 판단 기준)
+   * @returns 모드·실행 여부·건수·가장 오래된 결과 확인 실패 시각·다음 확인 시각
+   */
+  async recoveryStatus(now: Date) {
+    const control = await this.workRepository.getRecoveryControl();
+    const counts = await this.workRepository.getRecoveryCounts();
+    return {
+      mode: control.mode,
+      running: control.claimUntil !== null && control.claimUntil > now,
+      ...counts,
+      nextProbeAt: control.nextProbeAt,
+    };
+  }
+
+  /**
    * 운영자 전체 재확인: 자동 확인 예정 시각을 기다리지 않고 결과 확인 실패 건을 처리 단위씩 조회하도록 예약한다 (API 계약 §8)
    * @param now 요청 시각(BATCH 대상 기준 시각)
    * @returns SCHEDULED(예약함) / ALREADY_RUNNING(복구 작업 진행 중) / NO_WORK(대상 없음)

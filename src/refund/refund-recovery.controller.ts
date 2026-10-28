@@ -1,4 +1,4 @@
-import { Body, Controller, Post, Res } from '@nestjs/common';
+import { Body, Controller, Get, Post, Res } from '@nestjs/common';
 import type { Response } from 'express';
 import { CurrentUser } from 'src/auth/decorators/current-user.decorator';
 import type { JwtValidationResult } from 'src/auth/interfaces/jwt-payload.interface';
@@ -15,6 +15,20 @@ export class RefundRecoveryController {
     private readonly accessService: RefundAccessService,
     private readonly recoveryService: RefundRecoveryService,
   ) {}
+
+  /**
+   * 복구 현황을 조회한다
+   * @param user 요청한 사용자(JWT)
+   * @returns 모드·실행 여부·건수·가장 오래된 결과 확인 실패 시각·다음 확인 시각
+   */
+  @Get('status')
+  async status(@CurrentUser() user: JwtValidationResult) {
+    this.accessService.assertOperator({
+      userId: user.userId,
+      role: user.role,
+    });
+    return this.recoveryService.recoveryStatus(new Date());
+  }
 
   /**
    * 결과 확인 실패 건의 전체 재확인을 예약한다

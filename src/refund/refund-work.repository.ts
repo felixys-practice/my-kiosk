@@ -119,4 +119,52 @@ export class RefundWorkRepository {
     });
     return attempts.map((attempt) => attempt.id);
   }
+
+  /**
+   * 복구 현황 집계를 읽는다 (API 계약 §8 GET /refund/recovery/status)
+   * @returns 결과 확인 중·결과 확인 실패·조치 필요·별도 지급 예약 건수와 가장 오래된 결과 확인 실패 시각
+   */
+  async getRecoveryCounts(): Promise<{
+    requestedCount: number;
+    queryFailedCount: number;
+    actionRequiredCount: number;
+    reservedManualCount: number;
+    oldestQueryFailedAt: Date | null;
+  }> {
+    const [
+      requestedCount,
+      queryFailedCount,
+      actionRequiredCount,
+      reservedManualCount,
+      oldest,
+    ] = await Promise.all([
+      this.prisma.paymentCancel.count({
+        where: {
+          status: PaymentCancelStatus.REQUESTED,
+          refundId: { not: null },
+        },
+      }),
+      this.prisma.paymentCancel.count({
+        where: { status: PaymentCancelStatus.QUERY_FAILED },
+      }),
+      this.prisma.refund.count({
+        where: { payoutStatus: RefundPayoutStatus.ACTION_REQUIRED },
+      }),
+      this.prisma.manualRefundPayout.count({
+        where: { status: ManualRefundPayoutStatus.RESERVED },
+      }),
+      this.prisma.paymentCancel.findFirst({
+        where: { status: PaymentCancelStatus.QUERY_FAILED },
+        orderBy: { queryFailedAt: 'asc' },
+        select: { queryFailedAt: true },
+      }),
+    ]);
+    return {
+      requestedCount,
+      queryFailedCount,
+      actionRequiredCount,
+      reservedManualCount,
+      oldestQueryFailedAt: oldest?.queryFailedAt ?? null,
+    };
+  }
 }
