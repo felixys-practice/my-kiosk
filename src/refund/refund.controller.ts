@@ -17,8 +17,6 @@ import { RefundService } from './refund.service';
 import { GetRefundQueryDto, RefundDto, PgRefundCallbackDto } from './dto';
 import { RefundAcceptanceService } from './refund-acceptance.service';
 import { RefundResultService } from './refund-result.service';
-import { RefundRepository } from './refund.repository';
-import { PgCallbackTargetMismatchError } from './errors';
 
 @Controller('refund')
 export class RefundController {
@@ -26,7 +24,6 @@ export class RefundController {
     private readonly refundService: RefundService,
     private readonly refundAcceptanceService: RefundAcceptanceService,
     private readonly refundResultService: RefundResultService,
-    private readonly refundRepository: RefundRepository,
   ) {}
 
   /**
@@ -59,32 +56,16 @@ export class RefundController {
 
   /**
    * PG 취소 결과 콜백을 받는다 (API 계약 §7 POST /refund/callback, 200 수신 확인)
-   * - 환불 기록에 연결된 PG 취소 요청은 환불금 지급 결과 공통 처리로 반영한다
-   * - 기존 경로가 만든 PG 취소 요청(refundId 없음)은 US6·Phase 13 전환 전까지 기존 처리를 유지한다
    * @param dto 콜백 본문
    */
   @Post('callback')
   @HttpCode(HttpStatus.OK)
   async callbackRefund(@Body() dto: PgRefundCallbackDto) {
-    if (await this.refundRepository.isLegacyAttempt(dto.paymentCancelId)) {
-      // 기존 경로의 PG 취소 요청은 항상 주문 상품 대상이다. 결제 전체(null) 콜백은 연결 불일치다
-      if (dto.orderItemId === null || dto.orderItemId === undefined) {
-        throw new PgCallbackTargetMismatchError();
-      }
-      await this.refundService.callback(
-        dto.success,
-        dto.paymentCancelId,
-        dto.orderItemId,
-        dto.amount,
-        dto.reason,
-      );
-      return;
-    }
-    await this.refundResultService.applyCallback({
+    await this.refundResultService.receiveCallback({
       success: dto.success,
       paymentCancelId: dto.paymentCancelId,
       pgTransactionId: dto.pgTransactionId,
-      orderItemId: dto.orderItemId,
+      orderItemId: dto.orderItemId ?? null,
       amount: dto.amount,
       reason: dto.reason,
     });
