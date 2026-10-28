@@ -42,9 +42,8 @@ export class RefundPgCheckService {
     // 지정한 환불의 미확정 PG 취소 요청 한 건만 조회한다(자동 조회 예정 시각과 무관)
     const pending =
       await this.refundRepository.findPendingAttemptOfRefund(refundId);
-    if (!pending) {
-      return Promise.reject(new Error('구현 전'));
-    }
+    // 지급 완료·0원·금액 검토·별도 지급 방식·예약 중 등 개별 PG 조회 대상이 아니면 저장 상태만 안내한다
+    if (!pending) return this.storedResult('NO_PENDING_ATTEMPT', null);
     // 같은 환불의 전송·조회 담당이 유효하면 PG를 다시 부르지 않는다
     if (pending.claimUntil && pending.claimUntil > now) {
       return this.storedResult('ALREADY_RUNNING', pending);

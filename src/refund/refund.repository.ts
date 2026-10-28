@@ -421,9 +421,9 @@ export class RefundRepository {
   }
 
   /**
-   * 환불의 미확정 PG 취소 요청(결과 확인 중·결과 확인 실패) 한 건과 조회 기록을 찾는다
+   * 개별 확인할 환불의 미확정 PG 취소 요청(결과 확인 중·결과 확인 실패) 한 건과 조회 기록을 찾는다
    * @param refundId 환불 ID
-   * @returns 가장 최근 미확정 시도, 없으면 null
+   * @returns 가장 최근 미확정 시도, 개별 확인 대상이 아니면 null
    */
   async findPendingAttemptOfRefund(refundId: string): Promise<{
     id: string;
@@ -436,6 +436,16 @@ export class RefundRepository {
         refundId,
         status: {
           in: [PaymentCancelStatus.REQUESTED, PaymentCancelStatus.QUERY_FAILED],
+        },
+        // 개별 PG 조회 대상 환불: 확정·지급 처리 중·PG 방식, 금액 검토 중 아님, 별도 지급 예약 없음(API 계약 §8)
+        refund: {
+          decisionStatus: RefundDecisionStatus.ACCEPTED,
+          payoutStatus: RefundPayoutStatus.PENDING,
+          payoutMethod: RefundPayoutMethod.PG,
+          reviewRequired: false,
+          manualPayouts: {
+            none: { status: ManualRefundPayoutStatus.RESERVED },
+          },
         },
       },
       orderBy: { attemptNumber: 'desc' },

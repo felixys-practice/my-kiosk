@@ -11,6 +11,7 @@ import {
   PaymentType,
   RefundDecisionStatus,
   RefundNotificationAudience,
+  RefundPayoutMethod,
   RefundPayoutStatus,
   RefundSource,
   RefundTargetKind,
@@ -1929,4 +1930,46 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       control: controlBefore.updatedAt,
     });
   });
+
+  it.each([
+    [
+      '지급 완료',
+      { payoutStatus: RefundPayoutStatus.PAID, paidAmount: 10000 },
+      false,
+    ],
+    ['금액 검토 중', { reviewRequired: true }, false],
+    ['별도 지급 방식', { payoutMethod: RefundPayoutMethod.MANUAL }, false],
+    ['별도 지급 예약 중', {}, true],
+  ] as const)(
+    '%s 환불은 개별 확인에서 NO_PENDING_ATTEMPT를 받고 PG는 호출되지 않는다',
+    async (_label, refundState, reserved) => {
+      const target = await createInquiredBefore(60);
+      await prisma.refund.update({
+        where: { id: target.refundId },
+        data: refundState,
+      });
+      if (reserved) {
+        await prisma.manualRefundPayout.create({
+          data: {
+            refundId: target.refundId,
+            status: ManualRefundPayoutStatus.RESERVED,
+            amount: refundAmount,
+            reservedById: customerId,
+            reservedAt: new Date(),
+            reason: '계좌 이체 예정',
+          },
+        });
+      }
+      pgGateway.inquireCancel.mockResolvedValue({ result: 'IN_PROGRESS' });
+
+      const result = await app
+        .get(RefundPgCheckService)
+        .check(operator, target.refundId, target.now);
+
+      expect({
+        checkStatus: result.checkStatus,
+        inquired: pgGateway.inquireCancel.mock.calls.length,
+      }).toEqual({ checkStatus: 'NO_PENDING_ATTEMPT', inquired: 0 });
+    },
+  );
 });
