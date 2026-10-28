@@ -276,9 +276,9 @@ suite_baseline: green
 | U366 | (실제 DB) 환불에 연결된 PG 취소 요청의 주문 항목이 환불의 주문 항목과 다르면 저장이 실패한다 (data-model §4 '새 행의 연결은 Refund와 같아야 한다', 사용자 결정) | FR-030 | example | DONE | `src/prisma/refund-constraints.integration.spec.ts` › PaymentCancel › 환불에 연결된 PG 취소 요청의 주문 항목이 환불의 주문 항목과 다르면 저장이 실패한다 |
 | U367 | 결제 전체 대상 환불(PAYMENT)도 MANAGER 재시도로 대상 상품 없는 새 PG 취소 요청을 만든다 (U365 결정에 따른 재시도 경로 정리) | FR-044 | example | DONE | `src/refund/refund-result.integration.spec.ts` › MANAGER의 PG 직접 재시도 › 결제 전체 대상 환불도 재시도하면 대상 상품 없는 새 PG 취소 요청을 만든다 |
 | U368 | 승인 금액 불일치 콜백은 예외 없이 수신 확인(200)으로 끝난다 (계약 §7 '콜백은 200 수신 확인', 기존 payment spec 단언 변경 — 사용자 결정) | FR-030 | example | DONE | `src/payment/payment.service.spec.ts` › 승인 금액이 다르면 선점을 PAYMENT_FAILED로 해제하고 콜백은 수신 확인으로 끝난다 |
-| U369 | 시스템 자동 취소(SYSTEM) 환불의 PG 취소 요청 실패·조치 필요 알림은 운영자(MANAGER)에게만 저장한다 (계약 §9, US6 검수 2) | FR-028 | example | PENDING | |
-| U370 | 결제 승인 콜백의 금액이 원 단위 정수가 아니면 형식 오류(400)다 (US6 검수 3) | FR-030 | example | PENDING | |
-| U371 | 결제 승인 콜백은 200으로 수신 확인한다 (계약 §2·§7, US6 검수 1, 기존 E2E 기대값 변경 — 사용자 결정) | FR-030 | example | PENDING | |
+| U369 | 시스템 자동 취소(SYSTEM) 환불의 PG 취소 요청 실패·조치 필요 알림은 운영자(MANAGER)에게만 저장한다 (계약 §9, US6 검수 2) | FR-028 | example | DONE | `src/refund/refund-result.integration.spec.ts` › 시스템 자동 취소 환불의 PG 거절은 운영자에게만 알린다; QS-5-12 수신자 확인 |
+| U370 | 결제 승인 콜백의 금액이 원 단위 정수가 아니면 형식 오류(400)다 (US6 검수 3) | FR-030 | example | DONE | `src/payment/dto/pg-callback.dto.spec.ts` › 승인 금액이 원 단위 정수가 아니면(1000.5) 형식 오류(400)다 |
+| U371 | 결제 승인 콜백은 200으로 수신 확인한다 (계약 §2·§7, US6 검수 1, 기존 E2E 기대값 변경 — 사용자 결정) | FR-030 | example | DONE | `test/refund-payment-mismatch.e2e-spec.ts` 등 결제 콜백 `.expect(200)` |
 
 ### `src/refund/refund-idempotency.service.ts`
 
