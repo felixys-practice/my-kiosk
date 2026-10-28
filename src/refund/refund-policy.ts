@@ -51,6 +51,11 @@ export function evaluateCustomerRefund(
   if (!candidate || candidate.ownerId !== requesterId) {
     return { eligible: false, code: 'TICKET_NOT_FOUND' };
   }
+
+  // 2. 결제가 성공 상태여야 한다
+  if (candidate.paymentStatus !== PaymentStatus.SUCCESS) {
+    return { eligible: false, code: 'PAYMENT_NOT_COMPLETED' };
+  }
   void now;
   return { eligible: true, amount: 0 };
 }

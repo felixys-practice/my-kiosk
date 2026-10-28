@@ -51,6 +51,18 @@ describe('evaluateCustomerRefund', () => {
 
     expect(decision).toEqual({ eligible: false, code: 'TICKET_NOT_FOUND' });
   });
+  it('결제가 SUCCESS가 아니면 PAYMENT_NOT_COMPLETED로 판정된다', () => {
+    const decision = evaluateCustomerRefund(
+      candidate({ paymentStatus: PaymentStatus.FAILED }),
+      customerId,
+      now,
+    );
+
+    expect(decision).toEqual({
+      eligible: false,
+      code: 'PAYMENT_NOT_COMPLETED',
+    });
+  });
 });
 
 void RefundDecisionStatus;
