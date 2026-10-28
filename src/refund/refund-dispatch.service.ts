@@ -96,7 +96,7 @@ export class RefundDispatchService {
    * @param claimToken 조회를 맡은 담당 토큰
    * @param now 재전송 시각
    * @param counter 자동 재전송(resendCount) 또는 개별 확인 재전송(manualResendCount)
-   * @returns 실제로 보냈으면 true(담당이 바뀌었으면 false)
+   * @returns 보낸 PG 전송 결과 종류(담당이 바뀌어 보내지 않았으면 null)
    */
   async resendClaimed(
     paymentCancelId: string,
@@ -104,7 +104,7 @@ export class RefundDispatchService {
     claimToken: string,
     now: Date,
     counter: 'resendCount' | 'manualResendCount',
-  ): Promise<boolean> {
+  ): Promise<PgCancelSendResult['result'] | null> {
     const marked = await this.refundRepository.markResendStarted(
       paymentCancelId,
       {
@@ -114,10 +114,10 @@ export class RefundDispatchService {
       },
       counter,
     );
-    if (!marked) return false;
+    if (!marked) return null;
     const result = await this.pgGateway.sendCancel({ paymentCancelId, amount });
     await this.recordSendResult(paymentCancelId, claimToken, now, result);
-    return true;
+    return result.result;
   }
 
   /**

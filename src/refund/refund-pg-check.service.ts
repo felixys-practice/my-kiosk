@@ -58,19 +58,19 @@ export class RefundPgCheckService {
     ) {
       return this.storedResult('RECENT_RESULT', pending);
     }
-    const inquiryResult = await this.recoveryService.inquireAttempt(
+    const inquired = await this.recoveryService.inquireForCheck(
       pending.id,
       now,
     );
     // 확인과 조회 담당 지정 사이에 다른 작업이 먼저 맡았으면 진행 중으로 안내한다
-    if (inquiryResult === null) {
+    if (inquired === null) {
       return this.storedResult('ALREADY_RUNNING', pending);
     }
     const after =
       await this.refundRepository.findPendingAttemptOfRefund(refundId);
     return {
       ...this.storedResult('CHECKED', after),
-      inquiryResult,
+      ...inquired,
     };
   }
 

@@ -1789,4 +1789,35 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       inquired: pgGateway.inquireCancel.mock.calls.length,
     }).toEqual({ checkStatus: 'ALREADY_RUNNING', inquired: 0 });
   });
+
+  it('자동 재전송 한도를 소진한 미확정 요청도 개별 확인에서 PG 미접수가 확인되면 기존 ID·금액으로 즉시 다시 보낸다', async () => {
+    const target = await createInquiredBefore(60);
+    await prisma.paymentCancel.update({
+      where: { id: target.paymentCancelId },
+      data: { resendCount: 3 },
+    });
+    pgGateway.inquireCancel.mockResolvedValueOnce({
+      result: 'NOT_FOUND',
+      authoritative: true,
+    });
+    pgGateway.sendCancel.mockResolvedValueOnce({ result: 'ACCEPTED' });
+
+    const result = await app
+      .get(RefundPgCheckService)
+      .check(operator, target.refundId, target.now);
+
+    expect({
+      checkStatus: result.checkStatus,
+      inquiryResult: result.inquiryResult,
+      resendResult: result.resendResult,
+      sent: pgGateway.sendCancel.mock.calls,
+    }).toEqual({
+      checkStatus: 'CHECKED',
+      inquiryResult: 'NOT_FOUND',
+      resendResult: 'ACCEPTED',
+      sent: [
+        [{ paymentCancelId: target.paymentCancelId, amount: refundAmount }],
+      ],
+    });
+  });
 });

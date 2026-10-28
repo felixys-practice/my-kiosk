@@ -17,7 +17,7 @@ import { RefundWorkRepository } from './refund-work.repository';
 import { refundRecoveryQueueName } from './refund-recovery.scheduler';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
-import { PgCancelQueryResult } from 'src/pg/pg.types';
+import { PgCancelQueryResult, PgCancelSendResult } from 'src/pg/pg.types';
 
 /** 자동 조회 대상인 미확정 시도 상태 */
 const inquirableStatuses: readonly PaymentCancelStatus[] = [
@@ -198,6 +198,42 @@ export class RefundRecoveryService {
     paymentCancelId: string,
     now: Date,
   ): Promise<PgCancelQueryResult['result'] | null> {
+    const inquired = await this.runInquiry(paymentCancelId, now, false);
+    return inquired?.inquiryResult ?? null;
+  }
+
+  /**
+   * 점주·운영자 개별 확인으로 PG 취소 요청 한 건을 조회한다 (API 계약 §8 pg-check)
+   * - 미접수가 확인되면 자동 재전송 한도와 관계없이 기존 ID·금액으로 즉시 다시 보낸다
+   * @param paymentCancelId 조회할 PG 취소 요청
+   * @param now 조회 시각
+   * @returns 이번 조회·재전송 결과, 조회 담당을 맡지 못했으면 null
+   */
+  inquireForCheck(
+    paymentCancelId: string,
+    now: Date,
+  ): Promise<{
+    inquiryResult: PgCancelQueryResult['result'];
+    resendResult: PgCancelSendResult['result'] | null;
+  } | null> {
+    return this.runInquiry(paymentCancelId, now, true);
+  }
+
+  /**
+   * 조회 담당을 정하고 PG를 조회한 뒤 결과를 반영한다(자동·개별 확인 공통)
+   * @param paymentCancelId 조회할 PG 취소 요청
+   * @param now 조회 시각
+   * @param manual 개별 확인이면 true
+   * @returns 조회·재전송 결과, 담당을 맡지 못했으면 null
+   */
+  private async runInquiry(
+    paymentCancelId: string,
+    now: Date,
+    manual: boolean,
+  ): Promise<{
+    inquiryResult: PgCancelQueryResult['result'];
+    resendResult: PgCancelSendResult['result'] | null;
+  } | null> {
     // 1. Refund → PaymentCancel을 잠그고 조회 담당을 정한 뒤 커밋한다
     const claimToken = randomUUID();
     const attempt = await this.claimForInquiry(
@@ -209,8 +245,14 @@ export class RefundRecoveryService {
 
     // 2. PG 조회는 트랜잭션 밖에서 한다
     const result = await this.pgGateway.inquireCancel({ paymentCancelId });
-    await this.applyInquiryResult(attempt, claimToken, now, result);
-    return result.result;
+    const resendResult = await this.applyInquiryResult(
+      attempt,
+      claimToken,
+      now,
+      result,
+      manual,
+    );
+    return { inquiryResult: result.result, resendResult };
   }
 
   /**
@@ -219,27 +261,39 @@ export class RefundRecoveryService {
    * @param claimToken 조회 담당 토큰
    * @param now 조회 시각
    * @param result PG 조회 결과
+   * @param manual 개별 확인이면 true
+   * @returns 다시 보냈으면 그 전송 결과 종류, 아니면 null
    */
   private async applyInquiryResult(
     attempt: AttemptForResult,
     claimToken: string,
     now: Date,
     result: PgCancelQueryResult,
-  ): Promise<void> {
+    manual: boolean,
+  ): Promise<PgCancelSendResult['result'] | null> {
     const paymentCancelId = attempt.id;
 
     // 3. PG가 미접수를 확실히 확인했으면 자동 한도 안에서 같은 ID·금액으로 다시 보내고,
     //    한도를 모두 썼으면 그 시도를 실패(RETRY_EXHAUSTED)로 끝내 운영자 재처리로 넘긴다
     if (result.result === 'NOT_FOUND') {
+      // 개별 확인은 자동 한도와 관계없이 즉시 다시 보낸다(개별 확인 재전송 횟수만 센다)
+      if (manual) {
+        return this.dispatchService.resendClaimed(
+          paymentCancelId,
+          attempt.amount,
+          claimToken,
+          now,
+          'manualResendCount',
+        );
+      }
       if (attempt.resendCount < this.config('resendLimit')) {
-        await this.dispatchService.resendClaimed(
+        return this.dispatchService.resendClaimed(
           paymentCancelId,
           attempt.amount,
           claimToken,
           now,
           'resendCount',
         );
-        return;
       }
       await this.resultService.applyPgResult({
         paymentCancelId,
@@ -250,7 +304,7 @@ export class RefundRecoveryService {
           failureCode: PaymentCancelFailureCode.RETRY_EXHAUSTED,
         },
       });
-      return;
+      return null;
     }
 
     // 4. PG가 처리 중이면 결과를 단정하지 않고 정상 간격 뒤 다시 조회한다(연속 조회 오류는 0으로)
@@ -266,7 +320,7 @@ export class RefundRecoveryService {
           lastInquiryError: null,
         },
       );
-      return;
+      return null;
     }
 
     // 5. 조회 오류이면 결과를 단정하지 않고 지수 백오프 간격 뒤 다시 조회한다
@@ -279,7 +333,7 @@ export class RefundRecoveryService {
           claimToken,
           { inquiryFailureCount: failures, lastInquiryError: result.reason },
         );
-        return;
+        return null;
       }
       // 연속 오류가 한도에 도달하면 결과 확인 실패로 바꾸고 이후는 장애 복구 확인이 맡는다
       if (failures >= this.config('queryFailureThreshold')) {
@@ -292,7 +346,7 @@ export class RefundRecoveryService {
             now,
           },
         );
-        return;
+        return null;
       }
       await this.refundRepository.scheduleNextInquiry(
         paymentCancelId,
@@ -312,6 +366,7 @@ export class RefundRecoveryService {
         },
       );
     }
+    return null;
   }
 
   /**
