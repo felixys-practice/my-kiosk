@@ -89,7 +89,8 @@ export function evaluateCustomerRefund(
       action: 'CONTACT_SHOP',
     };
   }
-  return { eligible: true, amount: 0 };
+  // 고객 환불 금액은 실결제액 전액이다
+  return { eligible: true, amount: candidate.paidAmount };
 }
 
 /**

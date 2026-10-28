@@ -279,7 +279,13 @@ describe('evaluateCustomerRefund', () => {
       violations: ['USED_TICKET', 'EXPIRED_TICKET'],
     });
   });
-});
+  it('미사용·기한 안 이용권의 고객 환불 금액은 실결제액 전액으로 정해진다', () => {
+    const decision = evaluateCustomerRefund(
+      candidate({ paidAmount: 8700 }),
+      customerId,
+      now,
+    );
 
-void RefundDecisionStatus;
-void RefundPayoutStatus;
+    expect(decision).toEqual({ eligible: true, amount: 8700 });
+  });
+});
