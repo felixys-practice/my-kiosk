@@ -26,6 +26,7 @@ import { TransactionLoggerService } from 'src/logger/transaction-logger.service'
 import {
   PgCallbackTargetMismatchError,
   PgCallbackTargetNotFoundError,
+  RefundStorageUnavailableError,
 } from './errors';
 import { RefundRepository } from './refund.repository';
 import { RefundResultService } from './refund-result.service';
@@ -855,5 +856,26 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       attemptStatus: refund.paymentCancels[0].status,
       ledgers: refund.ledgers.length,
     }).toEqual({ attemptStatus: PaymentCancelStatus.REQUESTED, ledgers: 0 });
+  });
+
+  it('콜백 결과 저장이 실패하면 REFUND_STORAGE_UNAVAILABLE(503)로 응답해 PG가 다시 보내게 한다', async () => {
+    const pending = await createPendingRefund();
+    const storageFailure = jest
+      .spyOn(app.get(RefundRepository), 'runInTransaction')
+      .mockRejectedValueOnce(new Error('connection terminated unexpectedly'));
+
+    const rejection = service.receiveCallback({
+      success: true,
+      paymentCancelId: pending.paymentCancelId,
+      pgTransactionId: `pg-cancel-${randomUUID()}`,
+      orderItemId: pending.orderItemId,
+      amount: refundAmount,
+      reason: null,
+    });
+
+    await expect(rejection).rejects.toBeInstanceOf(
+      RefundStorageUnavailableError,
+    );
+    storageFailure.mockRestore();
   });
 });

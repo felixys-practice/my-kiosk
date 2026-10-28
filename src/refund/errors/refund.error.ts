@@ -3,6 +3,7 @@ import {
   DomainConflictError,
   DomainForbiddenError,
   DomainNotFoundError,
+  DomainServiceUnavailableError,
 } from 'src/common/errors';
 
 /**
@@ -98,5 +99,18 @@ export class PgCallbackTargetMismatchError extends DomainConflictError {
   constructor() {
     super('콜백의 PG 취소 요청이 콜백 대상과 일치하지 않습니다');
     this.name = 'PgCallbackTargetMismatchError';
+  }
+}
+
+/** 환불 결과 저장 실패(커밋 실패 등). PG가 같은 결과를 다시 보내도록 503으로 응답한다 */
+export class RefundStorageUnavailableError extends DomainServiceUnavailableError {
+  readonly code = 'REFUND_STORAGE_UNAVAILABLE';
+
+  /**
+   * @param cause 저장을 실패하게 한 원래 오류(서버 로그 추적용, 응답에는 노출하지 않음)
+   */
+  constructor(readonly cause?: unknown) {
+    super('환불 결과를 저장하지 못했습니다. 잠시 후 다시 보내 주세요');
+    this.name = 'RefundStorageUnavailableError';
   }
 }

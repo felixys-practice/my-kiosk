@@ -18,7 +18,16 @@ import { RefundService } from './refund.service';
 import {
   PgCallbackTargetMismatchError,
   PgCallbackTargetNotFoundError,
+  RefundStorageUnavailableError,
 } from './errors';
+import {
+  DomainBadRequestError,
+  DomainConflictError,
+  DomainForbiddenError,
+  DomainNotFoundError,
+  DomainServiceUnavailableError,
+  DomainUnauthorizedError,
+} from 'src/common/errors';
 import { RefundLockingRepository } from './refund-locking.repository';
 
 /** PG가 확정한 PG 취소 요청 결과 */
@@ -55,6 +64,22 @@ function contradicts(attempt: AttemptForResult, outcome: PgCancelOutcome) {
     (attempt.actualAmount !== outcome.actualAmount ||
       attempt.pgTransactionId !== outcome.pgTransactionId)
   );
+}
+
+/**
+ * 응답 코드가 정해진 도메인 오류인지 확인한다
+ * @param error 잡은 오류
+ * @returns 도메인 오류 기본 클래스의 인스턴스면 true
+ */
+function isDomainError(error: unknown): boolean {
+  return [
+    DomainBadRequestError,
+    DomainUnauthorizedError,
+    DomainForbiddenError,
+    DomainNotFoundError,
+    DomainConflictError,
+    DomainServiceUnavailableError,
+  ].some((domainError) => error instanceof domainError);
 }
 
 /** 결과 반영 결과 */
@@ -233,23 +258,32 @@ export class RefundResultService {
    * - 기존 경로가 만든 PG 취소 요청(refundId 없음)은 US6·Phase 13 전환 전까지 기존 처리를 유지한다
    * @param callback 콜백 본문
    * @throws PgCallbackTargetMismatchError 기존 경로 요청에 결제 전체(null) 대상 콜백이 온 경우
+   * @throws RefundStorageUnavailableError 결과 저장이 실패한 경우(503)
    */
   async receiveCallback(callback: RefundCallbackInput): Promise<void> {
-    if (await this.refundRepository.isLegacyAttempt(callback.paymentCancelId)) {
-      // 기존 경로의 PG 취소 요청은 항상 주문 상품 대상이다. 결제 전체(null) 콜백은 연결 불일치다
-      if (callback.orderItemId === null) {
-        throw new PgCallbackTargetMismatchError();
+    try {
+      if (
+        await this.refundRepository.isLegacyAttempt(callback.paymentCancelId)
+      ) {
+        // 기존 경로의 PG 취소 요청은 항상 주문 상품 대상이다. 결제 전체(null) 콜백은 연결 불일치다
+        if (callback.orderItemId === null) {
+          throw new PgCallbackTargetMismatchError();
+        }
+        await this.legacyRefundService.callback(
+          callback.success,
+          callback.paymentCancelId,
+          callback.orderItemId,
+          callback.amount,
+          callback.reason,
+        );
+        return;
       }
-      await this.legacyRefundService.callback(
-        callback.success,
-        callback.paymentCancelId,
-        callback.orderItemId,
-        callback.amount,
-        callback.reason,
-      );
-      return;
+      await this.applyCallback(callback);
+    } catch (error) {
+      // 대상 오류(404·409 등 도메인 오류)는 그대로, 그 밖의 저장 실패는 PG가 다시 보내도록 503으로 바꾼다(API 계약 §7)
+      if (isDomainError(error)) throw error;
+      throw new RefundStorageUnavailableError(error);
     }
-    await this.applyCallback(callback);
   }
 
   /**
