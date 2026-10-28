@@ -113,6 +113,15 @@ describe('evaluateCustomerRefund', () => {
 
     expect(decision).toMatchObject({ eligible: false, code: 'USED_TICKET' });
   });
+  it('활성화 전 정기권은 미사용으로 판정되어 환불 가능하다', () => {
+    const decision = evaluateCustomerRefund(
+      candidate({}, { activatedAt: null }),
+      customerId,
+      now,
+    );
+
+    expect(decision).toMatchObject({ eligible: true });
+  });
 });
 
 void RefundDecisionStatus;
