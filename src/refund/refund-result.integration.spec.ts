@@ -33,6 +33,7 @@ import { RefundRepository } from './refund.repository';
 import { RefundResultService } from './refund-result.service';
 import { RefundDispatchService } from './refund-dispatch.service';
 import { RefundRecoveryService } from './refund-recovery.service';
+import { RefundWorkRepository } from './refund-work.repository';
 
 /**
  * 환불금 지급 결과 공통 처리를 실제 PostgreSQL에서 확인한다 (US4, tasks T068~T071)
@@ -1478,6 +1479,7 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
    */
   async function resetRecoveryControl() {
     await prisma.refundRecoveryControl.deleteMany({});
+    await app.get(RefundWorkRepository).getRecoveryControl();
   }
 
   it('PROBE 모드는 가장 오래된 결과 확인 실패 1건만 조회하고 900초가 지나기 전에는 다시 조회하지 않는다', async () => {
@@ -1557,6 +1559,37 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
         second.paymentCancelId,
         third.paymentCancelId,
       ],
+    });
+  });
+
+  it('BATCH 조회 중 오류가 다시 나면 남은 건을 조회하지 않고 PROBE 모드로 돌아간다', async () => {
+    await resetRecoveryControl();
+    const year = recoveryYear--;
+    const first = await createQueryFailed(new Date(Date.UTC(year, 0, 1)));
+    await createQueryFailed(new Date(Date.UTC(year, 0, 2)));
+    const now = new Date(Date.UTC(year, 1, 1));
+    await prisma.refundRecoveryControl.update({
+      where: { id: 'PG_RESULT_RECOVERY' },
+      data: { mode: 'BATCH', batchCutoffAt: now, nextProbeAt: null },
+    });
+    pgGateway.inquireCancel.mockResolvedValue({
+      result: 'QUERY_ERROR',
+      reason: 'PG 장애 재발',
+    });
+
+    await app.get(RefundRecoveryService).recoverQueryFailed(now);
+
+    const control = await prisma.refundRecoveryControl.findFirstOrThrow();
+    expect({
+      inquired: pgGateway.inquireCancel.mock.calls.length,
+      firstInquired: pgGateway.inquireCancel.mock.calls[0] as unknown,
+      mode: control.mode,
+      nextProbeAt: control.nextProbeAt?.getTime(),
+    }).toEqual({
+      inquired: 1,
+      firstInquired: [{ paymentCancelId: first.paymentCancelId }],
+      mode: 'PROBE',
+      nextProbeAt: now.getTime() + 900_000,
     });
   });
 });
