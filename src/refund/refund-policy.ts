@@ -160,5 +160,9 @@ export function evaluateStoreRefund(
   if (candidate && input.amount > candidate.paidAmount) {
     return { eligible: false, code: 'REFUND_AMOUNT_EXCEEDED' };
   }
-  return { eligible: true, amount: input.amount, reason: input.reason ?? null };
+  // 사용 이력이 있으면 사유가 필수다
+  if (input.reason === undefined) {
+    return { eligible: false, code: 'REFUND_REASON_REQUIRED' };
+  }
+  return { eligible: true, amount: input.amount, reason: input.reason };
 }

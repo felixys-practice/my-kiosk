@@ -362,4 +362,16 @@ describe('evaluateStoreRefund', () => {
       reason: '전액 보상',
     });
   });
+  it('사용 이력이 있는 이용권에 사유가 없으면 REFUND_REASON_REQUIRED로 거절된다', () => {
+    const decision = evaluateStoreRefund(
+      usedCandidate(),
+      { amount: paidAmount - 3000 },
+      now,
+    );
+
+    expect(decision).toEqual({
+      eligible: false,
+      code: 'REFUND_REASON_REQUIRED',
+    });
+  });
 });
