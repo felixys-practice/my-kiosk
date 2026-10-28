@@ -2305,5 +2305,34 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
         ticket: TicketStatus.REVOKED,
       });
     });
+
+    it('한도를 소진해 실패한 요청을 재시도한 새 요청의 자동 재전송 횟수는 0이고 이전 요청의 횟수는 그대로다', async () => {
+      const failed = await createFailedRefund(
+        PaymentCancelFailureCode.RETRY_EXHAUSTED,
+        5,
+      );
+      pgGateway.sendCancel.mockResolvedValueOnce({ result: 'ACCEPTED' });
+
+      await app
+        .get(RefundRetryService)
+        .retryByManager(manager(), failed.refundId, {
+          reason: retryReason,
+          idempotencyKey: `retry-${randomUUID()}`,
+        });
+
+      const attempts = await prisma.paymentCancel.findMany({
+        where: { refundId: failed.refundId },
+        orderBy: { attemptNumber: 'asc' },
+      });
+      expect(
+        attempts.map((attempt) => ({
+          resendCount: attempt.resendCount,
+          manualResendCount: attempt.manualResendCount,
+        })),
+      ).toEqual([
+        { resendCount: 5, manualResendCount: 0 },
+        { resendCount: 0, manualResendCount: 0 },
+      ]);
+    });
   });
 });
