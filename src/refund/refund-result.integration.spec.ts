@@ -1504,4 +1504,30 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       totalCalls: 1,
     });
   });
+
+  it('결과 확인 실패 건이 PG 처리 중 응답을 받으면 일반 조회 일정(REQUESTED)으로 돌아간다', async () => {
+    const queryFailedAt = new Date(Date.UTC(recoveryYear--, 0, 1));
+    const failed = await createQueryFailed(queryFailedAt);
+    pgGateway.inquireCancel.mockResolvedValueOnce({ result: 'IN_PROGRESS' });
+    const now = new Date(queryFailedAt.getTime() + 86_400_000);
+
+    await app
+      .get(RefundRecoveryService)
+      .inquireAttempt(failed.paymentCancelId, now);
+
+    const attempt = await prisma.paymentCancel.findUniqueOrThrow({
+      where: { id: failed.paymentCancelId },
+    });
+    expect({
+      status: attempt.status,
+      queryFailedAt: attempt.queryFailedAt,
+      failures: attempt.inquiryFailureCount,
+      nextInquiryAt: attempt.nextInquiryAt?.getTime(),
+    }).toEqual({
+      status: PaymentCancelStatus.REQUESTED,
+      queryFailedAt: null,
+      failures: 0,
+      nextInquiryAt: now.getTime() + 15_000,
+    });
+  });
 });

@@ -254,6 +254,7 @@ suite_baseline: green
 | U344 | PG 전송 결과가 즉시 SUCCEEDED이면 공통 결과 처리로 실제액·원장을 반영한다 (US5 진행 중 추가, 계약 §8) | FR-018 | example | PENDING | |
 | U345 | 환불 접수 응답과 같은 키 재응답은 PG 전송 결과(예: ACTION_REQUIRED)를 반영한 같은 응답이다 (US5 진행 중 추가, 계약 §4) | FR-035 | example | PENDING | |
 | U346 | 지급 처리 중(PENDING)·PG 방식이 아닌 환불(예: 조치 필요)의 미확정 시도는 정기 탐색에서 조회하지 않는다 (US5 진행 중 추가, 계약 §8 자동 대상) | FR-022 | example | PENDING | |
+| U347 | 결과 확인 실패(QUERY_FAILED) 건이 PG 처리 중 응답을 받으면 일반 조회 일정(REQUESTED)으로 돌아간다 (US5 진행 중 추가, 계약 §8 정상 응답) | FR-026 | example | PENDING | |
 
 ### `src/refund/refund-idempotency.service.ts`
 

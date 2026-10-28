@@ -509,6 +509,7 @@ export class RefundRepository {
   /**
    * 결과가 아직 확정되지 않은 조회 뒤 다음 조회를 예약하고 담당을 내려놓는다
    * - 담당 토큰이 그대로일 때만 바꾼다
+   * - 일반 조회 일정(REQUESTED)으로 두므로 결과 확인 실패 건이었다면 복귀한다
    * @param id PG 취소 요청 ID
    * @param claimToken 조회를 맡은 담당 토큰
    * @param update 다음 조회 예정 시각과 연속 조회 오류 기록
@@ -524,7 +525,14 @@ export class RefundRepository {
   ): Promise<void> {
     await this.prisma.paymentCancel.updateMany({
       where: { id, claimToken },
-      data: { ...update, claimToken: null, claimUntil: null },
+      data: {
+        ...update,
+        // 정상 응답을 받은 결과 확인 실패 건도 일반 조회 일정으로 돌아간다
+        status: PaymentCancelStatus.REQUESTED,
+        queryFailedAt: null,
+        claimToken: null,
+        claimUntil: null,
+      },
     });
   }
 
