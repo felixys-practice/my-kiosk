@@ -59,3 +59,24 @@ export class RefundTerminationConsentRequiredError extends DomainBadRequestError
     this.name = 'RefundTerminationConsentRequiredError';
   }
 }
+
+/** 본인·매장 범위에 없는 이용권 (404). 범위 밖 이용권의 존재를 드러내지 않는다 */
+export class TicketNotFoundError extends DomainNotFoundError {
+  readonly code = 'TICKET_NOT_FOUND';
+
+  constructor() {
+    super('이용권을 찾을 수 없습니다');
+    this.name = 'TicketNotFoundError';
+  }
+}
+
+/** 환불 대상이 아닌 상태 (409): PAYMENT_NOT_COMPLETED·ALREADY_REFUNDED·REFUND_IN_PROGRESS·USED_TICKET·EXPIRED_TICKET */
+export class RefundNotEligibleError extends DomainConflictError {
+  constructor(
+    readonly code: string,
+    readonly details?: { violations?: string[]; action?: string },
+  ) {
+    super(`환불할 수 없는 이용권입니다: ${code}`);
+    this.name = 'RefundNotEligibleError';
+  }
+}

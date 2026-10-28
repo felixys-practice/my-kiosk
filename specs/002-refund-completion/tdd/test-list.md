@@ -212,6 +212,8 @@ suite_baseline: green
 | U302 | 처리 트랜잭션 안에서 처리 중인 요청의 기록은 기한이 지나도 다른 요청이 이어받지 못한다(기한 경과를 이전 작업 종료의 증거로 쓰지 않음) (Phase 2 재검수 P1) | FR-041 | example | DONE | `src/refund/refund-idempotency.service.spec.ts` |
 | U303 | 기한이 지난 같은 기록을 두 요청이 동시에 이어받으려 하면 하나만 처리한다 (Phase 2 재검수 P1) | FR-041 | example | DONE | `src/refund/refund-idempotency.service.spec.ts` |
 | U304 | (실제 DB) 담당 토큰이 다른 완료·정리는 기록을 바꾸거나 지우지 못하고, 처리 트랜잭션이 잡은 기록의 이어받기는 그 트랜잭션이 끝날 때까지 기다린 뒤 실패한다 (Phase 2 재검수 P1) | FR-041 | example | DONE | `src/refund/refund-idempotency.repository.integration.spec.ts` |
+| U305 | 고객 환불 판정 거절은 계약 코드의 도메인 오류로 거절되고(TICKET_NOT_FOUND 404, PAYMENT_NOT_COMPLETED·ALREADY_REFUNDED·REFUND_IN_PROGRESS·USED_TICKET·EXPIRED_TICKET 409) 아무것도 저장하지 않는다 | FR-001, FR-005 | example | PENDING | |
+| U306 | 도메인 오류에 details가 있으면 응답 error.details로 그대로 나간다(USED_TICKET의 violations·action 안내) | FR-005 | example | PENDING | |
 
 ### `src/refund/refund-idempotency.service.ts`
 

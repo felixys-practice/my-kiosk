@@ -9,8 +9,15 @@ import {
   RefundIdempotencyService,
 } from './refund-idempotency.service';
 import { RefundActor } from './refund-access.service';
-import { evaluateCustomerRefund } from './refund-policy';
-import { RefundTerminationConsentRequiredError } from './errors';
+import {
+  CustomerRefundDecision,
+  evaluateCustomerRefund,
+} from './refund-policy';
+import {
+  RefundNotEligibleError,
+  RefundTerminationConsentRequiredError,
+  TicketNotFoundError,
+} from './errors';
 
 /** 고객 환불 신청 */
 export type CustomerRefundCommand = {
@@ -79,7 +86,9 @@ export class RefundAcceptanceService {
           actor.userId,
           now,
         );
-        void decision;
+        if (!decision.eligible) {
+          throw rejectionError(decision);
+        }
 
         // 대상 판정을 모두 통과한 뒤 종료 동의를 확인한다(API 계약 §4 확인 순서)
         if (command.consentToTerminateTicket !== true) {
@@ -89,4 +98,21 @@ export class RefundAcceptanceService {
       },
     );
   }
+}
+
+/**
+ * 판정 거절을 계약 코드의 도메인 오류로 바꾼다
+ * @param decision 거절 판정
+ * @returns 본인 범위 밖이면 404 TicketNotFoundError, 그 밖은 409 RefundNotEligibleError
+ */
+function rejectionError(
+  decision: Extract<CustomerRefundDecision, { eligible: false }>,
+): Error {
+  if (decision.code === 'TICKET_NOT_FOUND') return new TicketNotFoundError();
+  return new RefundNotEligibleError(
+    decision.code,
+    decision.violations
+      ? { violations: decision.violations, action: decision.action }
+      : undefined,
+  );
 }

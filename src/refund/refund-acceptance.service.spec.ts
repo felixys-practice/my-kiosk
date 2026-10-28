@@ -1,5 +1,11 @@
 /* eslint-disable @typescript-eslint/unbound-method -- jest 목(mock) 메서드를 expect로 검증할 때 생기는 오탐 */
-import { PaymentStatus, TicketType, UserRole } from '@prisma/client';
+import {
+  PaymentStatus,
+  RefundDecisionStatus,
+  RefundPayoutStatus,
+  TicketType,
+  UserRole,
+} from '@prisma/client';
 import { TransactionClient } from 'src/prisma/prisma.service';
 import { RefundPgGateway } from 'src/pg/refund-pg.gateway';
 import { SeatAssignmentService } from 'src/seat-assignment/seat-assignment.service';
@@ -7,7 +13,11 @@ import { RefundAcceptanceService } from './refund-acceptance.service';
 import { CustomerRefundTarget, RefundRepository } from './refund.repository';
 import { RefundLockingRepository } from './refund-locking.repository';
 import { RefundIdempotencyService } from './refund-idempotency.service';
-import { RefundTerminationConsentRequiredError } from './errors';
+import {
+  RefundNotEligibleError,
+  RefundTerminationConsentRequiredError,
+  TicketNotFoundError,
+} from './errors';
 
 describe('RefundAcceptanceService', () => {
   const customer = { userId: 'customer-1', role: UserRole.USER };
@@ -110,5 +120,80 @@ describe('RefundAcceptanceService', () => {
     await expect(
       service.acceptCustomerRefund(customer, { ticketId }),
     ).rejects.toBeInstanceOf(RefundTerminationConsentRequiredError);
+  });
+
+  describe('판정 거절은 계약 코드의 오류로 거절되고 아무것도 저장하지 않는다', () => {
+    it('다른 고객의 이용권은 TicketNotFoundError(TICKET_NOT_FOUND)다', async () => {
+      const target = eligibleTarget();
+      target.candidate.ownerId = 'other-customer';
+      repository.findCustomerRefundTarget.mockResolvedValue(target);
+
+      await expect(
+        service.acceptCustomerRefund(customer, {
+          ticketId,
+          consentToTerminateTicket: true,
+        }),
+      ).rejects.toBeInstanceOf(TicketNotFoundError);
+      expect(repository.createAcceptedRefund).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      [
+        'PAYMENT_NOT_COMPLETED',
+        (t: CustomerRefundTarget) => {
+          t.candidate.paymentStatus = PaymentStatus.FAILED;
+        },
+      ],
+      [
+        'ALREADY_REFUNDED',
+        (t: CustomerRefundTarget) => {
+          t.candidate.existingRefunds = [
+            {
+              decisionStatus: RefundDecisionStatus.ACCEPTED,
+              payoutStatus: RefundPayoutStatus.PAID,
+            },
+          ];
+        },
+      ],
+      [
+        'REFUND_IN_PROGRESS',
+        (t: CustomerRefundTarget) => {
+          t.candidate.existingRefunds = [
+            {
+              decisionStatus: RefundDecisionStatus.ACCEPTED,
+              payoutStatus: RefundPayoutStatus.PENDING,
+            },
+          ];
+        },
+      ],
+      [
+        'USED_TICKET',
+        (t: CustomerRefundTarget) => {
+          t.candidate.ticket.inUse = true;
+        },
+      ],
+      [
+        'EXPIRED_TICKET',
+        (t: CustomerRefundTarget) => {
+          t.candidate.ticket.activationDeadline = new Date(Date.now() - 1000);
+        },
+      ],
+    ])(
+      '%s 판정은 그 코드의 RefundNotEligibleError(409)다',
+      async (code, adjust) => {
+        const target = eligibleTarget();
+        adjust(target);
+        repository.findCustomerRefundTarget.mockResolvedValue(target);
+
+        const rejection = service.acceptCustomerRefund(customer, {
+          ticketId,
+          consentToTerminateTicket: true,
+        });
+
+        await expect(rejection).rejects.toBeInstanceOf(RefundNotEligibleError);
+        await expect(rejection).rejects.toMatchObject({ code });
+        expect(repository.createAcceptedRefund).not.toHaveBeenCalled();
+      },
+    );
   });
 });
