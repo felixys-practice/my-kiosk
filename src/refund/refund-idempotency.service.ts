@@ -4,6 +4,7 @@ import { createHash, randomUUID } from 'crypto';
 import { TransactionClient } from 'src/prisma/prisma.service';
 import {
   IdempotencyRecord,
+  IdempotencyScope,
   RefundIdempotencyRepository,
 } from './refund-idempotency.repository';
 import { RefundIdempotencyStatus } from '@prisma/client';
@@ -141,12 +142,12 @@ export class RefundIdempotencyService {
           const current = after ? await this.repository.find(scope) : null;
           if (after && current?.refundId) {
             const rebuilt = await after.rebuild(current.refundId);
-            await this.repository.completeAfterCommit(
+            return this.completeOrReplay<T>(
+              scope,
               existing.id,
               claimToken,
               rebuilt,
             );
-            return rebuilt;
           }
           created = existing;
           break;
@@ -200,8 +201,36 @@ export class RefundIdempotencyService {
 
     // 커밋 뒤 단계가 실패하면 기록은 처리 중으로 남고, 처리 기한이 지난 뒤 같은 키 요청이 저장된 결과로 완료한다
     const final = await after.afterCommit(handled);
-    await this.repository.completeAfterCommit(created.id, claimToken, final);
-    return final;
+    return this.completeOrReplay<T>(scope, created.id, claimToken, final);
+  }
+
+  /**
+   * 커밋 뒤 단계의 최종 응답으로 기록을 완료한다. 그 사이 담당을 잃었으면 자기 응답을 확정하지 않는다
+   * - 이어받은 요청이 이미 최초 응답을 저장했으면 그 응답을 돌려준다(같은 키는 같은 최초 응답)
+   * @param scope 요청자·기능·키
+   * @param id 멱등 기록 ID
+   * @param claimToken 이 요청의 담당 토큰
+   * @param response 이 요청이 만든 최종 응답
+   * @returns 저장된 최초 응답
+   * @throws IdempotencyRequestInProgressError 담당을 잃었고 이어받은 요청이 아직 처리 중일 때
+   */
+  private async completeOrReplay<T>(
+    scope: IdempotencyScope,
+    id: string,
+    claimToken: string,
+    response: IdempotentResult<T>,
+  ): Promise<IdempotentResult<T>> {
+    if (await this.repository.completeAfterCommit(id, claimToken, response)) {
+      return response;
+    }
+    const stored = await this.repository.find(scope);
+    if (stored?.status !== RefundIdempotencyStatus.COMPLETED) {
+      throw new IdempotencyRequestInProgressError();
+    }
+    return {
+      status: stored.responseStatus!,
+      body: stored.responseBody as T,
+    };
   }
 
   /**

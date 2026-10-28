@@ -652,4 +652,47 @@ describe('환불 확정 저장 (실제 DB)', () => {
       record: 'COMPLETED',
     });
   });
+
+  it('PG 전송이 처리 기한을 넘겨 다른 요청이 이어받아 완료했으면, 늦게 끝난 최초 요청은 자기 응답 대신 저장된 최초 응답을 돌려준다', async () => {
+    const issued = await createUnusedPeriodTicket();
+    let releaseSend!: () => void;
+    const sendHeld = new Promise<void>((resolve) => {
+      releaseSend = resolve;
+    });
+    let sendStarted!: () => void;
+    const sendStartedSignal = new Promise<void>((resolve) => {
+      sendStarted = resolve;
+    });
+    pgGateway.sendCancel.mockImplementationOnce(async () => {
+      sendStarted();
+      await sendHeld;
+      return { result: 'NOT_SENT', reason: 'PG 연결 설정 누락' };
+    });
+    const command = {
+      ticketId: issued.ticketId,
+      consentToTerminateTicket: true,
+      idempotencyKey: `key-${randomUUID()}`,
+    };
+    const actor = { userId: customerId, role: UserRole.USER };
+
+    const first = service.acceptCustomerRefund(actor, command);
+    await sendStartedSignal;
+    // 최초 요청의 PG 전송이 처리 기한을 넘겼다
+    await prisma.refundIdempotencyRecord.updateMany({
+      where: { requesterId: customerId, key: command.idempotencyKey },
+      data: { claimUntil: new Date(Date.now() - 1_000) },
+    });
+    const takenOver = await service.acceptCustomerRefund(actor, command);
+    releaseSend();
+    const late = await first;
+    const replay = await service.acceptCustomerRefund(actor, command);
+
+    expect({
+      late: { status: late.status, body: late.body },
+      replay: { status: replay.status, body: replay.body },
+    }).toEqual({
+      late: { status: takenOver.status, body: takenOver.body },
+      replay: { status: takenOver.status, body: takenOver.body },
+    });
+  });
 });

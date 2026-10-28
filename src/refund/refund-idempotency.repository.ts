@@ -202,13 +202,14 @@ export class RefundIdempotencyRepository {
    * @param id 멱등 기록 ID
    * @param claimToken 담당 토큰
    * @param response 최종 응답
+   * @returns 완료했으면 true, 담당을 잃었으면 false
    */
   async completeAfterCommit(
     id: string,
     claimToken: string,
     response: { status: number; body: unknown },
-  ): Promise<void> {
-    await this.prisma.refundIdempotencyRecord.updateMany({
+  ): Promise<boolean> {
+    const { count } = await this.prisma.refundIdempotencyRecord.updateMany({
       where: { id, status: RefundIdempotencyStatus.IN_PROGRESS, claimToken },
       data: {
         status: RefundIdempotencyStatus.COMPLETED,
@@ -219,6 +220,7 @@ export class RefundIdempotencyRepository {
         claimUntil: null,
       },
     });
+    return count === 1;
   }
 
   /**
