@@ -163,6 +163,42 @@ export class PaymentRepository {
     });
   }
 
+  /**
+   * 승인 콜백 처리 트랜잭션에서 결제 행을 잠그고 현재 상태를 다시 읽는다
+   * @param paymentId 결제 ID
+   * @param tx 콜백 처리 트랜잭션
+   * @returns 잠근 뒤의 상태·실제 승인액
+   */
+  async lockForApproval(
+    paymentId: string,
+    tx: TransactionClient,
+  ): Promise<{ status: PaymentStatus; approvedAmount: number | null }> {
+    await tx.$queryRaw`SELECT id FROM payments WHERE id = ${paymentId} FOR UPDATE`;
+    return tx.payment.findUniqueOrThrow({
+      where: { id: paymentId },
+      select: { status: true, approvedAmount: true },
+    });
+  }
+
+  /**
+   * 승인 금액 불일치 결제를 실패로 바꾸고 PG가 알린 실제 승인액을 보존한다(요청액 amount는 그대로)
+   * @param paymentId 결제 ID
+   * @param approvedAmount PG가 승인했다고 알린 금액
+   * @param reason 실패 사유
+   * @param tx 콜백 처리 트랜잭션
+   */
+  async failApprovalMismatch(
+    paymentId: string,
+    approvedAmount: number,
+    reason: string,
+    tx: TransactionClient,
+  ): Promise<void> {
+    await tx.payment.update({
+      where: { id: paymentId },
+      data: { status: PaymentStatus.FAILED, approvedAmount, reason },
+    });
+  }
+
   async getPaymentByPgTransactionId(pgTransactionId: string) {
     return await this.prisma.payment.findUnique({
       where: { pgTransactionId },

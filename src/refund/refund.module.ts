@@ -25,6 +25,7 @@ import { RefundRecoveryProcessor } from './refund-recovery.processor';
 import { RefundRecoveryController } from './refund-recovery.controller';
 import { RefundPgCheckService } from './refund-pg-check.service';
 import { RefundRetryService } from './refund-retry.service';
+import { RefundSystemService } from './refund-system.service';
 import { RefundOperationsController } from './refund-operations.controller';
 import { RefundEventRepository } from './refund-event.repository';
 import { RefundLedgerRepository } from 'src/ledger/refund-ledger.repository';
@@ -61,12 +62,13 @@ import { RefundLedgerRepository } from 'src/ledger/refund-ledger.repository';
     RefundRecoveryProcessor,
     RefundPgCheckService,
     RefundRetryService,
+    RefundSystemService,
   ],
   controllers: [
     RefundController,
     RefundRecoveryController,
     RefundOperationsController,
   ],
-  exports: [RefundService],
+  exports: [RefundService, RefundSystemService],
 })
 export class RefundModule {}

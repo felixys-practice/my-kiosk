@@ -275,7 +275,7 @@ suite_baseline: green
 | U365 | (실제 DB) 결제 전체 대상 환불(PAYMENT) 아래 PG 취소 요청은 주문 항목 없이 저장된다 (US6 전 사용자 결정: nullable 전환) | FR-030 | example | DONE | `src/prisma/refund-constraints.integration.spec.ts` › PaymentCancel › 결제 전체 대상 환불 아래 PG 취소 요청은 주문 항목 없이 저장된다 |
 | U366 | (실제 DB) 환불에 연결된 PG 취소 요청의 주문 항목이 환불의 주문 항목과 다르면 저장이 실패한다 (data-model §4 '새 행의 연결은 Refund와 같아야 한다', 사용자 결정) | FR-030 | example | DONE | `src/prisma/refund-constraints.integration.spec.ts` › PaymentCancel › 환불에 연결된 PG 취소 요청의 주문 항목이 환불의 주문 항목과 다르면 저장이 실패한다 |
 | U367 | 결제 전체 대상 환불(PAYMENT)도 MANAGER 재시도로 대상 상품 없는 새 PG 취소 요청을 만든다 (U365 결정에 따른 재시도 경로 정리) | FR-044 | example | DONE | `src/refund/refund-result.integration.spec.ts` › MANAGER의 PG 직접 재시도 › 결제 전체 대상 환불도 재시도하면 대상 상품 없는 새 PG 취소 요청을 만든다 |
-| U368 | 승인 금액 불일치 콜백은 예외 없이 수신 확인(200)으로 끝난다 (계약 §7 '콜백은 200 수신 확인', 기존 payment spec 단언 변경 — 사용자 결정) | FR-030 | example | PENDING | |
+| U368 | 승인 금액 불일치 콜백은 예외 없이 수신 확인(200)으로 끝난다 (계약 §7 '콜백은 200 수신 확인', 기존 payment spec 단언 변경 — 사용자 결정) | FR-030 | example | DONE | `src/payment/payment.service.spec.ts` › 승인 금액이 다르면 선점을 PAYMENT_FAILED로 해제하고 콜백은 수신 확인으로 끝난다 |
 
 ### `src/refund/refund-idempotency.service.ts`
 
@@ -487,7 +487,7 @@ suite_baseline: green
 | U173 | 승인 금액이 요청 금액과 다르면 결제가 FAILED가 된다 | FR-030 | example | PENDING | |
 | U174 | 승인 금액이 요청 금액과 다르면 이용권이 발행되지 않는다 | FR-030 | example | PENDING | |
 | U175 | 승인 금액이 요청 금액과 다르면 좌석 선점이 해제된다 | FR-030 | example | PENDING | |
-| U176 | 승인 금액 불일치 시 approvedAmount와 승인액 전액의 SYSTEM·PAYMENT 대상 환불·최초 PG 취소 요청이 저장된다 | FR-030 | example | PENDING | |
+| U176 | 승인 금액 불일치 시 approvedAmount와 승인액 전액의 SYSTEM·PAYMENT 대상 환불·최초 PG 취소 요청이 저장된다 | FR-030 | example | DONE | `src/payment/payment.service.spec.ts` › 승인 금액이 다르면 같은 트랜잭션에서 실제 승인액을 보존하고…(저장 결과는 QS-6-1 E2E) |
 | U177 | 승인 금액이 요청 금액과 같으면 기존대로 이용권이 발행된다 | QS-6-4 | example | PENDING | |
 | U178 | 같은 승인 불일치 콜백이 반복돼도 SYSTEM 환불은 1건이다 | FR-030 | example | PENDING | |
 | U179 | 좌석 배정 실패 결제는 주문 항목 대상 SYSTEM 환불로 지급을 시작한다 | FR-028 | example | PENDING | |

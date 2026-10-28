@@ -786,6 +786,58 @@ export class RefundRepository {
   }
 
   /**
+   * 결제 전체 대상(PAYMENT) 시스템 환불과 최초 PG 취소 요청을 저장한다(승인 금액 불일치 자동 취소, data-model §1)
+   * - 확정·지급 처리 중으로 저장하고, 이용권이 없으므로 이용 종료·동의 시각과 실행자는 없다
+   * - 커밋 뒤 바로 보낼 전송 기록(시도 1회·시각·담당)을 함께 저장한다
+   * @param tx 결제 콜백 처리 트랜잭션
+   * @param input 결제·금액(실제 승인액)·시각·전송 담당
+   * @returns 환불·최초 PG 취소 요청 ID
+   */
+  async createPaymentTargetRefund(
+    tx: TransactionClient,
+    input: {
+      paymentId: string;
+      amount: number;
+      now: Date;
+      sendClaim: { claimToken: string; claimUntil: Date };
+    },
+  ): Promise<{ refundId: string; paymentCancelId: string }> {
+    const refund = await tx.refund.create({
+      data: {
+        paymentId: input.paymentId,
+        orderItemId: null,
+        targetKind: RefundTargetKind.PAYMENT,
+        source: RefundSource.SYSTEM,
+        decisionStatus: RefundDecisionStatus.ACCEPTED,
+        policyVersion: refundPolicyVersion,
+        amount: input.amount,
+        payoutStatus: RefundPayoutStatus.PENDING,
+        requestedAt: input.now,
+        acceptedAt: input.now,
+        paymentCancels: {
+          create: {
+            paymentId: input.paymentId,
+            orderItemId: null,
+            attemptNumber: 1,
+            amount: input.amount,
+            status: PaymentCancelStatus.REQUESTED,
+            requestedAt: input.now,
+            sendAttemptCount: 1,
+            lastSendAttemptAt: input.now,
+            claimToken: input.sendClaim.claimToken,
+            claimUntil: input.sendClaim.claimUntil,
+          },
+        },
+      },
+      select: { id: true, paymentCancels: { select: { id: true } } },
+    });
+    return {
+      refundId: refund.id,
+      paymentCancelId: refund.paymentCancels[0].id,
+    };
+  }
+
+  /**
    * PG 재시도 판정과 새 요청 저장에 쓸 환불의 지급 상태를 읽는다
    * @param refundId 환불 ID
    * @param tx 트랜잭션(잠금 뒤 다시 읽을 때)

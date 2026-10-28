@@ -4,12 +4,18 @@ import { PgPayload, PeriodPaymentData, TimePaymentData } from './payment.types';
 import { PaymentNotFoundError, PaymentAlreadyClosedError } from './errors';
 import { OrderItemRepository } from 'src/order-item/order-item.repository';
 import { addDays } from 'date-fns';
-import { SeatReleaseReason, SeatType, TicketStatus } from '@prisma/client';
+import {
+  PaymentStatus,
+  SeatReleaseReason,
+  SeatType,
+  TicketStatus,
+} from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { SeatHoldExpiredError } from 'src/seat-assignment/errors/seat-hold-expired.error';
 import { SeatAssignmentService } from 'src/seat-assignment/seat-assignment.service';
 import { RefundService } from 'src/refund/refund.service';
 import { TransactionLoggerService } from 'src/logger/transaction-logger.service';
+import { RefundSystemService } from 'src/refund/refund-system.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -30,6 +36,7 @@ export class PaymentService {
     private readonly seatAssignmentService: SeatAssignmentService,
     private readonly refundService: RefundService,
     private readonly transactionLogger: TransactionLoggerService,
+    private readonly refundSystemService: RefundSystemService,
   ) {}
 
   // 조회
@@ -117,12 +124,12 @@ export class PaymentService {
       return;
     }
 
-    // 결재 금액 다름 - 결제 실패 처리와 좌석 선점 해제. 콜백은 수신 확인으로 끝낸다(API 계약 §7)
+    // 결재 금액 다름 - 결제 실패·좌석 선점 해제·승인액 전액 자동 취소 환불을 함께 저장한다. 콜백은 수신 확인으로 끝낸다(API 계약 §7)
     if (payload.amount !== payment.amount) {
-      await this.failPaymentAndReleaseHolds(
+      await this.failMismatchAndStartRefund(
         payment.id,
         payment.order.id,
-        `결재 금액이 일치하지 않습니다: (승인금액:${payload.amount})`,
+        payload.amount,
       );
       return;
     }
@@ -191,6 +198,56 @@ export class PaymentService {
         tx,
       );
     });
+  }
+
+  /**
+   * 승인 금액 불일치 결제를 실패로 바꾸고 PG가 승인한 금액 전액의 자동 취소 환불을 시작한다 (US6, FR-030)
+   * - 결제 실패·실제 승인액 보존·좌석 선점 해제·결제 전체 대상 시스템 환불 확정을 한 트랜잭션으로 저장한다
+   * - 이용권은 발행하지 않는다. PG 취소는 커밋 뒤 보낸다
+   * @param paymentId 결제 ID
+   * @param orderId 주문 ID
+   * @param approvedAmount PG가 승인했다고 알린 금액
+   */
+  private async failMismatchAndStartRefund(
+    paymentId: string,
+    orderId: string,
+    approvedAmount: number,
+  ): Promise<void> {
+    const orderItems = await this.orderItemRepository.getOrderItem(orderId);
+    const now = new Date();
+
+    const pending = await this.prisma.executeTransaction(async (tx) => {
+      // 같은 승인 사건의 동시 콜백은 결제 잠금 뒤 다시 읽은 상태로 한 번만 반영한다
+      const locked = await this.paymentRepository.lockForApproval(
+        paymentId,
+        tx,
+      );
+      if (locked.status !== PaymentStatus.REQUESTED) return undefined;
+
+      // 결제 실패와 실제 승인액(요청액은 그대로)
+      await this.paymentRepository.failApprovalMismatch(
+        paymentId,
+        approvedAmount,
+        `결재 금액이 일치하지 않습니다: (승인금액:${approvedAmount})`,
+        tx,
+      );
+      // 좌석 선점 해제(이미 해제됐으면 그대로 성공, 멱등)
+      await this.seatAssignmentService.releaseByOrderItems(
+        orderItems.map((item) => item.id),
+        SeatReleaseReason.PAYMENT_FAILED,
+        now,
+        tx,
+      );
+      // 승인액 전액의 결제 전체 대상 시스템 환불과 최초 PG 취소 요청
+      return this.refundSystemService.acceptPaymentMismatch(tx, {
+        paymentId,
+        approvedAmount,
+        now,
+      });
+    });
+
+    // PG 취소는 커밋 뒤 보낸다(실패해도 자동 조회·복구가 이어받는다)
+    if (pending) await this.refundSystemService.sendAfterCommit(pending);
   }
 
   /**

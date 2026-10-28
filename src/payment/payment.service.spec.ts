@@ -11,6 +11,7 @@ import { SeatHoldExpiredError } from 'src/seat-assignment/errors/seat-hold-expir
 import { SeatAssignmentService } from 'src/seat-assignment/seat-assignment.service';
 import { TransactionLoggerService } from 'src/logger/transaction-logger.service';
 import { RefundService } from 'src/refund/refund.service';
+import { RefundSystemService } from 'src/refund/refund-system.service';
 import { PaymentRepository } from './payment.repository';
 import { PaymentService } from './payment.service';
 import { PeriodPaymentData, TimePaymentData } from './payment.types';
@@ -24,6 +25,7 @@ describe('PaymentService', () => {
   let seatAssignmentService: jest.Mocked<SeatAssignmentService>;
   let refundService: jest.Mocked<RefundService>;
   let transactionLogger: jest.Mocked<TransactionLoggerService>;
+  let refundSystemService: jest.Mocked<RefundSystemService>;
   /** 트랜잭션 안에서 실행 중인지(커밋 후 호출 검증용) */
   let inTransaction: boolean;
   let service: PaymentService;
@@ -81,6 +83,11 @@ describe('PaymentService', () => {
       approvePayment: jest.fn(),
       createTickets: jest.fn(),
       failedPayment: jest.fn(),
+      failApprovalMismatch: jest.fn(),
+      lockForApproval: jest.fn().mockResolvedValue({
+        status: PaymentStatus.REQUESTED,
+        approvedAmount: null,
+      }),
       createPayment: jest.fn().mockResolvedValue({ id: 'payment-1' }),
       requestedPayment: jest.fn(),
     } as unknown as jest.Mocked<PaymentRepository>;
@@ -111,6 +118,10 @@ describe('PaymentService', () => {
     transactionLogger = {
       logTransaction: jest.fn(),
     } as unknown as jest.Mocked<TransactionLoggerService>;
+    refundSystemService = {
+      acceptPaymentMismatch: jest.fn(),
+      sendAfterCommit: jest.fn(),
+    } as unknown as jest.Mocked<RefundSystemService>;
     service = new PaymentService(
       paymentRepository,
       orderItemRepository,
@@ -118,6 +129,7 @@ describe('PaymentService', () => {
       seatAssignmentService,
       refundService,
       transactionLogger,
+      refundSystemService,
     );
   });
 
@@ -212,6 +224,62 @@ describe('PaymentService', () => {
         expect.any(Date),
         tx,
       );
+    });
+
+    it('승인 금액이 다르면 같은 트랜잭션에서 실제 승인액을 보존하고 승인액 전액의 결제 전체 대상 시스템 환불을 확정하며 커밋 뒤 PG 취소를 보낸다', async () => {
+      /** PG가 실제로 승인했다고 알린 금액(요청액 20000원과 다름) */
+      const approvedAmount = 15000;
+      const pending = {
+        paymentCancelId: 'cancel-1',
+        amount: approvedAmount,
+        claimToken: 'claim-1',
+        sentAt: new Date(),
+      };
+      const steps: [string, boolean][] = [];
+      paymentRepository.failApprovalMismatch.mockImplementation(() => {
+        steps.push(['결제 실패·승인액 저장', inTransaction]);
+        return Promise.resolve();
+      });
+      refundSystemService.acceptPaymentMismatch.mockImplementation(() => {
+        steps.push(['환불 확정', inTransaction]);
+        return Promise.resolve(pending);
+      });
+      refundSystemService.sendAfterCommit.mockImplementation(() => {
+        steps.push(['PG 취소 전송', inTransaction]);
+        return Promise.resolve();
+      });
+
+      await service.callbackPayment({
+        ...successPayload,
+        amount: approvedAmount,
+      });
+
+      expect({
+        failed: paymentRepository.failApprovalMismatch.mock.calls,
+        accepted: refundSystemService.acceptPaymentMismatch.mock.calls,
+        sent: refundSystemService.sendAfterCommit.mock.calls,
+        steps,
+      }).toEqual({
+        failed: [
+          ['payment-1', approvedAmount, expect.any(String) as string, tx],
+        ],
+        accepted: [
+          [
+            tx,
+            {
+              paymentId: 'payment-1',
+              approvedAmount,
+              now: expect.any(Date) as Date,
+            },
+          ],
+        ],
+        sent: [[pending]],
+        steps: [
+          ['결제 실패·승인액 저장', true],
+          ['환불 확정', true],
+          ['PG 취소 전송', false],
+        ],
+      });
     });
 
     it('승인 금액이 다르면 선점을 PAYMENT_FAILED로 해제하고 콜백은 수신 확인으로 끝난다', async () => {
