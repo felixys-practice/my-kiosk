@@ -1,12 +1,13 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { PaymentCancelStatus } from '@prisma/client';
+import { PaymentCancelFailureCode, PaymentCancelStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { REFUND_PG_GATEWAY } from 'src/pg/refund-pg.gateway';
 import type { RefundPgGateway } from 'src/pg/refund-pg.gateway';
 import { PgCancelSendResult } from 'src/pg/pg.types';
 import { RefundRepository } from './refund.repository';
 import { RefundLockingRepository } from './refund-locking.repository';
+import { RefundResultService } from './refund-result.service';
 
 /** PG 취소 요청 전송 결과 요약 */
 export type DispatchOutcome = {
@@ -30,6 +31,7 @@ export class RefundDispatchService {
     private readonly refundRepository: RefundRepository,
     private readonly lockingRepository: RefundLockingRepository,
     private readonly configService: ConfigService,
+    private readonly resultService: RefundResultService,
     @Inject(REFUND_PG_GATEWAY) private readonly pgGateway: RefundPgGateway,
   ) {}
 
@@ -95,7 +97,19 @@ export class RefundDispatchService {
     sentAt: Date,
     result: PgCancelSendResult,
   ): Promise<void> {
-    void result;
+    // 보내기 전에 실패가 확인되면 그 시도를 실패(SEND_FAILED)로 끝내고 조치 필요로 둔다(API 계약 §8)
+    if (result.result === 'NOT_SENT') {
+      await this.resultService.applyPgResult({
+        paymentCancelId,
+        claimToken,
+        outcome: {
+          kind: 'FAILED',
+          reason: result.reason,
+          failureCode: PaymentCancelFailureCode.SEND_FAILED,
+        },
+      });
+      return;
+    }
     // 결과를 아직 모르면 전송 시각부터 결과 대기 시간 뒤 첫 조회를 예약한다
     await this.refundRepository.scheduleInquiryAfterSend(
       paymentCancelId,

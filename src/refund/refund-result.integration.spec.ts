@@ -1025,4 +1025,38 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       claimToken: null,
     });
   });
+
+  it('PG 전송 결과가 NOT_SENT이면 그 시도는 실패(SEND_FAILED), 환불은 조치 필요가 되고 운영자 알림이 저장된다', async () => {
+    const pending = await createPendingRefund();
+    pgGateway.sendCancel.mockResolvedValueOnce({
+      result: 'NOT_SENT',
+      reason: 'PG 연결 설정 누락',
+    });
+
+    await app.get(RefundDispatchService).dispatch(pending.paymentCancelId);
+
+    const refund = await prisma.refund.findUniqueOrThrow({
+      where: { id: pending.refundId },
+      include: { paymentCancels: true, notifications: true },
+    });
+    expect({
+      attempt: refund.paymentCancels[0].status,
+      failureCode: refund.paymentCancels[0].failureCode,
+      nextInquiryAt: refund.paymentCancels[0].nextInquiryAt,
+      payoutStatus: refund.payoutStatus,
+      actionCode: refund.actionCode,
+      operatorNotified: refund.notifications.some(
+        (n) =>
+          n.audience === RefundNotificationAudience.OPERATOR &&
+          n.kind === 'SEND_FAILED',
+      ),
+    }).toEqual({
+      attempt: PaymentCancelStatus.FAILED,
+      failureCode: PaymentCancelFailureCode.SEND_FAILED,
+      nextInquiryAt: null,
+      payoutStatus: RefundPayoutStatus.ACTION_REQUIRED,
+      actionCode: 'SEND_FAILED',
+      operatorNotified: true,
+    });
+  });
 });

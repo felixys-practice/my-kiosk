@@ -34,7 +34,12 @@ import { RefundLockingRepository } from './refund-locking.repository';
 /** PG가 확정한 PG 취소 요청 결과 */
 export type PgCancelOutcome =
   | { kind: 'SUCCEEDED'; pgTransactionId: string; actualAmount: number }
-  | { kind: 'FAILED'; reason: string };
+  | {
+      kind: 'FAILED';
+      reason: string;
+      // 실패 사유 코드(기본 PG 거절). 전송 전 실패는 SEND_FAILED
+      failureCode?: PaymentCancelFailureCode;
+    };
 
 /** 결과를 반영할 수 있는 미확정 PG 취소 요청 상태 */
 const unresolvedAttemptStatuses: readonly PaymentCancelStatus[] = [
@@ -202,10 +207,12 @@ export class RefundResultService {
           }
           return stored;
         }
-        // PG 거절: 그 시도만 실패로 끝내고 환불은 미지급 조치 필요로 둔다(원장 없음, 이용 종료 유지)
+        // 시도 실패(PG 거절·전송 전 실패): 그 시도만 실패로 끝내고 환불은 미지급 조치 필요로 둔다(원장 없음, 이용 종료 유지)
         if (outcome.kind === 'FAILED') {
+          const failureCode =
+            outcome.failureCode ?? PaymentCancelFailureCode.PG_REJECTED;
           await this.refundRepository.markAttemptFailed(tx, attempt.id, {
-            failureCode: PaymentCancelFailureCode.PG_REJECTED,
+            failureCode,
             failureReason: outcome.reason,
             now,
           });
@@ -214,10 +221,10 @@ export class RefundResultService {
             attempt.refund.id,
             {
               payoutStatus: RefundPayoutStatus.ACTION_REQUIRED,
-              actionCode: 'PG_REJECTED',
+              actionCode: failureCode,
             },
           );
-          await this.notifyPayoutAction(tx, attempt, 'PG_REJECTED', actionLogs);
+          await this.notifyPayoutAction(tx, attempt, failureCode, actionLogs);
           return {
             applied: true,
             attemptStatus: PaymentCancelStatus.FAILED,
