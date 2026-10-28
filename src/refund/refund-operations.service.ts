@@ -8,6 +8,7 @@ import {
 import { RefundLockingRepository } from './refund-locking.repository';
 import { RefundRepository } from './refund.repository';
 import { RefundOperationsRepository } from './refund-operations.repository';
+import { RefundLedgerRepository } from 'src/ledger/refund-ledger.repository';
 import {
   evaluateManualReservation,
   ManualReservationRejection,
@@ -35,6 +36,24 @@ export type ManualReservationResponse = {
   amount: number;
 };
 
+/** 별도 환불금 지급 결과 등록 요청 */
+export type ManualConfirmCommand = {
+  amount: number; // 실제 지급액(예약과 같아야 한다)
+  paidAt: Date; // 실제 지급 시각(미래 불가, DTO에서 검증)
+  externalTransactionId: string; // 실제 지급 거래 식별자(전역 고유)
+  evidenceReference?: string; // 지급 증빙 참조(없으면 MANUAL_PAYOUT_EVIDENCE_REQUIRED)
+  idempotencyKey?: string;
+};
+
+/** 별도 환불금 지급 결과 등록 응답 */
+export type ManualConfirmResponse = {
+  refundId: string;
+  payoutId: string;
+  status: 'SUCCEEDED';
+  amount: number;
+  payoutStatus: string; // 등록 뒤 환불의 지급 상태
+};
+
 /**
  * 미지급 환불금의 운영 처리 서비스 (API 계약 §5, MANAGER 전용)
  * - 별도 환불금 지급 예약·지급 결과 등록·미지급 확인·초과 취소 검토
@@ -48,6 +67,7 @@ export class RefundOperationsService {
     private readonly lockingRepository: RefundLockingRepository,
     private readonly refundRepository: RefundRepository,
     private readonly operationsRepository: RefundOperationsRepository,
+    private readonly ledgerRepository: RefundLedgerRepository,
   ) {}
 
   /**
@@ -103,6 +123,89 @@ export class RefundOperationsService {
             payoutId,
             status: 'RESERVED',
             amount: decision.outstandingAmount,
+          },
+        };
+      },
+    );
+  }
+
+  /**
+   * 별도 환불금 지급의 실제 지급 결과를 등록한다
+   * @param actor 요청한 운영자
+   * @param refundId 환불
+   * @param payoutId 예약
+   * @param command 금액·지급 시각·거래 식별자·증빙·멱등 키
+   * @returns 200 등록 응답
+   */
+  async confirmManualPayout(
+    actor: RefundActor,
+    refundId: string,
+    payoutId: string,
+    command: ManualConfirmCommand,
+  ): Promise<IdempotentResult<ManualConfirmResponse>> {
+    const idempotencyKey = await this.assertOperationRequest(
+      actor,
+      refundId,
+      command.idempotencyKey,
+    );
+    return this.idempotencyService.execute<ManualConfirmResponse>(
+      {
+        requesterId: actor.userId,
+        operation: 'MANUAL_PAYOUT_CONFIRM',
+        key: idempotencyKey,
+        request: {
+          refundId,
+          payoutId,
+          amount: command.amount,
+          paidAt: command.paidAt.toISOString(),
+          externalTransactionId: command.externalTransactionId,
+          evidenceReference: command.evidenceReference ?? null,
+        },
+        authorize: () => Promise.resolve(),
+      },
+      async (tx) => {
+        const now = new Date();
+        await this.lockPayoutTarget(tx, refundId);
+        const payout = (await this.operationsRepository.findPayout(
+          tx,
+          refundId,
+          payoutId,
+        ))!;
+        // 예약 성공 확정·지급 합계·원장을 같은 트랜잭션에서 저장한다
+        await this.operationsRepository.markPayoutSucceeded(tx, payoutId, {
+          confirmedById: actor.userId,
+          now,
+          paidAt: command.paidAt,
+          externalTransactionId: command.externalTransactionId,
+          evidenceReference: command.evidenceReference!,
+        });
+        const refund = await this.operationsRepository.findRefundForPayout(
+          tx,
+          refundId,
+        );
+        await this.ledgerRepository.recordPayout(tx, {
+          shopId: refund.shopId,
+          orderId: refund.orderId,
+          refundId,
+          paidAmount: payout.amount,
+          manualRefundPayoutId: payoutId,
+        });
+        const paidAmount = refund.paidAmount + payout.amount;
+        const settled = paidAmount === refund.amount;
+        await this.operationsRepository.applyManualPaid(tx, refundId, {
+          paidAmount,
+          settled,
+          now,
+        });
+        return {
+          status: 200,
+          refundId,
+          body: {
+            refundId,
+            payoutId,
+            status: 'SUCCEEDED',
+            amount: payout.amount,
+            payoutStatus: settled ? 'PAID' : 'ACTION_REQUIRED',
           },
         };
       },

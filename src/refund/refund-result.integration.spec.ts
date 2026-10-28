@@ -206,8 +206,9 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
     const byOrder = { orderId: { in: orderIds } };
     const byRefund = { refund: { payment: byOrder } };
     await prisma.refundNotification.deleteMany({ where: byRefund });
-    await prisma.manualRefundPayout.deleteMany({ where: byRefund });
+    // 원장이 별도 환불금 지급을 가리키므로 원장을 먼저 지운다
     await prisma.ledger.deleteMany({ where: { orderId: { in: orderIds } } });
+    await prisma.manualRefundPayout.deleteMany({ where: byRefund });
     await prisma.paymentCancel.deleteMany({ where: { payment: byOrder } });
     await prisma.refundIdempotencyRecord.deleteMany({
       where: { requesterId: { in: [customerId, managerId] } },
@@ -2765,6 +2766,90 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
           RefundPayoutMethod.MANUAL,
           0,
         ],
+      });
+    });
+
+    /**
+     * PG 거절로 실패한 환불에 별도 지급을 예약한다
+     * @returns 환불·예약 ID
+     */
+    async function reservedPayout() {
+      const failed = await createFailedRefund(
+        PaymentCancelFailureCode.PG_REJECTED,
+      );
+      const reserved = await app
+        .get(RefundOperationsService)
+        .reserveManualPayout(manager(), failed.refundId, {
+          amount: refundAmount,
+          reason: reserveReason,
+          idempotencyKey: `reserve-${randomUUID()}`,
+        });
+      return { ...failed, payoutId: reserved.body.payoutId };
+    }
+
+    /**
+     * 예약한 별도 지급의 실제 지급 결과를 등록한다
+     * @param target 환불·예약
+     * @param overrides 바꿀 입력
+     * @returns 응답
+     */
+    function confirm(
+      target: { refundId: string; payoutId: string },
+      overrides: Partial<{
+        amount: number;
+        externalTransactionId: string;
+        evidenceReference: string | undefined;
+        idempotencyKey: string;
+      }> = {},
+    ) {
+      return app
+        .get(RefundOperationsService)
+        .confirmManualPayout(manager(), target.refundId, target.payoutId, {
+          amount: refundAmount,
+          paidAt: new Date(Date.now() - 60_000),
+          externalTransactionId: `bank-${randomUUID()}`,
+          evidenceReference: '이체 확인증 2026-10-29',
+          idempotencyKey: `confirm-${randomUUID()}`,
+          ...overrides,
+        });
+    }
+
+    it('지급 결과 등록은 예약과 같은 금액·거래 ID·증빙이 있으면 지급 성공·지급액 합산·원장을 함께 저장하고 환불을 지급 완료로 바꾼다', async () => {
+      const reserved = await reservedPayout();
+      const externalTransactionId = `bank-${randomUUID()}`;
+
+      const response = await confirm(reserved, { externalTransactionId });
+
+      const payout = await prisma.manualRefundPayout.findUniqueOrThrow({
+        where: { id: reserved.payoutId },
+      });
+      const refund = await prisma.refund.findUniqueOrThrow({
+        where: { id: reserved.refundId },
+      });
+      const ledgers = await prisma.ledger.findMany({
+        where: { refundId: reserved.refundId },
+      });
+      expect({
+        status: response.status,
+        payout: [
+          payout.status,
+          payout.externalTransactionId,
+          payout.confirmedById,
+        ],
+        refund: [refund.paidAmount, refund.payoutStatus],
+        ledgers: ledgers.map((ledger) => [
+          ledger.amount,
+          ledger.manualRefundPayoutId,
+        ]),
+      }).toEqual({
+        status: 200,
+        payout: [
+          ManualRefundPayoutStatus.SUCCEEDED,
+          externalTransactionId,
+          managerId,
+        ],
+        refund: [refundAmount, RefundPayoutStatus.PAID],
+        ledgers: [[-refundAmount, reserved.payoutId]],
       });
     });
   });
