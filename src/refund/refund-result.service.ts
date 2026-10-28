@@ -40,13 +40,14 @@ export type RefundCallbackInput = {
  * 확정된 PG 취소 요청과 새로 온 결과가 모순되는지 판단한다
  * @param attempt 이미 확정된 PG 취소 요청
  * @param outcome 새로 온 결과
- * @returns 결과 종류 또는 성공 실제액이 다르면 true
+ * @returns 결과 종류, 성공 실제액 또는 PG 취소 거래 ID가 다르면 true
  */
 function contradicts(attempt: AttemptForResult, outcome: PgCancelOutcome) {
   if (attempt.status !== outcome.kind) return true;
   return (
     outcome.kind === 'SUCCEEDED' &&
-    attempt.actualAmount !== outcome.actualAmount
+    (attempt.actualAmount !== outcome.actualAmount ||
+      attempt.pgTransactionId !== outcome.pgTransactionId)
   );
 }
 

@@ -546,4 +546,27 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       conflictNotifications: 1,
     });
   });
+
+  it('이미 성공으로 확정된 PG 취소 요청에 거래 ID가 다른 성공 통보가 오면 모순·운영자 알림을 남긴다', async () => {
+    const pending = await createPendingRefund();
+    await succeed(pending.paymentCancelId, refundAmount);
+
+    await succeed(pending.paymentCancelId, refundAmount);
+
+    const refund = await prisma.refund.findUniqueOrThrow({
+      where: { id: pending.refundId },
+      include: { ledgers: true, notifications: true },
+    });
+    expect({
+      ledgers: refund.ledgers.length,
+      actionCode: refund.actionCode,
+      conflictNotifications: refund.notifications.filter(
+        (n) => n.kind === 'PG_RESULT_CONFLICT',
+      ).length,
+    }).toEqual({
+      ledgers: 1,
+      actionCode: 'PG_RESULT_CONFLICT',
+      conflictNotifications: 1,
+    });
+  });
 });
