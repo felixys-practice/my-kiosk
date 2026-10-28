@@ -15,6 +15,7 @@ import { evaluateStoreRefund } from './refund-policy';
 import {
   RefundForbiddenError,
   RefundTerminationConsentRequiredError,
+  TicketNotFoundError,
 } from './errors';
 
 /** 점주 매장 환불 요청 */
@@ -80,12 +81,17 @@ export class RefundStoreService {
           command.ticketId,
           tx,
         );
+        // 요청 매장의 주문이 아닌 이용권은 다른 매장에 있더라도 드러내지 않고 찾을 수 없음으로 본다
+        const inShop = target !== null && target.shopId === shopId;
         const decision = evaluateStoreRefund(
-          target?.candidate ?? null,
+          inShop ? target.candidate : null,
           { amount: command.amount, reason: command.reason },
           now,
         );
         if (!decision.eligible) {
+          if (decision.code === 'TICKET_NOT_FOUND') {
+            throw new TicketNotFoundError();
+          }
           throw new Error(decision.code);
         }
 

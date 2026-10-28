@@ -15,6 +15,7 @@ import { AppModule } from 'src/app.module';
 import { REFUND_PG_GATEWAY } from 'src/pg/refund-pg.gateway';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { RefundStoreService } from './refund-store.service';
+import { TicketNotFoundError } from './errors';
 
 /**
  * 매장 환불 확정의 저장 결과를 실제 PostgreSQL에서 확인한다 (US2, tasks T051~T056)
@@ -32,6 +33,7 @@ describe('매장 환불 확정 저장 (실제 DB)', () => {
   let customerId: string;
   let ownerId: string;
   let shopId: string;
+  let otherShopId: string;
   let productId: string;
   const orderIds: string[] = [];
 
@@ -40,16 +42,17 @@ describe('매장 환불 확정 저장 (실제 DB)', () => {
 
   /**
    * 결제를 마치고 사용 이력이 있는(활성화된) 정기권을 만든다
+   * @param orderShopId 주문 매장(기본: 주 매장)
    * @returns 이용권과 주문 항목·결제 ID
    */
-  async function createUsedPeriodTicket(): Promise<{
+  async function createUsedPeriodTicket(orderShopId = shopId): Promise<{
     ticketId: string;
     orderItemId: string;
     paymentId: string;
   }> {
     const order = await prisma.order.create({
       data: {
-        shopId,
+        shopId: orderShopId,
         userId: customerId,
         originalAmount: paidAmount,
         discountAmount: 0,
@@ -126,6 +129,10 @@ describe('매장 환불 확정 저장 (실제 DB)', () => {
       data: { name: `매장환불검증매장-${suffix}` },
     });
     shopId = shop.id;
+    const otherShop = await prisma.shop.create({
+      data: { name: `매장환불검증다른매장-${suffix}` },
+    });
+    otherShopId = otherShop.id;
     await prisma.shopOwner.create({ data: { shopId, userId: ownerId } });
     const product = await prisma.product.create({
       data: {
@@ -162,7 +169,9 @@ describe('매장 환불 확정 저장 (실제 DB)', () => {
     await prisma.seat.deleteMany({ where: { shopId } });
     await prisma.product.deleteMany({ where: { id: productId } });
     await prisma.shopOwner.deleteMany({ where: { shopId } });
-    await prisma.shop.deleteMany({ where: { id: shopId } });
+    await prisma.shop.deleteMany({
+      where: { id: { in: [shopId, otherShopId] } },
+    });
     await prisma.user.deleteMany({
       where: { id: { in: [customerId, ownerId] } },
     });
@@ -210,5 +219,30 @@ describe('매장 환불 확정 저장 (실제 DB)', () => {
       terminationConsentedAt: true,
       ticketStatus: TicketStatus.REVOKED,
     });
+  });
+
+  it('다른 매장 이용권을 자기 매장 환불로 요청하면 TICKET_NOT_FOUND로 거절되고 아무것도 저장하지 않는다', async () => {
+    const issued = await createUsedPeriodTicket(otherShopId);
+
+    await expect(
+      service.acceptStoreRefund(
+        { userId: ownerId, role: UserRole.OWNER },
+        shopId,
+        {
+          ticketId: issued.ticketId,
+          amount: 7000,
+          reason: '보상',
+          consentToTerminateTicket: true,
+        },
+      ),
+    ).rejects.toBeInstanceOf(TicketNotFoundError);
+    const ticket = await prisma.ticket.findUniqueOrThrow({
+      where: { id: issued.ticketId },
+      include: { orderItem: { include: { refunds: true } } },
+    });
+    expect({
+      status: ticket.status,
+      refunds: ticket.orderItem.refunds.length,
+    }).toEqual({ status: TicketStatus.ACTIVE, refunds: 0 });
   });
 });
