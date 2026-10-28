@@ -1083,4 +1083,29 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       payoutStatus: RefundPayoutStatus.ACTION_REQUIRED,
     });
   });
+
+  it('PG 전송 결과가 즉시 SUCCEEDED이면 공통 결과 처리로 지급 완료와 실제액 원장을 반영한다', async () => {
+    const pending = await createPendingRefund();
+    pgGateway.sendCancel.mockResolvedValueOnce({
+      result: 'SUCCEEDED',
+      pgTransactionId: `pg-cancel-${randomUUID()}`,
+      cancelledAmount: refundAmount,
+    });
+
+    await app.get(RefundDispatchService).dispatch(pending.paymentCancelId);
+
+    const refund = await prisma.refund.findUniqueOrThrow({
+      where: { id: pending.refundId },
+      include: { paymentCancels: true, ledgers: true },
+    });
+    expect({
+      attempt: refund.paymentCancels[0].status,
+      payoutStatus: refund.payoutStatus,
+      ledgers: refund.ledgers.map((l) => l.amount),
+    }).toEqual({
+      attempt: PaymentCancelStatus.SUCCEEDED,
+      payoutStatus: RefundPayoutStatus.PAID,
+      ledgers: [-refundAmount],
+    });
+  });
 });

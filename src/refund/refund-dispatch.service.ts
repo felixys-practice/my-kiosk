@@ -119,6 +119,19 @@ export class RefundDispatchService {
       });
       return;
     }
+    // PG가 즉시 취소를 확정하면 공통 결과 처리로 실제액·원장을 반영한다
+    if (result.result === 'SUCCEEDED') {
+      await this.resultService.applyPgResult({
+        paymentCancelId,
+        claimToken,
+        outcome: {
+          kind: 'SUCCEEDED',
+          pgTransactionId: result.pgTransactionId,
+          actualAmount: result.cancelledAmount,
+        },
+      });
+      return;
+    }
     // 결과를 아직 모르면 전송 시각부터 결과 대기 시간 뒤 첫 조회를 예약한다
     await this.refundRepository.scheduleInquiryAfterSend(
       paymentCancelId,
