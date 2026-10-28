@@ -1,12 +1,13 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { PaymentCancelStatus } from '@prisma/client';
+import { PaymentCancelFailureCode, PaymentCancelStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { REFUND_PG_GATEWAY } from 'src/pg/refund-pg.gateway';
 import type { RefundPgGateway } from 'src/pg/refund-pg.gateway';
 import { AttemptForResult, RefundRepository } from './refund.repository';
 import { RefundLockingRepository } from './refund-locking.repository';
 import { RefundDispatchService } from './refund-dispatch.service';
+import { RefundResultService } from './refund-result.service';
 
 /** 자동 조회 대상인 미확정 시도 상태 */
 const inquirableStatuses: readonly PaymentCancelStatus[] = [
@@ -24,6 +25,7 @@ export class RefundRecoveryService {
     private readonly refundRepository: RefundRepository,
     private readonly lockingRepository: RefundLockingRepository,
     private readonly dispatchService: RefundDispatchService,
+    private readonly resultService: RefundResultService,
     private readonly configService: ConfigService,
     @Inject(REFUND_PG_GATEWAY) private readonly pgGateway: RefundPgGateway,
   ) {}
@@ -46,18 +48,28 @@ export class RefundRecoveryService {
     // 2. PG 조회는 트랜잭션 밖에서 한다
     const result = await this.pgGateway.inquireCancel({ paymentCancelId });
 
-    // 3. PG가 미접수를 확실히 확인했고 자동 재전송 한도가 남았으면 같은 ID·금액으로 다시 보낸다
-    if (
-      result.result === 'NOT_FOUND' &&
-      attempt.resendCount < this.config('resendLimit')
-    ) {
-      await this.dispatchService.resendClaimed(
+    // 3. PG가 미접수를 확실히 확인했으면 자동 한도 안에서 같은 ID·금액으로 다시 보내고,
+    //    한도를 모두 썼으면 그 시도를 실패(RETRY_EXHAUSTED)로 끝내 운영자 재처리로 넘긴다
+    if (result.result === 'NOT_FOUND') {
+      if (attempt.resendCount < this.config('resendLimit')) {
+        await this.dispatchService.resendClaimed(
+          paymentCancelId,
+          attempt.amount,
+          claimToken,
+          now,
+          'resendCount',
+        );
+        return;
+      }
+      await this.resultService.applyPgResult({
         paymentCancelId,
-        attempt.amount,
         claimToken,
-        now,
-        'resendCount',
-      );
+        outcome: {
+          kind: 'FAILED',
+          reason: '자동 재전송 한도를 소진한 뒤 PG 미접수 확인',
+          failureCode: PaymentCancelFailureCode.RETRY_EXHAUSTED,
+        },
+      });
     }
   }
 

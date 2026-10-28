@@ -1166,4 +1166,44 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       status: PaymentCancelStatus.REQUESTED,
     });
   });
+
+  it('자동 재전송 횟수가 한도와 같고 PG가 미접수를 확인하면 시도 실패(RETRY_EXHAUSTED)·조치 필요·운영자 알림을 함께 기록한다', async () => {
+    const awaiting = await createAwaitingInquiry(3);
+    pgGateway.inquireCancel.mockResolvedValueOnce({
+      result: 'NOT_FOUND',
+      authoritative: true,
+    });
+
+    await app
+      .get(RefundRecoveryService)
+      .inquireAttempt(awaiting.paymentCancelId, awaiting.dueAt);
+
+    const refund = await prisma.refund.findUniqueOrThrow({
+      where: { id: awaiting.refundId },
+      include: { paymentCancels: true, notifications: true },
+    });
+    expect({
+      sent: pgGateway.sendCancel.mock.calls.length,
+      attempt: refund.paymentCancels[0].status,
+      failureCode: refund.paymentCancels[0].failureCode,
+      nextInquiryAt: refund.paymentCancels[0].nextInquiryAt,
+      claimToken: refund.paymentCancels[0].claimToken,
+      payoutStatus: refund.payoutStatus,
+      actionCode: refund.actionCode,
+      operatorNotified: refund.notifications.some(
+        (n) =>
+          n.audience === RefundNotificationAudience.OPERATOR &&
+          n.kind === 'RETRY_EXHAUSTED',
+      ),
+    }).toEqual({
+      sent: 0,
+      attempt: PaymentCancelStatus.FAILED,
+      failureCode: PaymentCancelFailureCode.RETRY_EXHAUSTED,
+      nextInquiryAt: null,
+      claimToken: null,
+      payoutStatus: RefundPayoutStatus.ACTION_REQUIRED,
+      actionCode: 'RETRY_EXHAUSTED',
+      operatorNotified: true,
+    });
+  });
 });
