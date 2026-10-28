@@ -68,11 +68,20 @@ export class RefundResultService {
         paymentCancelId: attempt.id,
       });
       const paidAmount = attempt.refund.paidAmount + outcome.actualAmount;
-      await this.refundRepository.updateRefundPayout(tx, attempt.refund.id, {
-        paidAmount,
-        payoutStatus: RefundPayoutStatus.PAID,
-        paidAt: now,
-      });
+      // 확정된 환불 금액과 같으면 지급 완료, 다르면 금액은 그대로 두고 조치·검토 필요(API 계약 §6)
+      const settled = paidAmount === attempt.refund.amount;
+      await this.refundRepository.updateRefundPayout(
+        tx,
+        attempt.refund.id,
+        settled
+          ? { paidAmount, payoutStatus: RefundPayoutStatus.PAID, paidAt: now }
+          : {
+              paidAmount,
+              payoutStatus: RefundPayoutStatus.ACTION_REQUIRED,
+              reviewRequired: true,
+              actionCode: 'AMOUNT_MISMATCH',
+            },
+      );
     });
   }
 }
