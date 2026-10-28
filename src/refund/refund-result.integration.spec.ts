@@ -1255,4 +1255,66 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       claimToken: null,
     });
   });
+
+  /**
+   * 연속 조회 오류가 쌓인 상태에서 결과를 받아 조회한다
+   * @param failures 지금까지의 연속 조회 오류 횟수
+   * @param result 이번 조회 결과
+   * @returns 조회 뒤 PG 취소 요청과 조회 시각
+   */
+  async function inquireAfterFailures(
+    failures: number,
+    result:
+      { result: 'QUERY_ERROR'; reason: string } | { result: 'IN_PROGRESS' },
+  ) {
+    const awaiting = await createAwaitingInquiry();
+    await prisma.paymentCancel.update({
+      where: { id: awaiting.paymentCancelId },
+      data: { inquiryFailureCount: failures },
+    });
+    pgGateway.inquireCancel.mockResolvedValueOnce(result);
+    await app
+      .get(RefundRecoveryService)
+      .inquireAttempt(awaiting.paymentCancelId, awaiting.dueAt);
+    const attempt = await prisma.paymentCancel.findUniqueOrThrow({
+      where: { id: awaiting.paymentCancelId },
+    });
+    return { ...awaiting, attempt };
+  }
+
+  /** 조회 오류 응답 */
+  const queryError = { result: 'QUERY_ERROR' as const, reason: '조회 실패' };
+
+  it('첫 조회 오류 뒤 다음 조회 간격은 15초다', async () => {
+    const { attempt, dueAt } = await inquireAfterFailures(0, queryError);
+
+    expect(attempt.nextInquiryAt?.getTime()).toBe(dueAt.getTime() + 15_000);
+  });
+
+  it('계산한 간격이 상한(300초)을 넘으면 상한 간격으로 다시 조회한다', async () => {
+    // 연속 오류 6회째: 15 × 2^5 = 480초 > 300초
+    const { attempt, dueAt } = await inquireAfterFailures(5, queryError);
+
+    expect(attempt.nextInquiryAt?.getTime()).toBe(dueAt.getTime() + 300_000);
+  });
+
+  it('연속 조회 오류 4회에서는 결과 확인 중(REQUESTED)이 유지된다', async () => {
+    const { attempt } = await inquireAfterFailures(3, queryError);
+
+    expect({
+      status: attempt.status,
+      failures: attempt.inquiryFailureCount,
+    }).toEqual({ status: PaymentCancelStatus.REQUESTED, failures: 4 });
+  });
+
+  it('PG가 처리 중이라고 응답하면 연속 조회 오류 횟수를 0으로 되돌린다', async () => {
+    const { attempt } = await inquireAfterFailures(3, {
+      result: 'IN_PROGRESS',
+    });
+
+    expect({
+      failures: attempt.inquiryFailureCount,
+      lastInquiryError: attempt.lastInquiryError,
+    }).toEqual({ failures: 0, lastInquiryError: null });
+  });
 });
