@@ -262,4 +262,24 @@ describe('환불 확정 저장 (실제 DB)', () => {
     });
     expect(closed.closedAt).toBeInstanceOf(Date);
   });
+
+  it('환불 확정 뒤 정기권의 기한·만료 시각이 바뀌지 않는다', async () => {
+    const issued = await createUnusedPeriodTicket();
+    const before = await prisma.ticket.findUniqueOrThrow({
+      where: { id: issued.ticketId },
+    });
+
+    await accept(issued.ticketId);
+
+    const after = await prisma.ticket.findUniqueOrThrow({
+      where: { id: issued.ticketId },
+    });
+    expect({
+      activationDeadline: after.activationDeadline,
+      expiresAt: after.expiresAt,
+    }).toEqual({
+      activationDeadline: before.activationDeadline,
+      expiresAt: before.expiresAt,
+    });
+  });
 });
