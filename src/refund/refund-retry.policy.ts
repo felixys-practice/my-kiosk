@@ -21,10 +21,10 @@ export type PayoutRetryRejection =
   | 'REFUND_PAYOUT_UNRESOLVED'
   | 'REFUND_PARTIAL_PAYOUT_REQUIRES_MANUAL';
 
-/** 결과가 아직 확정되지 않은 PG 취소 요청 상태 */
-const unresolvedStatuses: readonly PaymentCancelStatus[] = [
-  PaymentCancelStatus.REQUESTED,
-  PaymentCancelStatus.QUERY_FAILED,
+/** 결과가 확정된 PG 취소 요청 상태(그 밖의 상태는 모두 미확정으로 본다) */
+const finalStatuses: readonly PaymentCancelStatus[] = [
+  PaymentCancelStatus.SUCCEEDED,
+  PaymentCancelStatus.FAILED,
 ];
 
 /** PG 재시도 판정 결과 */
@@ -51,9 +51,7 @@ export function evaluatePayoutRetry(
   // 결과가 확정되지 않은 PG 취소 요청이나 활성 별도 지급 예약이 있으면 새 요청을 만들지 않는다
   if (
     state.activeManualPayout ||
-    state.attempts.some((attempt) =>
-      unresolvedStatuses.includes(attempt.status),
-    )
+    state.attempts.some((attempt) => !finalStatuses.includes(attempt.status))
   ) {
     return { allowed: false, code: 'REFUND_PAYOUT_UNRESOLVED' };
   }
@@ -70,8 +68,11 @@ export function evaluatePayoutRetry(
   if (state.paidAmount > 0 && state.paidAmount < state.amount) {
     return { allowed: false, code: 'REFUND_PARTIAL_PAYOUT_REQUIRES_MANUAL' };
   }
-  // 확정 금액 이상 지급된 건은 초과 취소 검토 대상이지 PG 재시도 대상이 아니다
-  if (state.paidAmount >= state.amount) {
+  // 확정 금액 이상 지급된 건은 초과 취소 검토 대상이고, 조치 필요가 아닌 환불은 재처리할 것이 없다
+  if (
+    state.paidAmount >= state.amount ||
+    state.payoutStatus !== RefundPayoutStatus.ACTION_REQUIRED
+  ) {
     return { allowed: false, code: 'REFUND_PAYOUT_NOT_ACTIONABLE' };
   }
   return { allowed: true };

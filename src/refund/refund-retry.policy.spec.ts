@@ -132,4 +132,30 @@ describe('evaluatePayoutRetry', () => {
   it('조치 필요이고 결과가 모두 확정됐으며 지급액이 0원이면 허용한다', () => {
     expect(evaluatePayoutRetry(stateWith(), now)).toEqual({ allowed: true });
   });
+
+  it('조치 필요가 아닌 환불(지급 처리 중이지만 시도는 모두 확정)은 REFUND_PAYOUT_NOT_ACTIONABLE로 거절한다', () => {
+    expect(
+      evaluatePayoutRetry(
+        stateWith({
+          payoutStatus: RefundPayoutStatus.PENDING,
+          actionCode: null,
+        }),
+        now,
+      ),
+    ).toEqual({ allowed: false, code: 'REFUND_PAYOUT_NOT_ACTIONABLE' });
+  });
+
+  it('최종 결과가 아닌 과거 승인 대기(PENDING_APPROVAL) 시도가 있으면 REFUND_PAYOUT_UNRESOLVED로 거절한다', () => {
+    const state = stateWith({
+      attempts: [
+        { status: PaymentCancelStatus.PENDING_APPROVAL, claimUntil: null },
+        { status: PaymentCancelStatus.FAILED, claimUntil: null },
+      ],
+    });
+
+    expect(evaluatePayoutRetry(state, now)).toEqual({
+      allowed: false,
+      code: 'REFUND_PAYOUT_UNRESOLVED',
+    });
+  });
 });
