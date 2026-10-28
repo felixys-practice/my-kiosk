@@ -13,9 +13,9 @@ import {
 import { randomUUID } from 'crypto';
 import { SeatHoldExpiredError } from 'src/seat-assignment/errors/seat-hold-expired.error';
 import { SeatAssignmentService } from 'src/seat-assignment/seat-assignment.service';
-import { RefundService } from 'src/refund/refund.service';
 import { TransactionLoggerService } from 'src/logger/transaction-logger.service';
 import { RefundSystemService } from 'src/refund/refund-system.service';
+import type { PendingSend } from 'src/refund/refund-acceptance.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -34,7 +34,6 @@ export class PaymentService {
     private readonly orderItemRepository: OrderItemRepository,
     private readonly prisma: PrismaService,
     private readonly seatAssignmentService: SeatAssignmentService,
-    private readonly refundService: RefundService,
     private readonly transactionLogger: TransactionLoggerService,
     private readonly refundSystemService: RefundSystemService,
   ) {}
@@ -137,6 +136,7 @@ export class PaymentService {
       await this.failMismatchAndStartRefund(
         payment.id,
         payment.order.id,
+        payment.order.userId,
         payload.amount,
       );
       return;
@@ -214,11 +214,13 @@ export class PaymentService {
    * - 이용권은 발행하지 않는다. PG 취소는 커밋 뒤 보낸다
    * @param paymentId 결제 ID
    * @param orderId 주문 ID
+   * @param userId 주문자 ID(거래 로그용)
    * @param approvedAmount PG가 승인했다고 알린 금액
    */
   private async failMismatchAndStartRefund(
     paymentId: string,
     orderId: string,
+    userId: string,
     approvedAmount: number,
   ): Promise<void> {
     const orderItems = await this.orderItemRepository.getOrderItem(orderId);
@@ -254,8 +256,38 @@ export class PaymentService {
       });
     });
 
-    // PG 취소는 커밋 뒤 보낸다(실패해도 자동 조회·복구가 이어받는다)
-    if (pending) await this.refundSystemService.sendAfterCommit(pending);
+    // PG 취소는 커밋 뒤 보낸다
+    if (pending) {
+      await this.sendSystemRefund(pending, { paymentId, orderId, userId });
+    }
+  }
+
+  /**
+   * 커밋된 시스템 자동 취소 환불의 최초 PG 취소 요청을 보낸다
+   * - 결제 처리는 이미 확정됐으므로 전송 오류가 나도 콜백은 성공으로 끝내고 거래 로그로 남긴다.
+   *   저장한 전송 기록·담당 기한으로 자동 조회가 이어받는다
+   * @param pending 보낼 PG 취소 요청
+   * @param context 거래 로그에 남길 결제·주문·사용자
+   */
+  private async sendSystemRefund(
+    pending: PendingSend,
+    context: { paymentId: string; orderId: string; userId: string },
+  ): Promise<void> {
+    try {
+      await this.refundSystemService.sendAfterCommit(pending);
+    } catch (error) {
+      this.transactionLogger.logTransaction({
+        transactionId: context.paymentId,
+        type: 'REFUND',
+        userId: context.userId,
+        orderId: context.orderId,
+        status: 'SYSTEM_REFUND_REQUEST_FAILED',
+        metadata: {
+          paymentCancelId: pending.paymentCancelId,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
+    }
   }
 
   /**
@@ -307,58 +339,41 @@ export class PaymentService {
         }
       });
 
-    // 결제 승인·이용권 생성·고정석 배정 확정을 한 트랜잭션으로 처리한다
-    const unassignedTicketIds = await this.prisma.executeTransaction(
-      async (tx) => {
-        await this.paymentRepository.approvePayment(paymentId, now, tx);
-        await this.paymentRepository.createTickets(
-          paymentId,
-          newTicketsData,
+    // 결제 승인·이용권 생성·고정석 배정 확정과, 좌석을 줄 수 없는 이용권의 자동 취소 환불 확정을 한 트랜잭션으로 처리한다
+    const pendingRefunds = await this.prisma.executeTransaction(async (tx) => {
+      await this.paymentRepository.approvePayment(paymentId, now, tx);
+      await this.paymentRepository.createTickets(paymentId, newTicketsData, tx);
+
+      // 고정석 주문 항목의 선점을 발급한 이용권에 확정한다
+      const pendings: PendingSend[] = [];
+      for (const orderItem of orderItems) {
+        if (orderItem.seatType !== SeatType.FIXED) continue;
+        const ticket = newTicketsData.find(
+          (data) => data.orderItemId === orderItem.id,
+        )!;
+        const activated = await this.seatAssignmentService.activateByOrderItem(
+          orderItem.id,
+          ticket.id,
+          now,
           tx,
         );
-
-        // 고정석 주문 항목의 선점을 발급한 이용권에 확정한다
-        const failedTicketIds: string[] = [];
-        for (const orderItem of orderItems) {
-          if (orderItem.seatType !== SeatType.FIXED) continue;
-          const ticket = newTicketsData.find(
-            (data) => data.orderItemId === orderItem.id,
-          )!;
-          const activated =
-            await this.seatAssignmentService.activateByOrderItem(
-              orderItem.id,
-              ticket.id,
-              now,
-              tx,
-            );
-          // 좌석이 다른 이용권에 넘어가 확정하지 못한 이용권
-          if (!activated) failedTicketIds.push(ticket.id);
-        }
-        return failedTicketIds;
-      },
-    );
-
-    // 커밋 후 좌석을 줄 수 없는 이용권을 자동 환불한다(research R12-A)
-    // 자동 취소 요청이 실패해도 결제 승인은 이미 확정됐으므로 콜백은 성공으로 처리하고 거래 로그로 남긴다
-    for (const ticketId of unassignedTicketIds) {
-      try {
-        await this.refundService.refundBySystem(
-          ticketId,
-          '좌석 선점 만료로 좌석 배정 불가 - 자동 결제 취소',
-        );
-      } catch (error) {
-        this.transactionLogger.logTransaction({
-          transactionId: paymentId,
-          type: 'REFUND',
-          userId,
-          orderId,
-          status: 'SYSTEM_REFUND_REQUEST_FAILED',
-          metadata: {
-            ticketId,
-            error: error instanceof Error ? error.message : String(error),
-          },
-        });
+        if (activated) continue;
+        // 좌석이 다른 이용권에 넘어가 확정하지 못한 이용권은 상품 대상 시스템 환불로 확정한다(API 계약 §7)
+        const pending =
+          await this.refundSystemService.acceptSeatAssignmentFailure(tx, {
+            paymentId,
+            orderItemId: orderItem.id,
+            ticketId: ticket.id,
+            now,
+          });
+        if (pending) pendings.push(pending);
       }
+      return pendings;
+    });
+
+    // PG 취소는 커밋 뒤 보낸다
+    for (const pending of pendingRefunds) {
+      await this.sendSystemRefund(pending, { paymentId, orderId, userId });
     }
   }
 }

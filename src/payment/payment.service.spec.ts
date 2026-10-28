@@ -10,7 +10,6 @@ import { PrismaService, TransactionClient } from 'src/prisma/prisma.service';
 import { SeatHoldExpiredError } from 'src/seat-assignment/errors/seat-hold-expired.error';
 import { SeatAssignmentService } from 'src/seat-assignment/seat-assignment.service';
 import { TransactionLoggerService } from 'src/logger/transaction-logger.service';
-import { RefundService } from 'src/refund/refund.service';
 import { RefundSystemService } from 'src/refund/refund-system.service';
 import { PaymentRepository } from './payment.repository';
 import { PaymentService } from './payment.service';
@@ -23,7 +22,6 @@ describe('PaymentService', () => {
   let orderItemRepository: jest.Mocked<OrderItemRepository>;
   let prisma: jest.Mocked<PrismaService>;
   let seatAssignmentService: jest.Mocked<SeatAssignmentService>;
-  let refundService: jest.Mocked<RefundService>;
   let transactionLogger: jest.Mocked<TransactionLoggerService>;
   let refundSystemService: jest.Mocked<RefundSystemService>;
   /** 트랜잭션 안에서 실행 중인지(커밋 후 호출 검증용) */
@@ -112,14 +110,12 @@ describe('PaymentService', () => {
       releaseByOrderItems: jest.fn(),
       releaseEndedHolds: jest.fn().mockResolvedValue([]),
     } as unknown as jest.Mocked<SeatAssignmentService>;
-    refundService = {
-      refundBySystem: jest.fn(),
-    } as unknown as jest.Mocked<RefundService>;
     transactionLogger = {
       logTransaction: jest.fn(),
     } as unknown as jest.Mocked<TransactionLoggerService>;
     refundSystemService = {
       acceptPaymentMismatch: jest.fn(),
+      acceptSeatAssignmentFailure: jest.fn(),
       sendAfterCommit: jest.fn(),
     } as unknown as jest.Mocked<RefundSystemService>;
     service = new PaymentService(
@@ -127,7 +123,6 @@ describe('PaymentService', () => {
       orderItemRepository,
       prisma,
       seatAssignmentService,
-      refundService,
       transactionLogger,
       refundSystemService,
     );
@@ -163,7 +158,7 @@ describe('PaymentService', () => {
       ]);
     });
 
-    it('좌석을 확정하지 못한 이용권은 커밋 후 시스템 자동 취소를 요청한다', async () => {
+    it('좌석을 확정하지 못한 이용권은 승인과 같은 트랜잭션에서 상품 대상 시스템 환불로 확정하고 커밋 뒤 PG 취소를 보낸다', async () => {
       const secondFixed = { ...fixedItem, id: 'item-fixed-2' };
       orderItemRepository.getOrderItem.mockResolvedValue([
         fixedItem,
@@ -173,25 +168,59 @@ describe('PaymentService', () => {
       seatAssignmentService.activateByOrderItem.mockImplementation(
         (orderItemId) => Promise.resolve(orderItemId !== 'item-fixed'),
       );
-      const calledInTransaction: boolean[] = [];
-      refundService.refundBySystem.mockImplementation(() => {
-        calledInTransaction.push(inTransaction);
+      const pending = {
+        paymentCancelId: 'cancel-1',
+        amount: 10000,
+        claimToken: 'claim-1',
+        sentAt: new Date(),
+      };
+      const steps: [string, boolean][] = [];
+      refundSystemService.acceptSeatAssignmentFailure.mockImplementation(() => {
+        steps.push(['환불 확정', inTransaction]);
+        return Promise.resolve(pending);
+      });
+      refundSystemService.sendAfterCommit.mockImplementation(() => {
+        steps.push(['PG 취소 전송', inTransaction]);
         return Promise.resolve();
       });
 
       await service.callbackPayment(successPayload);
 
-      expect(refundService.refundBySystem).toHaveBeenCalledTimes(1);
-      expect(refundService.refundBySystem).toHaveBeenCalledWith(
-        createdTicketId('item-fixed'),
-        '좌석 선점 만료로 좌석 배정 불가 - 자동 결제 취소',
-      );
-      expect(calledInTransaction).toEqual([false]);
+      expect({
+        accepted: refundSystemService.acceptSeatAssignmentFailure.mock.calls,
+        sent: refundSystemService.sendAfterCommit.mock.calls,
+        steps,
+      }).toEqual({
+        accepted: [
+          [
+            tx,
+            {
+              paymentId: 'payment-1',
+              orderItemId: 'item-fixed',
+              ticketId: createdTicketId('item-fixed'),
+              now: expect.any(Date) as Date,
+            },
+          ],
+        ],
+        sent: [[pending]],
+        steps: [
+          ['환불 확정', true],
+          ['PG 취소 전송', false],
+        ],
+      });
     });
 
-    it('자동 취소 요청이 예외를 던져도 콜백은 성공하고 거래 로그를 남긴다', async () => {
+    it('좌석 배정 실패 환불의 PG 전송이 커밋 뒤 예외를 던져도 콜백은 성공하고 거래 로그를 남긴다', async () => {
       seatAssignmentService.activateByOrderItem.mockResolvedValue(false);
-      refundService.refundBySystem.mockRejectedValue(new Error('PG 장애'));
+      refundSystemService.acceptSeatAssignmentFailure.mockResolvedValue({
+        paymentCancelId: 'cancel-1',
+        amount: 10000,
+        claimToken: 'claim-1',
+        sentAt: new Date(),
+      });
+      refundSystemService.sendAfterCommit.mockRejectedValue(
+        new Error('PG 장애'),
+      );
 
       await expect(
         service.callbackPayment(successPayload),

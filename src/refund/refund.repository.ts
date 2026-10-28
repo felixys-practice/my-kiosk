@@ -81,7 +81,7 @@ export type AcceptedRefundInput = {
   shopId: string;
   source: RefundSource;
   amount: number;
-  requestedById: string;
+  requestedById: string | null; // 실행자, 시스템 자동 취소(SYSTEM)는 null
   now: Date; // 신청·확정·종료·동의 시각
   reason?: string;
   exitConsentedAt?: Date;
@@ -270,7 +270,9 @@ export class RefundRepository {
         acceptedAt: input.now,
         terminatedAt: input.now,
         requestedById: input.requestedById,
-        terminationConsentedAt: input.now,
+        // 이용 종료 동의는 고객·점주 요청에만 있다(시스템 자동 취소는 동의 없이 종료)
+        terminationConsentedAt:
+          input.source === RefundSource.SYSTEM ? null : input.now,
         exitConsentedAt: input.exitConsentedAt,
         reason: input.reason,
         endedSessionId: input.endedSessionId,

@@ -744,7 +744,7 @@ describe('좌석 타입 (E2E)', () => {
       expect(body.data.assignedSeat).toBeNull();
     });
 
-    it('승인 전에 좌석을 다른 이용자가 확정하면 이용권 발급 후 자동 환불되고 환불 콜백 후 이용권이 소멸된다 (QS-31)', async () => {
+    it('승인 전에 좌석을 다른 이용자가 확정하면 이용권은 승인과 함께 이용 종료되고 상품 대상 자동 취소 환불로 지급을 시작한다 (QS-31)', async () => {
       const productId = await createProduct(SeatType.FIXED, TicketType.TIME);
       const seatId = await createSeat(SeatType.FIXED);
       const other: Buyer = { userId: otherUser.id, token: otherUserToken };
@@ -766,7 +766,7 @@ describe('좌석 타입 (E2E)', () => {
       ).expect(201);
       await payOrder(otherOrder.data.id as string, true, other);
 
-      // 첫 결제의 승인 콜백 - 이용권은 발급되지만 좌석을 줄 수 없어 자동 환불 요청
+      // 첫 결제의 승인 콜백 - 좌석을 줄 수 없는 이용권은 승인과 같은 트랜잭션에서 이용 종료·자동 취소 환불 확정(환불 명세 API 계약 §7)
       await sendPaymentCallback(firstPaymentId, true);
       const firstTicketId = await findTicketIdByOrder(
         firstOrder.data.id as string,
@@ -775,28 +775,29 @@ describe('좌석 타입 (E2E)', () => {
         where: { id: firstTicketId },
         include: { orderItem: true },
       });
-      const cancel = await prisma.paymentCancel.findFirst({
+      const refund = await prisma.refund.findFirstOrThrow({
         where: { orderItemId: firstTicket.orderItemId },
+        include: { paymentCancels: true },
       });
-      expect(cancel).not.toBeNull();
-      expect(cancel!.reason).toContain('자동 결제 취소');
-
-      // PG 환불 성공 콜백 후 이용권 소멸
-      await request(server)
-        .post('/refund/callback')
-        .set('Authorization', `Bearer ${userToken}`)
-        .send({
-          success: true,
-          pgTransactionId: `refund-${cancel!.id}`,
-          orderItemId: firstTicket.orderItemId,
-          paymentCancelId: cancel!.id,
-          amount: cancel!.amount,
-        })
-        .expect(200);
-      const revoked = await prisma.ticket.findUniqueOrThrow({
-        where: { id: firstTicketId },
+      expect({
+        ticket: firstTicket.status,
+        refund: [
+          refund.targetKind,
+          refund.source,
+          refund.decisionStatus,
+          refund.amount,
+        ],
+        attempts: refund.paymentCancels.length,
+      }).toEqual({
+        ticket: TicketStatus.REVOKED,
+        refund: [
+          'ORDER_ITEM',
+          'SYSTEM',
+          'ACCEPTED',
+          firstTicket.orderItem.amount,
+        ],
+        attempts: 1,
       });
-      expect(revoked.status).toBe(TicketStatus.REVOKED);
     });
 
     it('결제 실패 후 같은 좌석으로 새 주문이 성공한다 (QS-9)', async () => {
