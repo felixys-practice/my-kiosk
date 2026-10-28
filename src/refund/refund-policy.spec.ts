@@ -143,6 +143,21 @@ describe('evaluateCustomerRefund', () => {
       );
     }
 
+    it('신청 시각이 시간권 소진 기한보다 1ms 늦으면 EXPIRED_TICKET으로 판정된다', () => {
+      const ticket = timeTicket(purchasedMinutes);
+
+      const decision = evaluateCustomerRefund(
+        ticket,
+        customerId,
+        new Date(ticket.ticket.minuteExpireDeadline!.getTime() + 1),
+      );
+
+      expect(decision).toMatchObject({
+        eligible: false,
+        code: 'EXPIRED_TICKET',
+      });
+    });
+
     it('남은 시간이 구매 시간과 같은 시간권은 미사용으로 판정되어 환불 가능하다', () => {
       const decision = evaluateCustomerRefund(
         timeTicket(purchasedMinutes),

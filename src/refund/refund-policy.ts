@@ -108,11 +108,17 @@ function isUnused(ticket: CustomerRefundCandidate['ticket']): boolean {
 /**
  * 미사용 환불 기한을 고른다
  * - 정기권: 활성화 기한(activationDeadline)
+ * - 시간권: 소진 기한(minuteExpireDeadline)
  * @param ticket 이용권
  * @returns 기한, 없으면 null
  */
 function unusedDeadlineOf(
   ticket: CustomerRefundCandidate['ticket'],
 ): Date | null {
-  return ticket.activationDeadline;
+  switch (ticket.type) {
+    case TicketType.PERIOD:
+      return ticket.activationDeadline;
+    case TicketType.TIME:
+      return ticket.minuteExpireDeadline;
+  }
 }
