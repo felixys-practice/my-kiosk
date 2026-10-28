@@ -75,7 +75,12 @@ export function evaluateCustomerRefund(
   if (candidate.ticket.inUse || !isUnused(candidate.ticket)) {
     return { eligible: false, code: 'USED_TICKET' };
   }
-  void now;
+
+  // 6. 미사용 기한: 신청 시각이 기한보다 늦어야 초과(기한과 같은 시각은 허용)
+  const deadline = unusedDeadlineOf(candidate.ticket);
+  if (deadline !== null && now.getTime() > deadline.getTime()) {
+    return { eligible: false, code: 'EXPIRED_TICKET' };
+  }
   return { eligible: true, amount: 0 };
 }
 
@@ -98,4 +103,16 @@ function isUnused(ticket: CustomerRefundCandidate['ticket']): boolean {
         ticket.remainingMinutes === ticket.purchasedMinutes
       );
   }
+}
+
+/**
+ * 미사용 환불 기한을 고른다
+ * - 정기권: 활성화 기한(activationDeadline)
+ * @param ticket 이용권
+ * @returns 기한, 없으면 null
+ */
+function unusedDeadlineOf(
+  ticket: CustomerRefundCandidate['ticket'],
+): Date | null {
+  return ticket.activationDeadline;
 }
