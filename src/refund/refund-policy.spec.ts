@@ -337,4 +337,16 @@ describe('evaluateStoreRefund', () => {
       reason: '이용 불편 보상 없음 처리',
     });
   });
+  it('매장 환불 금액이 실결제액보다 1원 많으면 REFUND_AMOUNT_EXCEEDED로 거절된다', () => {
+    const decision = evaluateStoreRefund(
+      usedCandidate(),
+      { amount: paidAmount + 1, reason: '보상' },
+      now,
+    );
+
+    expect(decision).toEqual({
+      eligible: false,
+      code: 'REFUND_AMOUNT_EXCEEDED',
+    });
+  });
 });

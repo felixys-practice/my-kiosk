@@ -155,7 +155,10 @@ export function evaluateStoreRefund(
   input: StoreRefundInput,
   now: Date,
 ): StoreRefundDecision {
-  void candidate;
   void now;
+  // 금액 상한: 실결제액을 넘을 수 없다
+  if (candidate && input.amount > candidate.paidAmount) {
+    return { eligible: false, code: 'REFUND_AMOUNT_EXCEEDED' };
+  }
   return { eligible: true, amount: input.amount, reason: input.reason ?? null };
 }
