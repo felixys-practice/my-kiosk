@@ -14,6 +14,7 @@ import { CustomerRefundTarget, RefundRepository } from './refund.repository';
 import { RefundLockingRepository } from './refund-locking.repository';
 import { RefundIdempotencyService } from './refund-idempotency.service';
 import {
+  RefundForbiddenError,
   RefundNotEligibleError,
   RefundTerminationConsentRequiredError,
   TicketNotFoundError,
@@ -267,4 +268,18 @@ describe('RefundAcceptanceService', () => {
     });
     expect(result.body.terminatedAt).toEqual(expect.any(String));
   });
+
+  it.each([UserRole.OWNER, UserRole.MANAGER])(
+    '고객 환불 신청을 %s 역할이 하면 아무것도 저장하지 않고 REFUND_FORBIDDEN으로 거절된다',
+    async (role) => {
+      await expect(
+        service.acceptCustomerRefund(
+          { userId: customer.userId, role },
+          { ticketId, consentToTerminateTicket: true },
+        ),
+      ).rejects.toBeInstanceOf(RefundForbiddenError);
+      expect(repository.createAcceptedRefund).not.toHaveBeenCalled();
+      expect(pgGateway.sendCancel).not.toHaveBeenCalled();
+    },
+  );
 });

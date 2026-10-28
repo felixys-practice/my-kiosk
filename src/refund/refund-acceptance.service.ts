@@ -4,6 +4,7 @@ import {
   RefundPayoutStatus,
   RefundSource,
   SeatReleaseReason,
+  UserRole,
 } from '@prisma/client';
 import { REFUND_PG_GATEWAY } from 'src/pg/refund-pg.gateway';
 import type { RefundPgGateway } from 'src/pg/refund-pg.gateway';
@@ -21,6 +22,7 @@ import {
   evaluateCustomerRefund,
 } from './refund-policy';
 import {
+  RefundForbiddenError,
   RefundNotEligibleError,
   RefundTerminationConsentRequiredError,
   TicketNotFoundError,
@@ -70,6 +72,9 @@ export class RefundAcceptanceService {
     actor: RefundActor,
     command: CustomerRefundCommand,
   ): Promise<IdempotentResult<RefundAcceptance>> {
+    // 고객 환불은 USER만 신청한다(API 계약 §2). 저장된 응답을 재생할 때도 같은 확인을 거친다
+    assertCustomerRole(actor);
+
     // 이번 요청이 실제로 확정한 PG 취소 요청(저장된 응답을 재생한 경우는 없음)
     let accepted: { paymentCancelId: string; amount: number } | undefined;
     const result = await this.idempotencyService.execute(
@@ -194,4 +199,13 @@ function rejectionError(
       ? { violations: decision.violations, action: decision.action }
       : undefined,
   );
+}
+
+/**
+ * 고객 환불을 신청할 수 있는 역할인지 확인한다
+ * @param actor 신청한 사용자
+ * @throws RefundForbiddenError USER가 아닐 때(403)
+ */
+function assertCustomerRole(actor: RefundActor): void {
+  if (actor.role !== UserRole.USER) throw new RefundForbiddenError();
 }

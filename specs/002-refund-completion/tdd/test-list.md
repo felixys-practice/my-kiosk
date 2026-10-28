@@ -214,6 +214,11 @@ suite_baseline: green
 | U304 | (실제 DB) 담당 토큰이 다른 완료·정리는 기록을 바꾸거나 지우지 못하고, 처리 트랜잭션이 잡은 기록의 이어받기는 그 트랜잭션이 끝날 때까지 기다린 뒤 실패한다 (Phase 2 재검수 P1) | FR-041 | example | DONE | `src/refund/refund-idempotency.repository.integration.spec.ts` |
 | U305 | 고객 환불 판정 거절은 계약 코드의 도메인 오류로 거절되고(TICKET_NOT_FOUND 404, PAYMENT_NOT_COMPLETED·ALREADY_REFUNDED·REFUND_IN_PROGRESS·USED_TICKET·EXPIRED_TICKET 409) 아무것도 저장하지 않는다 | FR-001, FR-005 | example | DONE | `src/refund/refund-acceptance.service.spec.ts` |
 | U306 | 도메인 오류에 details가 있으면 응답 error.details로 그대로 나간다(USED_TICKET의 violations·action 안내) | FR-005 | example | DONE | `src/common/filters/http-exception.filter.spec.ts` |
+| U307 | 고객 환불 신청을 USER가 아닌 역할(OWNER·MANAGER)이 하면 아무것도 저장하지 않고 REFUND_FORBIDDEN(403)으로 거절된다 (Phase 3 검수 1) | FR-001 | example | PENDING | |
+| U308 | 같은 멱등 키 재응답도 현재 역할이 USER가 아니면 REFUND_FORBIDDEN으로 거절된다 (Phase 3 검수 1) | FR-041 | example | PENDING | |
+| U309 | 실결제액 0원 고객 환불은 PG 취소 요청 없이 이용 종료·Refund PAID·0원 원장을 함께 저장하고 PG를 호출하지 않는다 (Phase 3 검수 2) | FR-016a | example | PENDING | |
+| U310 | 0원 고객 환불 응답은 200과 지급 완료(PAID)다 (Phase 3 검수 2) | FR-016a | example | PENDING | |
+| U311 | 환불로 닫힌 정지 기록(closedAt)은 이용권·주문 조회에서 진행 중 정지로 보이지 않는다 (Phase 3 검수 3) | FR-042 | example | PENDING | |
 
 ### `src/refund/refund-idempotency.service.ts`
 
