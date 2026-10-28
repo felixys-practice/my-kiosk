@@ -86,7 +86,33 @@ export class RefundRecoveryService {
           lastInquiryError: null,
         },
       );
+      return;
     }
+
+    // 5. 조회 오류이면 결과를 단정하지 않고 지수 백오프 간격 뒤 다시 조회한다
+    if (result.result === 'QUERY_ERROR') {
+      const failures = attempt.inquiryFailureCount + 1;
+      await this.refundRepository.scheduleNextInquiry(
+        paymentCancelId,
+        claimToken,
+        {
+          nextInquiryAt: new Date(now.getTime() + this.backoffMs(failures)),
+          inquiryFailureCount: failures,
+          lastInquiryError: result.reason,
+        },
+      );
+    }
+  }
+
+  /**
+   * 연속 조회 오류 횟수에 따른 다음 조회 간격(min(base × 2^(n-1), cap))
+   * @param failures 연속 조회 오류 횟수(1부터)
+   * @returns 밀리초
+   */
+  private backoffMs(failures: number): number {
+    const base = this.config('queryBackoffSeconds');
+    const cap = this.config('queryBackoffMaxSeconds');
+    return Math.min(base * 2 ** (failures - 1), cap) * 1000;
   }
 
   /**
@@ -135,7 +161,12 @@ export class RefundRecoveryService {
    * @returns 설정 값
    */
   private config(
-    key: 'resendLimit' | 'workLeaseSeconds' | 'queryIntervalSeconds',
+    key:
+      | 'resendLimit'
+      | 'workLeaseSeconds'
+      | 'queryIntervalSeconds'
+      | 'queryBackoffSeconds'
+      | 'queryBackoffMaxSeconds',
   ): number {
     return this.configService.get<number>(`refund.${key}`)!;
   }
