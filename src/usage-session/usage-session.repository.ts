@@ -7,6 +7,7 @@ import {
   SeatType,
 } from '@prisma/client';
 import { PrismaService, TransactionClient } from 'src/prisma/prisma.service';
+import { TicketTerminatedError } from 'src/ticket/errors/ticket-terminated.error';
 import { SeatAlreadyOccupiedError } from './errors/seat-already-occupied.error';
 import { JobRegistrationFailedError } from './errors/job-registration-failed.error';
 import { SessionLifecycleService } from 'src/session-lifecycle/session-lifecycle.service';
@@ -43,7 +44,15 @@ export class UsageSessionRepository {
     beforeCreate?: (tx: TransactionClient) => Promise<void>, // 같은 트랜잭션에서 세션 생성 전에 실행할 확인(서비스가 판단)
   ): Promise<string> {
     return await this.prisma.executeTransaction(async (tx) => {
-      // Step 0. 호출 측 확인(예: 고정석 배정 재확인)
+      // Step 0. 이용권을 먼저 잠그고(공유 잠금 순서 Ticket → … → SeatAssignment) 환불 종료 여부를 다시 확인한다(API 계약 §6)
+      const [locked] = await tx.$queryRaw<{ status: TicketStatus }[]>`
+        SELECT status FROM tickets WHERE id = ${ticketId} FOR UPDATE
+      `;
+      if (locked?.status === TicketStatus.REVOKED) {
+        throw new TicketTerminatedError();
+      }
+
+      // Step 0-1. 호출 측 확인(예: 고정석 배정 재확인)
       if (beforeCreate) await beforeCreate(tx);
 
       // Step 1. 좌석 이용 가능 유무 확인 (AVAILABLE 상태이고 ACTIVE 세션 없음)

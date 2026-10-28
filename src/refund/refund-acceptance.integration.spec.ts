@@ -24,6 +24,7 @@ import { REFUND_PG_GATEWAY } from 'src/pg/refund-pg.gateway';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { RefundAcceptanceService } from './refund-acceptance.service';
 import { RefundRepository } from './refund.repository';
+import { UsageSessionRepository } from 'src/usage-session/usage-session.repository';
 
 /**
  * 환불 확정의 저장 결과를 실제 PostgreSQL에서 확인한다 (US1, tasks T032·T034)
@@ -167,6 +168,7 @@ describe('환불 확정 저장 (실제 DB)', () => {
     await prisma.ticketPause.deleteMany({
       where: { ticket: { userId: customerId } },
     });
+    await prisma.usageSession.deleteMany({ where: { userId: customerId } });
     await prisma.ticket.deleteMany({ where: { userId: customerId } });
     await prisma.payment.deleteMany({ where: byOrder });
     await prisma.orderItem.deleteMany({ where: byOrder });
@@ -420,5 +422,62 @@ describe('환불 확정 저장 (실제 DB)', () => {
     });
     expect(ticket.status).toBe(TicketStatus.REVOKED);
     expect(pgGateway.sendCancel).not.toHaveBeenCalled();
+  });
+
+  it('입실이 먼저 이용권 잠금을 얻으면 뒤이은 고객 환불은 사용 이력을 보고 USED_TICKET으로 거절된다', async () => {
+    const issued = await createUnusedPeriodTicket();
+    const seat = await prisma.seat.create({
+      data: { number: nextSeatNumber++, shopId, type: SeatType.FREE },
+    });
+    let releaseEntry!: () => void;
+    const entryHolding = new Promise<void>((resolve) => {
+      releaseEntry = resolve;
+    });
+    let entryLocked!: () => void;
+    const entryLockedSignal = new Promise<void>((resolve) => {
+      entryLocked = resolve;
+    });
+
+    // 입실: 세션 생성 전 확인 단계에서 잠시 멈춰 환불이 끼어들 틈을 만든다
+    const now = new Date();
+    const entry = app.get(UsageSessionRepository).createSession(
+      issued.ticketId,
+      shopId,
+      seat.id,
+      customerId,
+      new Date(now.getTime() + 30 * 86_400_000),
+      now,
+      {
+        activatedAt: now,
+        expiresAt: new Date(now.getTime() + 30 * 86_400_000),
+      },
+      async () => {
+        entryLocked();
+        await entryHolding;
+      },
+    );
+    await entryLockedSignal;
+    // 환불: 입실 트랜잭션이 끝나기 전에 시작한다
+    const refund = accept(issued.ticketId);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    releaseEntry();
+
+    const [entryResult, refundResult] = await Promise.allSettled([
+      entry,
+      refund,
+    ]);
+
+    expect({
+      entry: entryResult.status,
+      refund: refundResult.status,
+      refundCode:
+        refundResult.status === 'rejected'
+          ? (refundResult.reason as { code?: string }).code
+          : undefined,
+    }).toEqual({
+      entry: 'fulfilled',
+      refund: 'rejected',
+      refundCode: 'USED_TICKET',
+    });
   });
 });
