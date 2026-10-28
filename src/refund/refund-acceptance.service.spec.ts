@@ -247,4 +247,24 @@ describe('RefundAcceptanceService', () => {
     ).rejects.toThrow('커밋 실패');
     expect(pgGateway.sendCancel).not.toHaveBeenCalled();
   });
+
+  it('양수 금액 접수 응답은 202와 환불 식별자·이용 종료 완료·지급 처리 중 상태를 담는다', async () => {
+    const result = await service.acceptCustomerRefund(customer, {
+      ticketId,
+      consentToTerminateTicket: true,
+    });
+
+    expect(result).toMatchObject({
+      status: 202,
+      body: {
+        refundId: 'refund-1',
+        decisionStatus: 'ACCEPTED',
+        ticketId,
+        amount: 10000,
+        payoutStatus: 'PENDING',
+        paymentCancelId: 'pc-1',
+      },
+    });
+    expect(result.body.terminatedAt).toEqual(expect.any(String));
+  });
 });
