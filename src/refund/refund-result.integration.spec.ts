@@ -21,6 +21,7 @@ import { randomUUID } from 'crypto';
 import { AppModule } from 'src/app.module';
 import { REFUND_PG_GATEWAY } from 'src/pg/refund-pg.gateway';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { RefundRepository } from './refund.repository';
 import { RefundResultService } from './refund-result.service';
 
 /**
@@ -422,6 +423,36 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       },
       attemptStatus: PaymentCancelStatus.REQUESTED,
       paidAmount: 0,
+      ledgers: 0,
+    });
+  });
+
+  it('결과 저장 중 중단되면 지급 완료·원장·시도 성공 어느 것도 저장되지 않는다', async () => {
+    const pending = await createPendingRefund();
+    // 마지막 단계(환불 지급 상태 갱신)에서 저장이 중단된 상황
+    const repository = app.get(RefundRepository);
+    const interrupted = jest
+      .spyOn(repository, 'updateRefundPayout')
+      .mockRejectedValueOnce(new Error('저장 중단'));
+
+    await expect(
+      succeed(pending.paymentCancelId, refundAmount),
+    ).rejects.toThrow('저장 중단');
+    interrupted.mockRestore();
+
+    const refund = await prisma.refund.findUniqueOrThrow({
+      where: { id: pending.refundId },
+      include: { paymentCancels: true, ledgers: true },
+    });
+    expect({
+      payoutStatus: refund.payoutStatus,
+      paidAmount: refund.paidAmount,
+      attemptStatus: refund.paymentCancels[0].status,
+      ledgers: refund.ledgers.length,
+    }).toEqual({
+      payoutStatus: RefundPayoutStatus.PENDING,
+      paidAmount: 0,
+      attemptStatus: PaymentCancelStatus.REQUESTED,
       ledgers: 0,
     });
   });
