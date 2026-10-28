@@ -1353,4 +1353,22 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       calledAt60: [[{ paymentCancelId: awaiting.paymentCancelId }]],
     });
   });
+
+  it('실패로 확정된 PG 취소 요청은 예정 시각이 남아 있어도 정기 탐색에서 조회·재전송하지 않는다', async () => {
+    // 정기 탐색은 기준 시각 이전의 모든 예정 건을 고르므로, 앞 테스트가 남긴 데이터보다 이른 시각을 쓴다
+    const sentAt = new Date('1998-01-01T00:00:00Z');
+    const awaiting = await createAwaitingInquiry(0, sentAt);
+    // 실패 확정 뒤에도 예정 시각이 남아 있는 비정상 데이터라도 제외해야 한다
+    await prisma.paymentCancel.update({
+      where: { id: awaiting.paymentCancelId },
+      data: { status: PaymentCancelStatus.FAILED },
+    });
+
+    await app.get(RefundRecoveryService).sweep(awaiting.dueAt);
+
+    expect({
+      inquiries: pgGateway.inquireCancel.mock.calls.length,
+      sends: pgGateway.sendCancel.mock.calls.length,
+    }).toEqual({ inquiries: 0, sends: 0 });
+  });
 });
