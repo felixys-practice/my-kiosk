@@ -172,6 +172,24 @@ export class RefundIdempotencyRepository {
   }
 
   /**
+   * 완료된 멱등 기록의 저장 응답을 바꾼다(커밋 뒤 PG 전송 결과를 최초 응답에 반영)
+   * @param scope 요청자·기능·키
+   * @param response 새 응답
+   */
+  async replaceCompletedResponse(
+    scope: IdempotencyScope,
+    response: { status: number; body: unknown },
+  ): Promise<void> {
+    await this.prisma.refundIdempotencyRecord.updateMany({
+      where: { ...scope, status: RefundIdempotencyStatus.COMPLETED },
+      data: {
+        responseStatus: response.status,
+        responseBody: response.body as Prisma.InputJsonValue,
+      },
+    });
+  }
+
+  /**
    * 처리하지 못한 요청의 기록을 지운다(거절된 요청이 같은 키의 이후 요청을 막지 않게 한다)
    * @param id 기록 ID
    * @param claimToken 이 요청의 담당 토큰

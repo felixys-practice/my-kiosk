@@ -1,6 +1,10 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { PaymentCancelFailureCode, PaymentCancelStatus } from '@prisma/client';
+import {
+  PaymentCancelFailureCode,
+  PaymentCancelStatus,
+  RefundPayoutStatus,
+} from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { REFUND_PG_GATEWAY } from 'src/pg/refund-pg.gateway';
 import type { RefundPgGateway } from 'src/pg/refund-pg.gateway';
@@ -80,12 +84,42 @@ export class RefundDispatchService {
     });
 
     // 3. 전송 결과를 반영한다
-    await this.applySendResult(paymentCancelId, claimToken, now, result);
+    await this.recordSendResult(paymentCancelId, claimToken, now, result);
     return { sent: true };
   }
 
   /**
+   * 커밋 뒤 바로 보낼 PG 취소 요청의 담당을 만든다(확정 트랜잭션이 전송 직전 기록과 함께 저장한다)
+   * @param now 전송 시도 시각
+   * @returns 담당 토큰과 처리 기한
+   */
+  newSendClaim(now: Date): { claimToken: string; claimUntil: Date } {
+    return {
+      claimToken: randomUUID(),
+      claimUntil: new Date(now.getTime() + this.seconds('workLease')),
+    };
+  }
+
+  /**
    * 전송 결과를 반영한다
+   * @param paymentCancelId PG 취소 요청
+   * @param claimToken 전송을 맡은 담당 토큰
+   * @param sentAt 전송 시도 시각
+   * @param result PG 전송 결과
+   * @returns 반영 뒤 환불의 지급 상태와 조치 사유 코드
+   */
+  async recordSendResult(
+    paymentCancelId: string,
+    claimToken: string,
+    sentAt: Date,
+    result: PgCancelSendResult,
+  ): Promise<{ payoutStatus: RefundPayoutStatus; actionCode: string | null }> {
+    await this.applySendResult(paymentCancelId, claimToken, sentAt, result);
+    return this.refundRepository.findPayoutStateByAttempt(paymentCancelId);
+  }
+
+  /**
+   * 전송 결과 종류별로 시도·환불 상태를 바꾼다
    * @param paymentCancelId PG 취소 요청
    * @param claimToken 전송을 맡은 담당 토큰
    * @param sentAt 전송 시도 시각

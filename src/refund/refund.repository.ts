@@ -80,6 +80,8 @@ export type AcceptedRefundInput = {
   reason?: string;
   exitConsentedAt?: Date;
   endedSessionId?: string;
+  // 커밋 뒤 바로 보낼 최초 PG 취소 요청의 담당(전송 직전 기록을 확정과 함께 저장, API 계약 §8)
+  sendClaim?: { claimToken: string; claimUntil: Date };
 };
 
 @Injectable()
@@ -259,6 +261,12 @@ export class RefundRepository {
                 amount: input.amount,
                 status: PaymentCancelStatus.REQUESTED,
                 requestedAt: input.now,
+                ...(input.sendClaim && {
+                  sendAttemptCount: 1,
+                  lastSendAttemptAt: input.now,
+                  claimToken: input.sendClaim.claimToken,
+                  claimUntil: input.sendClaim.claimUntil,
+                }),
               },
             },
       },
@@ -420,6 +428,21 @@ export class RefundRepository {
       where: { id, claimToken },
       data: { nextInquiryAt, claimToken: null, claimUntil: null },
     });
+  }
+
+  /**
+   * PG 취소 요청이 속한 환불의 현재 지급 상태를 읽는다
+   * @param paymentCancelId PG 취소 요청 ID
+   * @returns 지급 상태와 조치 사유 코드
+   */
+  async findPayoutStateByAttempt(
+    paymentCancelId: string,
+  ): Promise<{ payoutStatus: RefundPayoutStatus; actionCode: string | null }> {
+    const attempt = await this.prisma.paymentCancel.findUniqueOrThrow({
+      where: { id: paymentCancelId },
+      select: { refund: { select: { payoutStatus: true, actionCode: true } } },
+    });
+    return attempt.refund!;
   }
 
   /**

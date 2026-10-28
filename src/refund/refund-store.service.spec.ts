@@ -28,7 +28,6 @@ describe('RefundStoreService', () => {
       {} as RefundIdempotencyService,
       {} as SessionLifecycleService,
       {} as SessionEndJobQueue,
-      { sendCancel: jest.fn(), inquireCancel: jest.fn() },
     );
   });
 

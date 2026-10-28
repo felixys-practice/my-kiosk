@@ -13,6 +13,7 @@ import { RefundAcceptanceService } from './refund-acceptance.service';
 import { CustomerRefundTarget, RefundRepository } from './refund.repository';
 import { RefundLockingRepository } from './refund-locking.repository';
 import { RefundIdempotencyService } from './refund-idempotency.service';
+import { RefundDispatchService } from './refund-dispatch.service';
 import {
   RefundForbiddenError,
   RefundNotEligibleError,
@@ -40,6 +41,17 @@ describe('RefundAcceptanceService', () => {
   >;
   let pgGateway: jest.Mocked<RefundPgGateway>;
   let service: RefundAcceptanceService;
+  /** 전송 결과 반영 대역(전송 결과를 저장하고 지급 처리 중 상태를 돌려준다) */
+  const dispatchService = {
+    newSendClaim: () => ({
+      claimToken: 'claim-1',
+      claimUntil: new Date('2026-10-28T12:00:30Z'),
+    }),
+    recordSendResult: jest.fn().mockResolvedValue({
+      payoutStatus: RefundPayoutStatus.PENDING,
+      actionCode: null,
+    }),
+  } as unknown as RefundDispatchService;
   /** 커밋·PG 호출 순서 기록 */
   let events: string[];
 
@@ -115,6 +127,7 @@ describe('RefundAcceptanceService', () => {
       seatAssignment as unknown as SeatAssignmentService,
       idempotency,
       pgGateway,
+      dispatchService,
     );
   });
 
@@ -240,6 +253,7 @@ describe('RefundAcceptanceService', () => {
       seatAssignment as unknown as SeatAssignmentService,
       commitFailure,
       pgGateway,
+      dispatchService,
     );
 
     await expect(
@@ -299,6 +313,7 @@ describe('RefundAcceptanceService', () => {
       seatAssignment as unknown as SeatAssignmentService,
       replaying,
       pgGateway,
+      dispatchService,
     );
 
     await expect(

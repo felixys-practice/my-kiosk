@@ -21,6 +21,7 @@ import {
   RefundIdempotencyService,
 } from './refund-idempotency.service';
 import { RefundActor } from './refund-access.service';
+import { RefundDispatchService } from './refund-dispatch.service';
 import {
   CustomerRefundDecision,
   evaluateCustomerRefund,
@@ -39,6 +40,14 @@ export type CustomerRefundCommand = {
   idempotencyKey?: string;
 };
 
+/** 커밋 뒤 보낼 최초 PG 취소 요청과 그 전송 담당 */
+export type PendingSend = {
+  paymentCancelId: string;
+  amount: number;
+  claimToken: string; // 확정 트랜잭션이 저장한 전송 담당 토큰
+  sentAt: Date; // 확정 트랜잭션이 저장한 전송 시도 시각
+};
+
 /** 환불 접수 응답 본문 (API 계약 §3 일부) */
 export type RefundAcceptance = {
   refundId: string;
@@ -47,6 +56,7 @@ export type RefundAcceptance = {
   amount: number;
   payoutStatus: string;
   paymentCancelId: string | null; // 현재 PG 취소 요청, 0원 환불이면 null
+  actionCode?: string | null; // 미지급 조치 사유(전송 전 실패·PG 거절 등), 없으면 null
   acceptedAt: string;
   terminatedAt: string;
 };
@@ -64,6 +74,7 @@ export class RefundAcceptanceService {
     private readonly seatAssignmentService: SeatAssignmentService,
     private readonly idempotencyService: RefundIdempotencyService,
     @Inject(REFUND_PG_GATEWAY) private readonly pgGateway: RefundPgGateway,
+    private readonly dispatchService: RefundDispatchService,
   ) {}
 
   /**
@@ -80,7 +91,7 @@ export class RefundAcceptanceService {
     assertCustomerRole(actor);
 
     // 이번 요청이 실제로 확정한 PG 취소 요청(저장된 응답을 재생한 경우는 없음)
-    let accepted: { paymentCancelId: string; amount: number } | undefined;
+    let accepted: PendingSend | undefined;
     const result = await this.idempotencyService.execute(
       {
         requesterId: actor.userId,
@@ -129,11 +140,51 @@ export class RefundAcceptanceService {
       },
     );
 
-    // PG 전송은 커밋 뒤에만 한다. 전송 결과 저장은 PG 처리 흐름(US5)에서 한다
-    if (accepted) {
-      await this.pgGateway.sendCancel(accepted);
+    // PG 전송은 커밋 뒤에만 하고, 전송 결과를 응답과 멱등 기록에 반영한다
+    if (!accepted) return result;
+    return this.sendAccepted(accepted, result, {
+      requesterId: actor.userId,
+      operation: 'CUSTOMER_REFUND',
+      key: command.idempotencyKey,
+    });
+  }
+
+  /**
+   * 커밋된 환불의 최초 PG 취소 요청을 보내고 결과를 응답·멱등 기록에 반영한다(고객·매장 공통)
+   * @param pending 커밋 뒤 보낼 PG 취소 요청과 그 전송 담당
+   * @param result 확정 트랜잭션이 만든 접수 응답
+   * @param scope 멱등 기록 범위(키 없으면 기록 갱신 없음)
+   * @returns 전송 결과(지급 상태·조치 사유)를 반영한 접수 응답
+   */
+  async sendAccepted(
+    pending: PendingSend,
+    result: IdempotentResult<RefundAcceptance>,
+    scope: { requesterId: string; operation: string; key?: string },
+  ): Promise<IdempotentResult<RefundAcceptance>> {
+    const sendResult = await this.pgGateway.sendCancel({
+      paymentCancelId: pending.paymentCancelId,
+      amount: pending.amount,
+    });
+    const state = await this.dispatchService.recordSendResult(
+      pending.paymentCancelId,
+      pending.claimToken,
+      pending.sentAt,
+      sendResult,
+    );
+    // 이용 종료 완료와 미지급 상태를 구분해 응답한다(전송 전 실패·즉시 거절도 202 접수, API 계약 §4)
+    const updated = {
+      ...result,
+      body: {
+        ...result.body,
+        payoutStatus: state.payoutStatus,
+        actionCode: state.actionCode,
+      },
+    };
+    // 멱등 키로 저장한 최초 응답도 같은 내용으로 바꾼다(키 없이 처리한 요청은 저장 응답이 없음)
+    if (scope.key !== undefined) {
+      await this.idempotencyService.replaceResponse(scope, updated);
     }
-    return result;
+    return updated;
   }
 
   /**
@@ -149,7 +200,7 @@ export class RefundAcceptanceService {
     tx: TransactionClient,
   ): Promise<{
     result: IdempotentResult<RefundAcceptance>;
-    pending?: { paymentCancelId: string; amount: number };
+    pending?: PendingSend;
   }> {
     const { ticketId, ...refundInput } = input;
     const { now } = input;
@@ -164,9 +215,11 @@ export class RefundAcceptanceService {
       now,
       tx,
     );
-    // 확정된 환불과 최초 PG 취소 요청을 저장한다
+    // 확정된 환불과 최초 PG 취소 요청을 저장한다. 양수는 커밋 뒤 바로 보낼 전송 기록(시도·시각·담당)도 함께 저장한다
+    const sendClaim =
+      input.amount > 0 ? this.dispatchService.newSendClaim(now) : undefined;
     const created = await this.refundRepository.createAcceptedRefund(
-      refundInput,
+      { ...refundInput, sendClaim },
       tx,
     );
     // 양수는 202 접수·지급 처리 중, 0원은 PG 요청 없이 200 지급 완료(API 계약 §4)
@@ -174,7 +227,12 @@ export class RefundAcceptanceService {
     return {
       pending: isZero
         ? undefined
-        : { paymentCancelId: created.paymentCancelId!, amount: input.amount },
+        : {
+            paymentCancelId: created.paymentCancelId!,
+            amount: input.amount,
+            claimToken: sendClaim!.claimToken,
+            sentAt: now,
+          },
       result: {
         status: isZero ? 200 : 202,
         refundId: created.refundId,

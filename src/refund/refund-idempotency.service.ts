@@ -163,6 +163,27 @@ export class RefundIdempotencyService {
   }
 
   /**
+   * 최초 응답을 바꾼다(커밋 뒤 PG 전송 결과를 반영한 응답을 같은 키 재응답에도 돌려주기 위해)
+   * - 키 없이 처리한 요청은 저장한 응답이 없으므로 아무것도 하지 않는다
+   * @param scope 요청자·기능·키(키 없으면 생략)
+   * @param response 새 최초 응답
+   */
+  async replaceResponse(
+    scope: { requesterId: string; operation: string; key?: string },
+    response: { status: number; body: unknown },
+  ): Promise<void> {
+    if (scope.key === undefined) return;
+    await this.repository.replaceCompletedResponse(
+      {
+        requesterId: scope.requesterId,
+        operation: scope.operation,
+        key: scope.key,
+      },
+      response,
+    );
+  }
+
+  /**
    * 이미 있는 기록으로 최초 응답을 돌려준다
    * @param existing 같은 요청자·기능·키의 기록
    * @param fingerprint 이번 요청의 본문 지문

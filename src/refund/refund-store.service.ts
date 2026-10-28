@@ -1,7 +1,5 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { RefundSource, UserRole } from '@prisma/client';
-import { REFUND_PG_GATEWAY } from 'src/pg/refund-pg.gateway';
-import type { RefundPgGateway } from 'src/pg/refund-pg.gateway';
 import { SessionLifecycleService } from 'src/session-lifecycle/session-lifecycle.service';
 import { SessionEndJobQueue } from 'src/session-lifecycle/session-end-job.queue';
 import { RefundAccessService, RefundActor } from './refund-access.service';
@@ -10,6 +8,7 @@ import {
   RefundIdempotencyService,
 } from './refund-idempotency.service';
 import {
+  PendingSend,
   RefundAcceptance,
   RefundAcceptanceService,
 } from './refund-acceptance.service';
@@ -48,7 +47,6 @@ export class RefundStoreService {
     private readonly idempotencyService: RefundIdempotencyService,
     private readonly sessionLifecycleService: SessionLifecycleService,
     private readonly sessionEndJobQueue: SessionEndJobQueue,
-    @Inject(REFUND_PG_GATEWAY) private readonly pgGateway: RefundPgGateway,
   ) {}
 
   /**
@@ -71,7 +69,7 @@ export class RefundStoreService {
     await this.accessService.assertShopScope(actor, shopId);
 
     // 이번 요청이 실제로 확정한 PG 취소 요청(저장된 응답을 재생한 경우는 없음)
-    let pending: { paymentCancelId: string; amount: number } | undefined;
+    let pending: PendingSend | undefined;
     // 이번 요청이 퇴실시킨 세션의 자동 종료 지연 작업(커밋 뒤 제거)
     let endedSessionJobId: string | null = null;
     const result = await this.idempotencyService.execute(
@@ -158,11 +156,13 @@ export class RefundStoreService {
       await this.removeSessionEndJob(endedSessionJobId);
     }
 
-    // PG 전송은 커밋 뒤에만 한다
-    if (pending) {
-      await this.pgGateway.sendCancel(pending);
-    }
-    return result;
+    // PG 전송은 커밋 뒤에만 하고, 전송 결과를 응답과 멱등 기록에 반영한다
+    if (!pending) return result;
+    return this.acceptanceService.sendAccepted(pending, result, {
+      requesterId: actor.userId,
+      operation: 'STORE_REFUND',
+      key: command.idempotencyKey,
+    });
   }
 
   /**

@@ -159,6 +159,9 @@ describe('환불 확정 저장 (실제 DB)', () => {
     await prisma.refundIdempotencyRecord.deleteMany({
       where: { requesterId: customerId },
     });
+    await prisma.refundNotification.deleteMany({
+      where: { refund: { payment: byOrder } },
+    });
     await prisma.ledger.deleteMany({ where: { orderId: { in: orderIds } } });
     await prisma.paymentCancel.deleteMany({ where: { payment: byOrder } });
     await prisma.refund.deleteMany({ where: { payment: byOrder } });
@@ -513,5 +516,37 @@ describe('환불 확정 저장 (실제 DB)', () => {
       where: { ticketId: issued.ticketId },
     });
     expect(sessions).toBe(0);
+  });
+
+  it('접수 응답과 같은 키 재응답은 PG 전송 결과(전송 전 실패 → 조치 필요)를 반영한 같은 응답이다', async () => {
+    const issued = await createUnusedPeriodTicket();
+    pgGateway.sendCancel.mockResolvedValueOnce({
+      result: 'NOT_SENT',
+      reason: 'PG 연결 설정 누락',
+    });
+    const command = {
+      ticketId: issued.ticketId,
+      consentToTerminateTicket: true,
+      idempotencyKey: `key-${randomUUID()}`,
+    };
+    const actor = { userId: customerId, role: UserRole.USER };
+
+    const first = await service.acceptCustomerRefund(actor, command);
+    const replay = await service.acceptCustomerRefund(actor, command);
+
+    expect({
+      status: first.status,
+      payoutStatus: first.body.payoutStatus,
+      pgCalls: pgGateway.sendCancel.mock.calls.length,
+    }).toEqual({
+      status: 202,
+      payoutStatus: RefundPayoutStatus.ACTION_REQUIRED,
+      pgCalls: 1,
+    });
+    // 저장 응답은 JSON으로 다시 읽으므로 키 순서가 아니라 값으로 비교한다
+    expect({ status: replay.status, body: replay.body }).toEqual({
+      status: first.status,
+      body: first.body,
+    });
   });
 });
