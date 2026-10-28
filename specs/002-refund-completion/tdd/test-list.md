@@ -260,12 +260,12 @@ suite_baseline: green
 | U350 | 정기 탐색 작업은 일반 탐색과 장애 복구 확인을 실행하고, 작업자 설정이 꺼져 있으면 아무것도 하지 않는다 (US5 진행 중 추가) | FR-022 | example | DONE | `src/refund/refund-recovery.processor.spec.ts` |
 | U351 | 장애 복구 확인은 실행 동안 복구 제어 담당을 잡고, 다른 작업자가 처리 기한 안에서 맡고 있으면 건너뛰며, 끝나면 담당을 내려놓는다 (US5 진행 중 추가, T100 중복 실행 방지) | FR-026a | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
 | U352 | (E2E) GET /refund/recovery/status는 MANAGER에게 {mode,running,requestedCount,queryFailedCount,actionRequiredCount,reservedManualCount,oldestQueryFailedAt,nextProbeAt}를 주고 다른 역할은 403이다 (US5 진행 중 추가, 계약 §8) | FR-026a | example | DONE | `test/refund-recovery.e2e-spec.ts` |
-| U353 | 결과 확인 실패 건이 미접수 확인 뒤 재전송이 접수되면 연속 오류를 지우고 일반 조회 일정(REQUESTED)으로 복귀한다 (Phase 7a 검수 3) | FR-026 | example | PENDING | |
-| U354 | 개별 확인은 잠금 안에서 최근 조회 간격을 다시 확인해, 먼저 읽은 기록이 오래됐어도 간격 안이면 PG를 부르지 않는다 (Phase 7a 검수 4) | FR-055 | example | PENDING | |
-| U355 | (실제 DB) 복구 제어 상태 변경은 현재 담당 토큰일 때만 반영된다 (Phase 7a 검수 2) | FR-026 | example | PENDING | |
-| U356 | BATCH의 뒤쪽 건은 경과 시간을 반영한 시각으로 조회 담당을 정한다 (Phase 7a 검수 2) | FR-026 | example | PENDING | |
-| U357 | 개별 확인 재전송은 실행자·시각·개별 확인 재전송임을 거래 로그에 남긴다 (Phase 7a 검수 5) | FR-054 | example | PENDING | |
-| U358 | 환불 접수 멱등 기록은 PG 전송 결과 반영 뒤 최종 응답으로 완료하고, 전송 중 같은 키는 IDEMPOTENCY_REQUEST_IN_PROGRESS, 중단 뒤에는 저장된 환불로 응답을 만든다 (Phase 7a 검수 1, 사용자 결정 A) | FR-035 | example | PENDING | |
+| U353 | 결과 확인 실패 건이 미접수 확인 뒤 재전송이 접수되면 연속 오류를 지우고 일반 조회 일정(REQUESTED)으로 복귀한다 (Phase 7a 검수 3) | FR-026 | example | DONE | `src/refund/refund-result.integration.spec.ts` › 결과 확인 실패 건이 미접수 확인 뒤 재전송이 접수되면 연속 오류를 지우고 일반 조회 일정으로 복귀한다 |
+| U354 | 개별 확인은 잠금 안에서 최근 조회 간격을 다시 확인해, 먼저 읽은 기록이 오래됐어도 간격 안이면 PG를 부르지 않는다 (Phase 7a 검수 4) | FR-055 | example | DONE | `src/refund/refund-result.integration.spec.ts` › 개별 확인은 잠금 안에서 최근 조회 간격을 다시 확인해… |
+| U355 | (실제 DB) 복구 제어 상태 변경은 현재 담당 토큰일 때만 반영된다 (Phase 7a 검수 2) | FR-026 | example | DONE | `src/refund/refund-result.integration.spec.ts` › 복구 제어 상태 변경은 현재 담당 토큰일 때만 반영된다 |
+| U356 | BATCH의 뒤쪽 건은 경과 시간을 반영한 시각으로 조회 담당을 정한다 (Phase 7a 검수 2) | FR-026 | example | DONE | `src/refund/refund-result.integration.spec.ts` › BATCH의 뒤쪽 건은 앞 건 조회에 걸린 시간을 반영한 시각으로 조회 담당을 정한다 |
+| U357 | 개별 확인 재전송은 실행자·시각·개별 확인 재전송임을 거래 로그에 남긴다 (Phase 7a 검수 5) | FR-054 | example | DONE | `src/refund/refund-result.integration.spec.ts` › 개별 확인 재전송은 실행자·시각·개별 확인 재전송임을 거래 로그에 남긴다 |
+| U358 | 환불 접수 멱등 기록은 PG 전송 결과 반영 뒤 최종 응답으로 완료하고, 전송 중 같은 키는 IDEMPOTENCY_REQUEST_IN_PROGRESS, 중단 뒤에는 저장된 환불로 응답을 만든다 (Phase 7a 검수 1, 사용자 결정 A) | FR-035 | example | DONE | `src/refund/refund-acceptance.integration.spec.ts` › PG 전송 중에 같은 키로…, 확정은 커밋됐지만 PG 전송 단계 전에 중단되면… |
 
 ### `src/refund/refund-idempotency.service.ts`
 

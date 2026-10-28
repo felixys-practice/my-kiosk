@@ -939,3 +939,37 @@ U10~U15를 마친 뒤, 관계 검증의 비교 대상 설정을 생략하면 정
   - 기존 테스트 변경: acceptance spec 생성자 인자(사용자 결정 A), store spec PG 인자 제거, seat-type afterAll에 알림 삭제(QS-21이 PG 미연동으로 SEND_FAILED 알림을 만듦). 단언은 바꾸지 않았다.
 - 발견(범위 밖, 고치지 않음): 기존 `usage-session.service`의 `mockExternalApi`(무작위 10% 실패, 'TODO: 테스트 용 함수') 때문에 E2E QS-15에서 500이 한 번 났다.
 - 결과: 단위 484 passed, E2E 124 passed(`0a57560`).
+
+## Phase 7a Codex 검수 1차 (2026-10-29)
+
+- 범위 `ae9b0fc..44aab82`. 판정 **수정 필요**: P1 2건, P2 3건.
+  1. [P1] 같은 멱등 키의 응답이 실행 시점에 따라 달라진다. PG 호출 중 재요청은 PENDING을, 최초 요청은 ACTION_REQUIRED를 받는다. 전송 결과 저장과 응답 교체 사이에 중단되면 둘이 어긋난다.
+  2. [P1] 담당을 잃은 복구 작업자가 제어 상태를 바꿀 수 있다(토큰 조건 없음). BATCH가 모든 건에 같은 `now`를 써서 뒤쪽 건이 지난 기한으로 담당을 잡는다.
+  3. [P2] QUERY_FAILED 건이 미접수 확인 뒤 재전송이 접수돼도 일반 조회로 돌아가지 않는다.
+  4. [P2] 개별 확인의 최근 조회 간격 검사가 잠금 밖이라 경합을 막지 못한다.
+  5. [P2] 개별 확인 재전송의 실행자·거래 로그가 없다.
+- 사용자 결정(1번): **"A: 전송 반영 뒤 완료"**. 계약 §4(전송 전 실패·즉시 거절도 202 ACTION_REQUIRED)를 지키고 Phase 2의 R4(처리와 최초 응답을 같은 트랜잭션에서 완료)를 바꾼다.
+  - 확정 트랜잭션은 멱등 기록에 환불만 표시하고 처리 중으로 둔다.
+  - 전송 결과를 반영한 최종 응답으로 완료한다.
+  - 그 사이 같은 키는 409 `IDEMPOTENCY_REQUEST_IN_PROGRESS`를 받는다.
+  - 중단 뒤에는 처리 기한이 지난 같은 키 요청이 저장된 환불 상태로 응답을 만들어 완료한다.
+
+## Phase 7a 검수 수정 사이클 (2026-10-29)
+
+| 동작 | red(실행 명령 → 결정적 줄) | green | 커밋 |
+|---|---|---|---|
+| U353 | `npx jest src/refund/refund-result.integration.spec.ts -t '재전송이 접수되면 연속 오류를 지우고'` → `+ "failures": 5`, `+ "lastInquiryError": "PG 장애"`, `+ "queryFailedAt": 1990-01-01…` | `scheduleInquiryAfterSend`가 status REQUESTED·queryFailedAt null·연속 오류 0·오류 null도 저장. 단위 485, E2E 124 | `07b9165` |
+| U354 | `… -t '잠금 안에서 최근 조회 간격을'` → `+ "checkStatus": "CHECKED"`, `+ "inquiries": 2` | `claimForInquiry(manual)`가 잠금 안에서 `lastInquiryAt` 간격을 확인해 `'RECENT'`를 돌려주고, pg-check가 RECENT_RESULT로 응답. 단위 486, E2E 124 | `933778a` |
+| U355 | `… -t '현재 담당 토큰일 때만'` → `error TS2554: Expected 1 arguments, but got 2` 및 `PrismaClientValidationError`(토큰 인자 자체가 없음) | `updateRecoveryControl(claimToken, update)` = `updateMany(id·claimToken)`. 복구 실행이 토큰을 넘기고, `resumeRecovery`는 제어 담당을 잡은 뒤 BATCH로 바꾸고 내려놓는다(못 잡으면 ALREADY_RUNNING). 단위 487, E2E 124 | `59d430d` |
+| U356 | `… -t '앞 건 조회에 걸린 시간을'` → `Expected: >= 633830401000`, `Received: 633830400000` | `runRecoveryBatch`가 건마다 `itemNow = now + 경과`를 쓰고, `extendRecoveryControl`로 담당 기한을 늘린다(잃었으면 중단). 오류 재발 때 `nextProbeAt(itemNow)`. 단위 488, E2E 124 | `e7d7d89` |
+| U357 | `… -t '실행자·시각·개별 확인 재전송임을'` → `Received: undefined`(MANUAL_RESEND 로그 없음) | pg-check가 실행자 ID를 넘기고, `inquireForCheck`가 재전송했으면 거래 로그 type REFUND·status MANUAL_RESEND·userId 실행자·metadata(refundId·paymentCancelId·requestedAt·사유·resendResult)를 남긴다. 단위 489, E2E 124 | `e708871` |
+| U358 | `npx jest src/refund/refund-acceptance.integration.spec.ts -t 'PG 전송 중에 같은 키로'` → `- "duringSend": "IDEMPOTENCY_REQUEST_IN_PROGRESS"`, `+ "duringSend": "resolved"` | `execute`에 커밋 뒤 단계 옵션(`afterCommit`·`rebuild`)을 추가했다. `markHandledInTransaction`이 환불 ID만 표시하고, 커밋 뒤 전송·결과 반영 다음 `completeAfterCommit`(토큰 조건)으로 완료한다. 이어받을 때 환불 ID가 있으면 처리를 다시 하지 않고 `rebuildAcceptance`로 완료한다. `replaceResponse`는 지웠다. 고객·매장 공통(`afterAcceptance`). 단위 491, E2E 124 | `db55d74` |
+
+- 리팩터: 각 사이클 "필요 없음". U354에서 `InquiryOutcome` 타입을 뽑아냈다.
+- 이탈·메모:
+  - U356: 담당 기한 연장 자체는 중간 상태를 관찰하기 어려워 별도 테스트가 없다. 연장 실패 시 중단하는 분기도 테스트가 없다.
+  - U358의 중단 복구 테스트는 처음 실행에서 통과했다(같은 커밋의 구현). 뮤턴트(이어받기 때 재구성 생략)로 `1 failed`를 확인했다.
+  - U358 기존 테스트 변경: `refund-acceptance.service.spec.ts`의 멱등 대역이 커밋 뒤 단계를 실행하도록 바꿨다(사용자 결정 A의 범위). 단언은 바꾸지 않았다.
+  - `IdempotencyRecord.refundId`는 선택 필드로 두어 Phase 2 단위 테스트의 기록 대역을 바꾸지 않았다.
+- 결과: 단위 491 passed, E2E 124 passed(`db55d74`).
+
