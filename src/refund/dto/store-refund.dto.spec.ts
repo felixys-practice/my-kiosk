@@ -34,4 +34,9 @@ describe('매장 환불 요청 DTO(StoreRefundDto)', () => {
 
     expect(Object.keys(constraints)).toEqual(['amount']);
   });
+  it('매장 환불 금액이 소수이면 형식 오류(400)다', async () => {
+    const constraints = await constraintsOf({ ...validBody, amount: 1000.5 });
+
+    expect(Object.keys(constraints)).toEqual(['amount']);
+  });
 });

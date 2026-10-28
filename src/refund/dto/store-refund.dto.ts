@@ -1,6 +1,6 @@
 import {
   IsBoolean,
-  IsNumber,
+  IsInt,
   IsOptional,
   IsString,
   IsUUID,
@@ -15,8 +15,8 @@ export class StoreRefundDto {
   @IsUUID('4', { message: '티켓 아이디는 유효한 UUID 형식이어야 합니다' })
   ticketId!: string;
 
-  // 확정할 환불 금액(원). 0 이상(상한은 실결제액으로 서비스에서 확인)
-  @IsNumber()
+  // 확정할 환불 금액(원 단위 정수). 0 이상(상한은 실결제액으로 서비스에서 확인)
+  @IsInt()
   @Min(0)
   amount!: number;
 
