@@ -2307,6 +2307,47 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       });
     });
 
+    it('결제 전체 대상 환불도 재시도하면 대상 상품 없는 새 PG 취소 요청을 만든다', async () => {
+      const failed = await createFailedRefund();
+      // 같은 결제를 결제 전체 대상 시스템 환불로 바꾼다(승인 금액 불일치 자동 취소와 같은 형태)
+      await prisma.paymentCancel.update({
+        where: { id: failed.paymentCancelId },
+        data: { refundId: null },
+      });
+      await prisma.refund.update({
+        where: { id: failed.refundId },
+        data: {
+          targetKind: RefundTargetKind.PAYMENT,
+          source: RefundSource.SYSTEM,
+          orderItemId: null,
+          requestedById: null,
+        },
+      });
+      await prisma.paymentCancel.update({
+        where: { id: failed.paymentCancelId },
+        data: { refundId: failed.refundId, orderItemId: null },
+      });
+      pgGateway.sendCancel.mockResolvedValueOnce({ result: 'ACCEPTED' });
+
+      const response = await app
+        .get(RefundRetryService)
+        .retryByManager(manager(), failed.refundId, {
+          reason: retryReason,
+          idempotencyKey: `retry-${randomUUID()}`,
+        });
+
+      const created = await prisma.paymentCancel.findFirst({
+        where: { refundId: failed.refundId, attemptNumber: 2 },
+      });
+      expect({
+        status: response.status,
+        created: created && [created.status, created.orderItemId],
+      }).toEqual({
+        status: 202,
+        created: [PaymentCancelStatus.REQUESTED, null],
+      });
+    });
+
     it('한도를 소진해 실패한 요청을 재시도한 새 요청의 자동 재전송 횟수는 0이고 이전 요청의 횟수는 그대로다', async () => {
       const failed = await createFailedRefund(
         PaymentCancelFailureCode.RETRY_EXHAUSTED,

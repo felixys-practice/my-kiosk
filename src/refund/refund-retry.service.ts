@@ -115,9 +115,6 @@ export class RefundRetryService {
         ))!;
         const decision = evaluatePayoutRetry(target.state, now);
         if (!decision.allowed) throw retryRejectionError(decision.code);
-        if (target.orderItemId === null) {
-          throw new RefundPayoutNotActionableError();
-        }
 
         // 4. 이전 실패를 보존한 채 같은 금액의 새 요청과 커밋 뒤 전송 기록을 저장한다
         const sendClaim = this.dispatchService.newSendClaim(now);
@@ -250,7 +247,6 @@ export class RefundRetryService {
       );
       if (
         failed?.id !== candidate.id ||
-        target.orderItemId === null ||
         !evaluatePayoutRetry(target.state, now).allowed
       ) {
         return;

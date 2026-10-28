@@ -272,8 +272,9 @@ suite_baseline: green
 | U362 | 정기 탐색 작업은 장애 복구 확인을 탐색이 끝난 뒤의 현재 시각으로 시작한다 (Phase 7a 검수 2차 3, U361에서 분리) | FR-026 | example | DONE | `src/refund/refund-recovery.processor.spec.ts` › 장애 복구 확인은 탐색이 끝난 뒤의 현재 시각으로 시작한다 |
 | U363 | PG 재시도는 환불이 조치 필요(ACTION_REQUIRED)일 때만 허용하고, 그 밖의 상태는 미확정 판정 뒤 REFUND_PAYOUT_NOT_ACTIONABLE로 거절한다 (US10 재요청 검수 1) | FR-044 | example | DONE | `src/refund/refund-retry.policy.spec.ts` › 조치 필요가 아닌 환불(…)은 REFUND_PAYOUT_NOT_ACTIONABLE로 거절한다 |
 | U364 | PG 재시도는 SUCCEEDED·FAILED가 아닌 시도(PENDING_APPROVAL 포함)가 있으면 REFUND_PAYOUT_UNRESOLVED로 거절한다 (US10 재요청 검수 2) | FR-043 | example | DONE | `src/refund/refund-retry.policy.spec.ts` › 최종 결과가 아닌 과거 승인 대기(PENDING_APPROVAL) 시도가 있으면… |
-| U365 | (실제 DB) 결제 전체 대상 환불(PAYMENT) 아래 PG 취소 요청은 주문 항목 없이 저장된다 (US6 전 사용자 결정: nullable 전환) | FR-030 | example | PENDING | |
-| U366 | (실제 DB) 환불에 연결된 PG 취소 요청의 주문 항목이 환불의 주문 항목과 다르면 저장이 실패한다 (data-model §4 '새 행의 연결은 Refund와 같아야 한다', 사용자 결정) | FR-030 | example | PENDING | |
+| U365 | (실제 DB) 결제 전체 대상 환불(PAYMENT) 아래 PG 취소 요청은 주문 항목 없이 저장된다 (US6 전 사용자 결정: nullable 전환) | FR-030 | example | DONE | `src/prisma/refund-constraints.integration.spec.ts` › PaymentCancel › 결제 전체 대상 환불 아래 PG 취소 요청은 주문 항목 없이 저장된다 |
+| U366 | (실제 DB) 환불에 연결된 PG 취소 요청의 주문 항목이 환불의 주문 항목과 다르면 저장이 실패한다 (data-model §4 '새 행의 연결은 Refund와 같아야 한다', 사용자 결정) | FR-030 | example | DONE | `src/prisma/refund-constraints.integration.spec.ts` › PaymentCancel › 환불에 연결된 PG 취소 요청의 주문 항목이 환불의 주문 항목과 다르면 저장이 실패한다 |
+| U367 | 결제 전체 대상 환불(PAYMENT)도 MANAGER 재시도로 대상 상품 없는 새 PG 취소 요청을 만든다 (U365 결정에 따른 재시도 경로 정리) | FR-044 | example | DONE | `src/refund/refund-result.integration.spec.ts` › MANAGER의 PG 직접 재시도 › 결제 전체 대상 환불도 재시도하면 대상 상품 없는 새 PG 취소 요청을 만든다 |
 
 ### `src/refund/refund-idempotency.service.ts`
 

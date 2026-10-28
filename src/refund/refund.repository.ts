@@ -101,7 +101,7 @@ const retryableFailureCodes: readonly PaymentCancelFailureCode[] = [
 export type PayoutRetryTarget = {
   state: PayoutRetryState;
   paymentId: string;
-  orderItemId: string | null; // 새 요청의 대상 상품
+  orderItemId: string | null; // 새 요청의 대상 상품(환불과 같음, 결제 전체 대상이면 null)
   nextAttemptNumber: number;
   paymentCancelIds: string[]; // 잠글 PG 취소 요청
   manualRefundPayoutIds: string[]; // 잠글 별도 환불금 지급
@@ -813,7 +813,6 @@ export class RefundRepository {
             status: true,
             claimUntil: true,
             attemptNumber: true,
-            orderItemId: true,
           },
         },
         manualPayouts: { select: { id: true, status: true } },
@@ -837,8 +836,8 @@ export class RefundRepository {
         ),
       },
       paymentId: refund.paymentId,
-      // 이용권 상품 환불은 그 상품, 결제 전체 환불은 마지막 요청의 대상 상품
-      orderItemId: refund.orderItemId ?? latest?.orderItemId ?? null,
+      // 새 요청의 대상 상품은 환불과 같다(결제 전체 대상이면 null, DB 검사 트리거가 일치를 보장)
+      orderItemId: refund.orderItemId,
       nextAttemptNumber: (latest?.attemptNumber ?? 0) + 1,
       paymentCancelIds: refund.paymentCancels.map((attempt) => attempt.id),
       manualRefundPayoutIds: refund.manualPayouts.map((payout) => payout.id),
@@ -951,7 +950,7 @@ export class RefundRepository {
     input: {
       refundId: string;
       paymentId: string;
-      orderItemId: string;
+      orderItemId: string | null;
       attemptNumber: number;
       amount: number;
       requestedById: string;
