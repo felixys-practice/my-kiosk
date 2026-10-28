@@ -3,6 +3,7 @@ import { RefundService } from './refund.service';
 import { RefundController } from './refund.controller';
 import { RefundRepository } from './refund.repository';
 import { LoggerModule } from 'src/logger/logger.module';
+import { SessionLifecycleModule } from 'src/session-lifecycle/session-lifecycle.module';
 import { PgModule } from 'src/pg/pg.module';
 import { SeatAssignmentModule } from 'src/seat-assignment/seat-assignment.module';
 import { RefundIdempotencyRepository } from './refund-idempotency.repository';
@@ -16,7 +17,12 @@ import { RefundEventRepository } from './refund-event.repository';
 import { RefundLedgerRepository } from 'src/ledger/refund-ledger.repository';
 
 @Module({
-  imports: [LoggerModule, PgModule, SeatAssignmentModule],
+  imports: [
+    LoggerModule,
+    PgModule,
+    SeatAssignmentModule,
+    SessionLifecycleModule,
+  ],
   providers: [
     RefundService,
     RefundRepository,

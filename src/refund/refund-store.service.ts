@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { RefundSource, UserRole } from '@prisma/client';
 import { REFUND_PG_GATEWAY } from 'src/pg/refund-pg.gateway';
 import type { RefundPgGateway } from 'src/pg/refund-pg.gateway';
+import { SessionLifecycleService } from 'src/session-lifecycle/session-lifecycle.service';
 import { RefundAccessService, RefundActor } from './refund-access.service';
 import {
   IdempotentResult,
@@ -42,6 +43,7 @@ export class RefundStoreService {
     private readonly accessService: RefundAccessService,
     private readonly acceptanceService: RefundAcceptanceService,
     private readonly idempotencyService: RefundIdempotencyService,
+    private readonly sessionLifecycleService: SessionLifecycleService,
     @Inject(REFUND_PG_GATEWAY) private readonly pgGateway: RefundPgGateway,
   ) {}
 
@@ -110,6 +112,16 @@ export class RefundStoreService {
         ) {
           throw new TicketInUseError();
         }
+        // 모든 검증을 통과했으므로 이용 중이면 퇴실시킨다(기존 퇴실 규칙: 시간권은 퇴실 시각까지 사용 시간 차감)
+        let endedSessionId: string | undefined;
+        if (target!.candidate.ticket.inUse) {
+          endedSessionId = target!.lockTargets.usageSessionIds[0];
+          await this.sessionLifecycleService.endSession(
+            endedSessionId,
+            now,
+            tx,
+          );
+        }
 
         // 이용권 종료·좌석 해제·확정 환불·최초 PG 취소 요청을 함께 저장한다
         const confirmed = await this.acceptanceService.confirmAcceptedRefund(
@@ -122,6 +134,8 @@ export class RefundStoreService {
             source: RefundSource.STORE,
             amount: decision.amount,
             reason: decision.reason ?? undefined,
+            endedSessionId,
+            exitConsentedAt: endedSessionId ? now : undefined,
             requestedById: actor.userId,
             now,
           },

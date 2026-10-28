@@ -44,16 +44,23 @@ describe('매장 환불 확정 저장 (실제 DB)', () => {
   /** 결제 금액(원) */
   const paidAmount = 10000;
 
-  /**
-   * 결제를 마치고 사용 이력이 있는(활성화된) 정기권을 만든다
-   * @param orderShopId 주문 매장(기본: 주 매장)
-   * @returns 이용권과 주문 항목·결제 ID
-   */
-  async function createUsedPeriodTicket(orderShopId = shopId): Promise<{
+  /** 발급한 이용권과 주문 항목·결제 ID */
+  type IssuedTicket = {
     ticketId: string;
     orderItemId: string;
     paymentId: string;
-  }> {
+  };
+
+  /**
+   * 결제를 마친 주문 항목을 만든다
+   * @param ticketType 이용권 타입
+   * @param orderShopId 주문 매장
+   * @returns 주문 항목·결제 ID
+   */
+  async function createPaidOrderItem(
+    ticketType: TicketType,
+    orderShopId: string,
+  ): Promise<{ orderItemId: string; paymentId: string }> {
     const order = await prisma.order.create({
       data: {
         shopId: orderShopId,
@@ -68,11 +75,12 @@ describe('매장 환불 확정 저장 (실제 DB)', () => {
       data: {
         orderId: order.id,
         productId,
-        ticketType: TicketType.PERIOD,
+        ticketType,
         originalAmount: paidAmount,
         discountAmount: 0,
         amount: paidAmount,
-        purchasedDurationDays: 30,
+        purchasedDurationDays: ticketType === TicketType.PERIOD ? 30 : null,
+        purchasedMinutes: ticketType === TicketType.TIME ? 600 : null,
         usableDays: 30,
       },
     });
@@ -84,22 +92,51 @@ describe('매장 환불 확정 저장 (실제 DB)', () => {
         status: PaymentStatus.SUCCESS,
       },
     });
+    return { orderItemId: orderItem.id, paymentId: payment.id };
+  }
+
+  /**
+   * 결제를 마치고 사용 이력이 있는(활성화된) 정기권을 만든다
+   * @param orderShopId 주문 매장(기본: 주 매장)
+   * @returns 이용권과 주문 항목·결제 ID
+   */
+  async function createUsedPeriodTicket(
+    orderShopId = shopId,
+  ): Promise<IssuedTicket> {
+    const paid = await createPaidOrderItem(TicketType.PERIOD, orderShopId);
     const ticket = await prisma.ticket.create({
       data: {
         userId: customerId,
         type: TicketType.PERIOD,
         status: TicketStatus.ACTIVE,
-        orderItemId: orderItem.id,
+        orderItemId: paid.orderItemId,
         purchasedDurationDays: 30,
         activatedAt: new Date(Date.now() - 86_400_000),
         activationDeadline: new Date(Date.now() + 30 * 86_400_000),
       },
     });
-    return {
-      ticketId: ticket.id,
-      orderItemId: orderItem.id,
-      paymentId: payment.id,
-    };
+    return { ticketId: ticket.id, ...paid };
+  }
+
+  /**
+   * 결제를 마치고 일부를 쓴 시간권(구매 600분, 남은 500분)을 만든다
+   * @returns 이용권과 주문 항목·결제 ID
+   */
+  async function createUsedTimeTicket(): Promise<IssuedTicket> {
+    const paid = await createPaidOrderItem(TicketType.TIME, shopId);
+    const ticket = await prisma.ticket.create({
+      data: {
+        userId: customerId,
+        type: TicketType.TIME,
+        status: TicketStatus.ACTIVE,
+        orderItemId: paid.orderItemId,
+        purchasedMinutes: 600,
+        remainingMinutes: 500,
+        activatedAt: new Date(Date.now() - 86_400_000),
+        minuteExpireDeadline: new Date(Date.now() + 30 * 86_400_000),
+      },
+    });
+    return { ticketId: ticket.id, ...paid };
   }
 
   beforeAll(async () => {
@@ -398,6 +435,52 @@ describe('매장 환불 확정 저장 (실제 DB)', () => {
     expect({ session: session.status, ticket: ticket.status }).toEqual({
       session: UsageSessionStatus.ACTIVE,
       ticket: TicketStatus.ACTIVE,
+    });
+  });
+
+  it('이용 중인 시간권을 퇴실 동의와 함께 매장 환불하면 퇴실 시각까지의 사용 시간만 차감되고 그 세션이 환불에 기록된다', async () => {
+    const issued = await createUsedTimeTicket();
+    const startedAt = new Date(Date.now() - 30 * 60_000);
+    const sessionId = await startSession(issued.ticketId, startedAt);
+
+    const { body } = await service.acceptStoreRefund(
+      { userId: ownerId, role: UserRole.OWNER },
+      shopId,
+      {
+        ticketId: issued.ticketId,
+        amount: 5000,
+        reason: '이용 중 불편 보상',
+        consentToTerminateTicket: true,
+        consentToEndSession: true,
+      },
+    );
+
+    const session = await prisma.usageSession.findUniqueOrThrow({
+      where: { id: sessionId },
+    });
+    const ticket = await prisma.ticket.findUniqueOrThrow({
+      where: { id: issued.ticketId },
+    });
+    const refund = await prisma.refund.findUniqueOrThrow({
+      where: { id: body.refundId },
+    });
+    // 기존 퇴실 규칙: 입실부터 퇴실까지 분 단위 올림만큼 차감
+    const endedAt = session.endedAt ?? new Date(Number.NaN);
+    const usedMinutes = Math.ceil(
+      (endedAt.getTime() - startedAt.getTime()) / 60_000,
+    );
+    expect({
+      session: session.status,
+      remainingMinutes: ticket.remainingMinutes,
+      ticket: ticket.status,
+      endedSessionId: refund.endedSessionId,
+      exitConsentedAt: refund.exitConsentedAt instanceof Date,
+    }).toEqual({
+      session: UsageSessionStatus.ENDED,
+      remainingMinutes: 500 - usedMinutes,
+      ticket: TicketStatus.REVOKED,
+      endedSessionId: sessionId,
+      exitConsentedAt: true,
     });
   });
 });

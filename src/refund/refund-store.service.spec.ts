@@ -10,6 +10,7 @@ import {
 } from 'src/common/errors';
 import { RefundAcceptanceService } from './refund-acceptance.service';
 import { RefundAccessService } from './refund-access.service';
+import { SessionLifecycleService } from 'src/session-lifecycle/session-lifecycle.service';
 import { RefundIdempotencyService } from './refund-idempotency.service';
 import { RefundForbiddenError } from './errors';
 
@@ -24,6 +25,7 @@ describe('RefundStoreService', () => {
       {} as RefundAccessService,
       {} as RefundAcceptanceService,
       {} as RefundIdempotencyService,
+      {} as SessionLifecycleService,
       { sendCancel: jest.fn(), inquireCancel: jest.fn() },
     );
   });
