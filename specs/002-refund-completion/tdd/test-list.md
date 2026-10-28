@@ -246,6 +246,8 @@ suite_baseline: green
 | U336 | 다른 매장 이용권을 자기 매장 환불로 요청하면 TICKET_NOT_FOUND(404)로 거절되고 아무것도 저장하지 않는다 (US2 진행 중 추가, A18 단위) | FR-011 | example | DONE | `src/refund/refund-store.integration.spec.ts`(실제 DB) |
 | U337 | 요청 매장의 현재 점주가 아닌 OWNER는 SHOP_NOT_FOUND(404)로 거절된다 (US2 진행 중 추가, 계약 §2 현재 소유 매장) | FR-050 | example | DONE | `src/refund/refund-store.integration.spec.ts`(실제 DB) |
 | U338 | 매장 환불 판정 거절은 계약 오류로 응답한다: 금액 상한·전액 원칙·사유 누락은 400, 대상 여부 규칙은 409 (US2 진행 중 추가) | FR-012 | example | DONE | `src/refund/refund-store.service.spec.ts` |
+| U339 | (실제 DB) 환불이 이용권을 먼저 잠근 상태에서 일반 퇴실(endSession)이 같은 세션을 종료해도 교착 없이 둘 다 끝난다: 퇴실도 Ticket → UsageSession 순서로 잠근다 (Phase 4 검수 1 P2) | 계약 §6 | example | DONE | `src/session-lifecycle/session-lifecycle.integration.spec.ts`(실제 DB) |
+| U340 | 매장 환불 요청에 공백만 있는 사유를 보내면 형식 오류(400)다: 제공한 사유는 trim 후 1~500자 (Phase 4 검수 1 P2) | 계약 §4 | example | DONE | `src/refund/dto/store-refund.dto.spec.ts` |
 
 ### `src/refund/refund-idempotency.service.ts`
 
