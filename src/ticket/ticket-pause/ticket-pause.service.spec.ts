@@ -7,6 +7,7 @@ import {
   TicketType,
 } from '@prisma/client';
 import { TransactionClient } from 'src/prisma/prisma.service';
+import { DomainConflictError } from 'src/common/errors';
 import { SeatSelectionRequiredError } from 'src/seat-assignment/errors/seat-selection-required.error';
 import { SeatAssignmentService } from 'src/seat-assignment/seat-assignment.service';
 import { SessionLifecycleService } from 'src/session-lifecycle/session-lifecycle.service';
@@ -94,6 +95,22 @@ describe('TicketPauseService', () => {
         id: 'pause-1',
         pausedAt: new Date('2026-10-20T00:00:00Z'),
       } as Awaited<ReturnType<TicketPauseRepository['findActivePause']>>);
+    });
+
+    it('환불로 종료된(REVOKED) 이용권의 재개는 정지 기록이 닫혔어도 TICKET_TERMINATED로 거절된다', async () => {
+      repository.getTicketForUpdate.mockResolvedValue({
+        ...activePeriodTicket(SeatType.FIXED),
+        status: TicketStatus.REVOKED,
+      });
+      // 환불이 정지 기록을 닫았으므로 진행 중 정지가 없다
+      repository.findActivePause.mockResolvedValue(null);
+
+      const resume = service.resumeTicket(ticketId, ownerId, '복귀', 'seat-1');
+
+      await expect(resume).rejects.toBeInstanceOf(DomainConflictError);
+      await expect(resume).rejects.toMatchObject({ code: 'TICKET_TERMINATED' });
+      expect(repository.resumePause).not.toHaveBeenCalled();
+      expect(seatAssignmentService.assign).not.toHaveBeenCalled();
     });
 
     it('고정석 이용권을 재개하면 요청한 좌석으로 다시 배정한다', async () => {

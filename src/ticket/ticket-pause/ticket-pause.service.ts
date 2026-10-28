@@ -7,6 +7,7 @@ import {
   TicketStatus,
   TicketType,
 } from '@prisma/client';
+import { TicketTerminatedError } from '../errors/ticket-terminated.error';
 import { SeatSelectionRequiredError } from 'src/seat-assignment/errors/seat-selection-required.error';
 import { SeatAssignmentService } from 'src/seat-assignment/seat-assignment.service';
 import { TicketPauseRepository } from './ticket-pause.repository';
@@ -139,6 +140,11 @@ export class TicketPauseService {
         ticketId,
         tx,
       );
+
+      // 1-1. 환불로 이용이 종료된 이용권은 재개할 수 없다(정지 기록은 환불이 이미 닫았다, API 계약 §6)
+      if (ticket.status === TicketStatus.REVOKED) {
+        throw new TicketTerminatedError();
+      }
 
       // 2. 활성 TicketPause 존재 확인
       const activePause = await this.ticketPauseRepository.findActivePause(
