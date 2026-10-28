@@ -636,7 +636,16 @@ export class RefundRepository {
   ): Promise<void> {
     await this.prisma.paymentCancel.updateMany({
       where: { id, claimToken },
-      data: { nextInquiryAt, claimToken: null, claimUntil: null },
+      data: {
+        nextInquiryAt,
+        // PG가 전송을 받았으므로 결과 확인 실패였던 건도 일반 조회 일정으로 돌아간다(연속 오류 초기화)
+        status: PaymentCancelStatus.REQUESTED,
+        queryFailedAt: null,
+        inquiryFailureCount: 0,
+        lastInquiryError: null,
+        claimToken: null,
+        claimUntil: null,
+      },
     });
   }
 

@@ -1998,4 +1998,40 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       sent: pgGateway.sendCancel.mock.calls.length,
     }).toEqual({ checkStatus: 'NO_PENDING_ATTEMPT', inquired: 0, sent: 0 });
   });
+
+  it('결과 확인 실패 건이 미접수 확인 뒤 재전송이 접수되면 연속 오류를 지우고 일반 조회 일정으로 복귀한다', async () => {
+    const queryFailedAt = new Date(Date.UTC(recoveryYear--, 0, 1));
+    const failed = await createQueryFailed(queryFailedAt);
+    await prisma.paymentCancel.update({
+      where: { id: failed.paymentCancelId },
+      data: { lastInquiryError: 'PG 장애' },
+    });
+    pgGateway.inquireCancel.mockResolvedValueOnce({
+      result: 'NOT_FOUND',
+      authoritative: true,
+    });
+    pgGateway.sendCancel.mockResolvedValueOnce({ result: 'ACCEPTED' });
+    const now = new Date(queryFailedAt.getTime() + 86_400_000);
+
+    await app
+      .get(RefundRecoveryService)
+      .inquireAttempt(failed.paymentCancelId, now);
+
+    const attempt = await prisma.paymentCancel.findUniqueOrThrow({
+      where: { id: failed.paymentCancelId },
+    });
+    expect({
+      status: attempt.status,
+      queryFailedAt: attempt.queryFailedAt,
+      failures: attempt.inquiryFailureCount,
+      lastInquiryError: attempt.lastInquiryError,
+      nextInquiryAt: attempt.nextInquiryAt?.getTime(),
+    }).toEqual({
+      status: PaymentCancelStatus.REQUESTED,
+      queryFailedAt: null,
+      failures: 0,
+      lastInquiryError: null,
+      nextInquiryAt: now.getTime() + 60_000,
+    });
+  });
 });
