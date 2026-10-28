@@ -893,3 +893,13 @@ U10~U15를 마친 뒤, 관계 검증의 비교 대상 설정을 생략하면 정
 | U341 (실제 DB) 입실 후속 실패 처리는 환불로 이미 종료된 세션을 덮어쓰지 않음 | status JOB_REGISTER_FAILED·failureReason 기록 | `failSession`을 `updateMany(where id·status ACTIVE)`로 조건부 갱신(세 실패 경로 모두 적용) | `c93f20e` |
 
 - 결과: 단위 436 passed, E2E 100 passed(`c93f20e`).
+
+## Phase 5 Codex 재검수 (2026-10-28)
+
+- 범위: `4704491..0ee9183`
+- 판정: **통과**. 이전 P2가 해결됐고, 이번 수정 범위에서 추가 수정 사항은 없다. `failSession`은 ACTIVE 세션만 조건부로 갱신하므로, 세 실패 경로 모두 이미 ENDED인 세션을 보존한다. U341의 검증과 수정 전 실패 기록도 확인했다.
+- Codex 직접 실행: 관련 단위 테스트 13개 통과. 공유 DB 테스트는 직접 실행하지 않았다.
+
+## Phase 5 완료
+
+- T057~T063·T181 완료, Codex 재검수 통과. 권장 구현 순서상 다음은 Phase 7(US5 PG 결과 조회·재전송·장애 복구)이다.
