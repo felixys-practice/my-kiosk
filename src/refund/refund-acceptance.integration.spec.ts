@@ -22,6 +22,7 @@ import { AppModule } from 'src/app.module';
 import { REFUND_PG_GATEWAY } from 'src/pg/refund-pg.gateway';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { RefundAcceptanceService } from './refund-acceptance.service';
+import { RefundRepository } from './refund.repository';
 
 /**
  * 환불 확정의 저장 결과를 실제 PostgreSQL에서 확인한다 (US1, tasks T032·T034)
@@ -281,5 +282,57 @@ describe('환불 확정 저장 (실제 DB)', () => {
       activationDeadline: before.activationDeadline,
       expiresAt: before.expiresAt,
     });
+  });
+
+  it('저장 마지막 단계가 실패하면 이용권·좌석·정지·환불·PG 취소 요청이 모두 저장 전 상태로 남는다', async () => {
+    const issued = await createUnusedPeriodTicket();
+    const seat = await prisma.seat.create({
+      data: { number: nextSeatNumber++, shopId, type: SeatType.FIXED },
+    });
+    await prisma.seatAssignment.create({
+      data: {
+        seatId: seat.id,
+        orderItemId: issued.orderItemId,
+        ticketId: issued.ticketId,
+        status: SeatAssignmentStatus.ACTIVE,
+        assignedAt: new Date(),
+      },
+    });
+    await prisma.ticketPause.create({
+      data: {
+        ticketId: issued.ticketId,
+        pausedAt: new Date(Date.now() - 60_000),
+        pausedBy: customerId,
+      },
+    });
+    const repository = app.get(RefundRepository);
+    jest
+      .spyOn(repository, 'createAcceptedRefund')
+      .mockRejectedValueOnce(new Error('환불 저장 실패'));
+
+    await expect(accept(issued.ticketId)).rejects.toThrow('환불 저장 실패');
+
+    const ticket = await prisma.ticket.findUniqueOrThrow({
+      where: { id: issued.ticketId },
+      include: { seatAssignments: true, ticketPauses: true },
+    });
+    expect({
+      ticketStatus: ticket.status,
+      seatStatuses: ticket.seatAssignments.map((row) => row.status),
+      pauseClosedAt: ticket.ticketPauses.map((pause) => pause.closedAt),
+      refunds: await prisma.refund.count({
+        where: { orderItemId: issued.orderItemId },
+      }),
+      attempts: await prisma.paymentCancel.count({
+        where: { orderItemId: issued.orderItemId },
+      }),
+    }).toEqual({
+      ticketStatus: TicketStatus.UNUSED,
+      seatStatuses: [SeatAssignmentStatus.ACTIVE],
+      pauseClosedAt: [null],
+      refunds: 0,
+      attempts: 0,
+    });
+    expect(pgGateway.sendCancel).not.toHaveBeenCalled();
   });
 });
