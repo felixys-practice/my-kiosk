@@ -1,5 +1,13 @@
 import { UserRole } from '@prisma/client';
-import { RefundStoreService } from './refund-store.service';
+import {
+  RefundStoreService,
+  storeRejectionError,
+} from './refund-store.service';
+import {
+  DomainBadRequestError,
+  DomainConflictError,
+  DomainNotFoundError,
+} from 'src/common/errors';
 import { RefundAcceptanceService } from './refund-acceptance.service';
 import { RefundAccessService } from './refund-access.service';
 import { RefundIdempotencyService } from './refund-idempotency.service';
@@ -33,5 +41,22 @@ describe('RefundStoreService', () => {
         },
       ),
     ).rejects.toBeInstanceOf(RefundForbiddenError);
+  });
+
+  describe('판정 거절은 계약 오류로 바뀐다', () => {
+    it.each([
+      ['REFUND_AMOUNT_EXCEEDED', DomainBadRequestError],
+      ['UNUSED_TICKET_FULL_REFUND_REQUIRED', DomainBadRequestError],
+      ['REFUND_REASON_REQUIRED', DomainBadRequestError],
+      ['PAYMENT_NOT_COMPLETED', DomainConflictError],
+      ['ALREADY_REFUNDED', DomainConflictError],
+      ['REFUND_IN_PROGRESS', DomainConflictError],
+      ['TICKET_NOT_FOUND', DomainNotFoundError],
+    ])('%s는 그 code의 %p 오류다', (code, errorBase) => {
+      const error = storeRejectionError(code);
+
+      expect(error).toBeInstanceOf(errorBase);
+      expect(error).toMatchObject({ code });
+    });
   });
 });

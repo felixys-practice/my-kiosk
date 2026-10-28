@@ -114,3 +114,11 @@ export class RefundStorageUnavailableError extends DomainServiceUnavailableError
     this.name = 'RefundStorageUnavailableError';
   }
 }
+
+/** 매장 환불 입력 규칙 위반 (400): REFUND_AMOUNT_EXCEEDED·UNUSED_TICKET_FULL_REFUND_REQUIRED·REFUND_REASON_REQUIRED */
+export class RefundInputRejectedError extends DomainBadRequestError {
+  constructor(readonly code: string) {
+    super(`매장 환불 입력이 규칙에 맞지 않습니다: ${code}`);
+    this.name = 'RefundInputRejectedError';
+  }
+}

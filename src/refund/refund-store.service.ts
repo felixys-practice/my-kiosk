@@ -14,6 +14,8 @@ import {
 import { evaluateStoreRefund } from './refund-policy';
 import {
   RefundForbiddenError,
+  RefundInputRejectedError,
+  RefundNotEligibleError,
   RefundTerminationConsentRequiredError,
   TicketNotFoundError,
 } from './errors';
@@ -93,10 +95,7 @@ export class RefundStoreService {
           now,
         );
         if (!decision.eligible) {
-          if (decision.code === 'TICKET_NOT_FOUND') {
-            throw new TicketNotFoundError();
-          }
-          throw new Error(decision.code);
+          throw storeRejectionError(decision.code);
         }
 
         // 판정을 모두 통과한 뒤 종료 동의를 확인한다
@@ -131,4 +130,25 @@ export class RefundStoreService {
     }
     return result;
   }
+}
+
+/** 점주 입력(금액·사유) 규칙 위반 코드 */
+const storeInputRejections: readonly string[] = [
+  'REFUND_AMOUNT_EXCEEDED',
+  'UNUSED_TICKET_FULL_REFUND_REQUIRED',
+  'REFUND_REASON_REQUIRED',
+];
+
+/**
+ * 매장 환불 판정 거절을 계약 오류로 바꾼다 (API 계약 §10)
+ * @param code 판정 거절 코드
+ * @returns 계약 코드를 가진 도메인 오류
+ */
+export function storeRejectionError(code: string): Error {
+  if (code === 'TICKET_NOT_FOUND') return new TicketNotFoundError();
+  // 금액·사유 입력 규칙 위반은 400, 대상 여부 규칙(결제·기존 환불)은 409
+  if (storeInputRejections.includes(code)) {
+    return new RefundInputRejectedError(code);
+  }
+  return new RefundNotEligibleError(code);
 }
