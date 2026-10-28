@@ -910,4 +910,44 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       payoutStatus: refund.payoutStatus,
     });
   });
+
+  it('같은 PG 취소 거래 ID가 동시에 저장돼 DB unique 위반이 나면 503이 아니라 PG_CALLBACK_TARGET_MISMATCH로 거절된다', async () => {
+    const first = await createPendingRefund();
+    const second = await createPendingRefund();
+    const racedTransactionId = `pg-cancel-${randomUUID()}`;
+    await service.applyPgResult({
+      paymentCancelId: first.paymentCancelId,
+      outcome: {
+        kind: 'SUCCEEDED',
+        pgTransactionId: racedTransactionId,
+        actualAmount: refundAmount,
+      },
+    });
+    // 두 콜백이 사전 확인을 함께 통과한 경쟁 상황: 사전 확인은 사용 중이 아니라고 답한다
+    const raced = jest
+      .spyOn(app.get(RefundRepository), 'isCancelTransactionUsedByOther')
+      .mockResolvedValueOnce(false);
+
+    const rejection = service.receiveCallback({
+      success: true,
+      paymentCancelId: second.paymentCancelId,
+      pgTransactionId: racedTransactionId,
+      orderItemId: second.orderItemId,
+      amount: refundAmount,
+      reason: null,
+    });
+
+    await expect(rejection).rejects.toBeInstanceOf(
+      PgCallbackTargetMismatchError,
+    );
+    raced.mockRestore();
+    const refund = await prisma.refund.findUniqueOrThrow({
+      where: { id: second.refundId },
+      include: { paymentCancels: true, ledgers: true },
+    });
+    expect({
+      attemptStatus: refund.paymentCancels[0].status,
+      ledgers: refund.ledgers.length,
+    }).toEqual({ attemptStatus: PaymentCancelStatus.REQUESTED, ledgers: 0 });
+  });
 });

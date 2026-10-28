@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import {
   PaymentCancelFailureCode,
   PaymentCancelStatus,
+  Prisma,
   RefundNotificationAudience,
   RefundPayoutStatus,
   RefundSource,
@@ -82,6 +83,25 @@ function isDomainError(error: unknown): boolean {
   ].some((domainError) => error instanceof domainError);
 }
 
+/**
+ * 다른 PG 취소 요청이 같은 PG 취소 거래 ID를 동시에 저장해 생긴 unique 위반을 연결 불일치로 바꾼다
+ * - 사전 확인(isCancelTransactionUsedByOther)을 두 요청이 함께 통과한 경쟁은 DB unique가 막는다(API 계약 §7)
+ * @param error 결과 반영 트랜잭션에서 난 오류
+ * @throws PgCallbackTargetMismatchError PG 취소 거래 ID unique 위반이면
+ * @throws 그 밖의 오류는 그대로 다시 던진다
+ */
+function rethrowCancelTransactionConflict(error: unknown): never {
+  if (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === 'P2002' &&
+    error.meta?.modelName === 'PaymentCancel' &&
+    JSON.stringify(error.meta).includes('pg_transaction_id')
+  ) {
+    throw new PgCallbackTargetMismatchError();
+  }
+  throw error;
+}
+
 /** 결과 반영 결과 */
 export type ApplyPgResultOutcome = {
   applied: boolean; // 이번 요청으로 결과를 저장했는지
@@ -123,136 +143,143 @@ export class RefundResultService {
   ): Promise<ApplyPgResultOutcome | null> {
     // 조치가 필요한 사건은 커밋된 뒤에만 거래 로그에 남긴다(롤백된 사건을 기록하지 않는다)
     const actionLogs: TransactionLog[] = [];
-    const result = await this.refundRepository.runInTransaction(async (tx) => {
-      // 결과가 온 PG 취소 요청과 환불을 찾고 Refund → PaymentCancel 순서로 잠근 뒤 다시 읽는다
-      const found = await this.refundRepository.findAttemptForResult(
-        command.paymentCancelId,
-        tx,
-      );
-      if (!found) return null;
-      await this.lockingRepository.lockForPayout(tx, {
-        refundId: found.refund.id,
-        paymentCancelIds: [found.id],
-        manualRefundPayoutIds: [],
-      });
-      const attempt = (await this.refundRepository.findAttemptForResult(
-        command.paymentCancelId,
-        tx,
-      ))!;
-      // 콜백이 가리킨 대상이 저장된 PaymentCancel → Refund 대상과 다르면 반영하지 않는다(API 계약 §7)
-      if (
-        command.expectedOrderItemId !== undefined &&
-        attempt.refund.orderItemId !== command.expectedOrderItemId
-      ) {
-        throw new PgCallbackTargetMismatchError();
-      }
-      // PG 취소 거래 ID가 원승인 거래 ID와 같으면 다른 거래의 결과다(API 계약 §7)
-      if (
-        command.outcome.kind === 'SUCCEEDED' &&
-        command.outcome.pgTransactionId === attempt.refund.approvalTransactionId
-      ) {
-        throw new PgCallbackTargetMismatchError();
-      }
-      const stored: ApplyPgResultOutcome = {
-        applied: false,
-        attemptStatus: attempt.status,
-        payoutStatus: attempt.refund.payoutStatus,
-      };
-      // 담당이 다른 작업으로 넘어갔으면 이 작업의 결과는 저장하지 않는다(API 계약 §6 담당 토큰 재확인)
-      if (
-        command.claimToken !== undefined &&
-        attempt.claimToken !== command.claimToken
-      ) {
-        return stored;
-      }
-      const now = new Date();
-      const { outcome } = command;
-      // 결과는 미확정 시도에만 한 번 반영한다(이미 확정된 시도는 저장된 결과를 유지)
-      if (!unresolvedAttemptStatuses.includes(attempt.status)) {
-        // 확정된 결과와 모순되는 늦은 통보는 덮어쓰지 않고 검토 필요·운영자 알림으로 남긴다(API 계약 §7)
-        if (contradicts(attempt, outcome)) {
-          await this.recordResultConflict(tx, attempt, actionLogs);
-          // 모순 기록으로 환불은 조치 필요가 됐다. 반환 상태도 저장된 상태와 맞춘다
+    const result = await this.refundRepository
+      .runInTransaction(async (tx) => {
+        // 결과가 온 PG 취소 요청과 환불을 찾고 Refund → PaymentCancel 순서로 잠근 뒤 다시 읽는다
+        const found = await this.refundRepository.findAttemptForResult(
+          command.paymentCancelId,
+          tx,
+        );
+        if (!found) return null;
+        await this.lockingRepository.lockForPayout(tx, {
+          refundId: found.refund.id,
+          paymentCancelIds: [found.id],
+          manualRefundPayoutIds: [],
+        });
+        const attempt = (await this.refundRepository.findAttemptForResult(
+          command.paymentCancelId,
+          tx,
+        ))!;
+        // 콜백이 가리킨 대상이 저장된 PaymentCancel → Refund 대상과 다르면 반영하지 않는다(API 계약 §7)
+        if (
+          command.expectedOrderItemId !== undefined &&
+          attempt.refund.orderItemId !== command.expectedOrderItemId
+        ) {
+          throw new PgCallbackTargetMismatchError();
+        }
+        // PG 취소 거래 ID가 원승인 거래 ID와 같으면 다른 거래의 결과다(API 계약 §7)
+        if (
+          command.outcome.kind === 'SUCCEEDED' &&
+          command.outcome.pgTransactionId ===
+            attempt.refund.approvalTransactionId
+        ) {
+          throw new PgCallbackTargetMismatchError();
+        }
+        const stored: ApplyPgResultOutcome = {
+          applied: false,
+          attemptStatus: attempt.status,
+          payoutStatus: attempt.refund.payoutStatus,
+        };
+        // 담당이 다른 작업으로 넘어갔으면 이 작업의 결과는 저장하지 않는다(API 계약 §6 담당 토큰 재확인)
+        if (
+          command.claimToken !== undefined &&
+          attempt.claimToken !== command.claimToken
+        ) {
+          return stored;
+        }
+        const now = new Date();
+        const { outcome } = command;
+        // 결과는 미확정 시도에만 한 번 반영한다(이미 확정된 시도는 저장된 결과를 유지)
+        if (!unresolvedAttemptStatuses.includes(attempt.status)) {
+          // 확정된 결과와 모순되는 늦은 통보는 덮어쓰지 않고 검토 필요·운영자 알림으로 남긴다(API 계약 §7)
+          if (contradicts(attempt, outcome)) {
+            await this.recordResultConflict(tx, attempt, actionLogs);
+            // 모순 기록으로 환불은 조치 필요가 됐다. 반환 상태도 저장된 상태와 맞춘다
+            return {
+              ...stored,
+              payoutStatus: RefundPayoutStatus.ACTION_REQUIRED,
+            };
+          }
+          return stored;
+        }
+        // PG 거절: 그 시도만 실패로 끝내고 환불은 미지급 조치 필요로 둔다(원장 없음, 이용 종료 유지)
+        if (outcome.kind === 'FAILED') {
+          await this.refundRepository.markAttemptFailed(tx, attempt.id, {
+            failureCode: PaymentCancelFailureCode.PG_REJECTED,
+            failureReason: outcome.reason,
+            now,
+          });
+          await this.refundRepository.updateRefundPayout(
+            tx,
+            attempt.refund.id,
+            {
+              payoutStatus: RefundPayoutStatus.ACTION_REQUIRED,
+              actionCode: 'PG_REJECTED',
+            },
+          );
+          await this.notifyPayoutAction(tx, attempt, 'PG_REJECTED', actionLogs);
           return {
-            ...stored,
+            applied: true,
+            attemptStatus: PaymentCancelStatus.FAILED,
             payoutStatus: RefundPayoutStatus.ACTION_REQUIRED,
           };
         }
-        return stored;
-      }
-      // PG 거절: 그 시도만 실패로 끝내고 환불은 미지급 조치 필요로 둔다(원장 없음, 이용 종료 유지)
-      if (outcome.kind === 'FAILED') {
-        await this.refundRepository.markAttemptFailed(tx, attempt.id, {
-          failureCode: PaymentCancelFailureCode.PG_REJECTED,
-          failureReason: outcome.reason,
+
+        // PG 취소 거래 ID는 전역에서 한 요청에만 쓰인다(API 계약 §7). 최종 중복 방지는 DB unique가 맡는다
+        if (
+          await this.refundRepository.isCancelTransactionUsedByOther(
+            tx,
+            outcome.pgTransactionId,
+            attempt.id,
+          )
+        ) {
+          throw new PgCallbackTargetMismatchError();
+        }
+        // PG 취소 성공: 실제액을 기록하고 지급 합계에 더한다
+        await this.refundRepository.markAttemptSucceeded(tx, attempt.id, {
+          pgTransactionId: outcome.pgTransactionId,
+          actualAmount: outcome.actualAmount,
           now,
         });
-        await this.refundRepository.updateRefundPayout(tx, attempt.refund.id, {
-          payoutStatus: RefundPayoutStatus.ACTION_REQUIRED,
-          actionCode: 'PG_REJECTED',
+        await this.ledgerRepository.recordPayout(tx, {
+          shopId: attempt.refund.shopId,
+          orderId: attempt.refund.orderId,
+          refundId: attempt.refund.id,
+          paidAmount: outcome.actualAmount,
+          paymentCancelId: attempt.id,
         });
-        await this.notifyPayoutAction(tx, attempt, 'PG_REJECTED', actionLogs);
+        const paidAmount = attempt.refund.paidAmount + outcome.actualAmount;
+        // 지급 완료는 미지급액 0이고 검토가 끝났을 때만이다(data-model §2). 금액이 다르면 금액은 그대로 두고 조치·검토 필요(API 계약 §6)
+        const amountMatches = paidAmount === attempt.refund.amount;
+        const settled = amountMatches && !attempt.refund.reviewRequired;
+        const payoutStatus = settled
+          ? RefundPayoutStatus.PAID
+          : RefundPayoutStatus.ACTION_REQUIRED;
+        await this.refundRepository.updateRefundPayout(
+          tx,
+          attempt.refund.id,
+          settled
+            ? { paidAmount, payoutStatus, paidAt: now }
+            : amountMatches
+              ? { paidAmount, payoutStatus }
+              : {
+                  paidAmount,
+                  payoutStatus,
+                  reviewRequired: true,
+                  actionCode: 'AMOUNT_MISMATCH',
+                },
+        );
+        // 실제액 불일치는 운영자가 부족액·초과액을 처리해야 하므로 알린다(FR-027)
+        if (!amountMatches) {
+          await this.notifyOperator(tx, attempt, 'AMOUNT_MISMATCH', actionLogs);
+        }
         return {
           applied: true,
-          attemptStatus: PaymentCancelStatus.FAILED,
-          payoutStatus: RefundPayoutStatus.ACTION_REQUIRED,
+          attemptStatus: PaymentCancelStatus.SUCCEEDED,
+          payoutStatus,
         };
-      }
-
-      // PG 취소 거래 ID는 전역에서 한 요청에만 쓰인다(API 계약 §7). 최종 중복 방지는 DB unique가 맡는다
-      if (
-        await this.refundRepository.isCancelTransactionUsedByOther(
-          tx,
-          outcome.pgTransactionId,
-          attempt.id,
-        )
-      ) {
-        throw new PgCallbackTargetMismatchError();
-      }
-      // PG 취소 성공: 실제액을 기록하고 지급 합계에 더한다
-      await this.refundRepository.markAttemptSucceeded(tx, attempt.id, {
-        pgTransactionId: outcome.pgTransactionId,
-        actualAmount: outcome.actualAmount,
-        now,
-      });
-      await this.ledgerRepository.recordPayout(tx, {
-        shopId: attempt.refund.shopId,
-        orderId: attempt.refund.orderId,
-        refundId: attempt.refund.id,
-        paidAmount: outcome.actualAmount,
-        paymentCancelId: attempt.id,
-      });
-      const paidAmount = attempt.refund.paidAmount + outcome.actualAmount;
-      // 지급 완료는 미지급액 0이고 검토가 끝났을 때만이다(data-model §2). 금액이 다르면 금액은 그대로 두고 조치·검토 필요(API 계약 §6)
-      const amountMatches = paidAmount === attempt.refund.amount;
-      const settled = amountMatches && !attempt.refund.reviewRequired;
-      const payoutStatus = settled
-        ? RefundPayoutStatus.PAID
-        : RefundPayoutStatus.ACTION_REQUIRED;
-      await this.refundRepository.updateRefundPayout(
-        tx,
-        attempt.refund.id,
-        settled
-          ? { paidAmount, payoutStatus, paidAt: now }
-          : amountMatches
-            ? { paidAmount, payoutStatus }
-            : {
-                paidAmount,
-                payoutStatus,
-                reviewRequired: true,
-                actionCode: 'AMOUNT_MISMATCH',
-              },
-      );
-      // 실제액 불일치는 운영자가 부족액·초과액을 처리해야 하므로 알린다(FR-027)
-      if (!amountMatches) {
-        await this.notifyOperator(tx, attempt, 'AMOUNT_MISMATCH', actionLogs);
-      }
-      return {
-        applied: true,
-        attemptStatus: PaymentCancelStatus.SUCCEEDED,
-        payoutStatus,
-      };
-    });
+      })
+      .catch(rethrowCancelTransactionConflict);
     for (const log of actionLogs) this.txLogger.logTransaction(log);
     return result;
   }
