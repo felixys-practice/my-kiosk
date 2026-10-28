@@ -249,6 +249,10 @@ suite_baseline: green
 | U339 | (실제 DB) 환불이 이용권을 먼저 잠근 상태에서 일반 퇴실(endSession)이 같은 세션을 종료해도 교착 없이 둘 다 끝난다: 퇴실도 Ticket → UsageSession 순서로 잠근다 (Phase 4 검수 1 P2) | 계약 §6 | example | DONE | `src/session-lifecycle/session-lifecycle.integration.spec.ts`(실제 DB) |
 | U340 | 매장 환불 요청에 공백만 있는 사유를 보내면 형식 오류(400)다: 제공한 사유는 trim 후 1~500자 (Phase 4 검수 1 P2) | 계약 §4 | example | DONE | `src/refund/dto/store-refund.dto.spec.ts` |
 | U341 | (실제 DB) 입실 후속 실패 처리(failSession)는 이미 종료된(환불 퇴실) 세션을 덮어쓰지 않는다 (Phase 5 검수 1 P2) | FR-042 | example | DONE | `src/refund/refund-store.integration.spec.ts`(실제 DB) |
+| U342 | PG 전송 결과가 NOT_SENT이면 그 시도는 FAILED/SEND_FAILED, 환불은 ACTION_REQUIRED가 되고 알림이 저장된다 (US5 진행 중 추가, A34 단위) | FR-021 | example | PENDING | |
+| U343 | PG 전송 결과가 즉시 REJECTED이면 그 시도는 FAILED/PG_REJECTED, 환불은 ACTION_REQUIRED다 (US5 진행 중 추가, 계약 §8) | FR-020 | example | PENDING | |
+| U344 | PG 전송 결과가 즉시 SUCCEEDED이면 공통 결과 처리로 실제액·원장을 반영한다 (US5 진행 중 추가, 계약 §8) | FR-018 | example | PENDING | |
+| U345 | 환불 접수 응답과 같은 키 재응답은 PG 전송 결과(예: ACTION_REQUIRED)를 반영한 같은 응답이다 (US5 진행 중 추가, 계약 §4) | FR-035 | example | PENDING | |
 
 ### `src/refund/refund-idempotency.service.ts`
 

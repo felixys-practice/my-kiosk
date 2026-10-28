@@ -30,6 +30,7 @@ import {
 } from './errors';
 import { RefundRepository } from './refund.repository';
 import { RefundResultService } from './refund-result.service';
+import { RefundDispatchService } from './refund-dispatch.service';
 
 /**
  * 환불금 지급 결과 공통 처리를 실제 PostgreSQL에서 확인한다 (US4, tasks T068~T071)
@@ -39,6 +40,8 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
   let service: RefundResultService;
+  /** 환불 PG 포트 대역(전송·조회 응답을 테스트마다 정한다) */
+  const pgGateway = { sendCancel: jest.fn(), inquireCancel: jest.fn() };
   let customerId: string;
   let shopId: string;
   let productId: string;
@@ -140,7 +143,7 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(REFUND_PG_GATEWAY)
-      .useValue({ sendCancel: jest.fn(), inquireCancel: jest.fn() })
+      .useValue(pgGateway)
       .compile();
     app = moduleRef.createNestApplication();
     await app.init();
@@ -994,6 +997,32 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
         actualAmount: refundAmount - 500,
         pgTransactionId: receivedTransactionId,
       },
+    });
+  });
+
+  it('응답 없는(UNKNOWN) PG 취소 요청은 전송 시도가 기록되고 전송 60초 뒤 첫 조회가 예정된다', async () => {
+    const pending = await createPendingRefund();
+    pgGateway.sendCancel.mockResolvedValueOnce({
+      result: 'UNKNOWN',
+      reason: '응답 시간 초과',
+    });
+
+    await app.get(RefundDispatchService).dispatch(pending.paymentCancelId);
+
+    const attempt = await prisma.paymentCancel.findUniqueOrThrow({
+      where: { id: pending.paymentCancelId },
+    });
+    const sentAt = attempt.lastSendAttemptAt ?? new Date(Number.NaN);
+    expect({
+      status: attempt.status,
+      sendAttemptCount: attempt.sendAttemptCount,
+      nextInquiryAt: attempt.nextInquiryAt?.getTime(),
+      claimToken: attempt.claimToken,
+    }).toEqual({
+      status: PaymentCancelStatus.REQUESTED,
+      sendAttemptCount: 1,
+      nextInquiryAt: sentAt.getTime() + 60_000,
+      claimToken: null,
     });
   });
 });

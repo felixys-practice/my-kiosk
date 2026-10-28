@@ -37,6 +37,9 @@ export type AttemptForResult = {
   id: string;
   status: PaymentCancelStatus;
   claimToken: string | null;
+  claimUntil: Date | null; // 담당 작업자의 처리 기한
+  amount: number; // 이 PG 취소 요청으로 보낼 금액
+  lastSendAttemptAt: Date | null; // 마지막 전송 시도 시각
   actualAmount: number | null; // 성공으로 확정됐으면 PG 실제 취소액
   pgTransactionId: string | null; // 성공으로 확정됐으면 PG 취소 거래 ID
   refund: {
@@ -296,6 +299,9 @@ export class RefundRepository {
         id: true,
         status: true,
         claimToken: true,
+        claimUntil: true,
+        amount: true,
+        lastSendAttemptAt: true,
         actualAmount: true,
         pgTransactionId: true,
         refund: {
@@ -322,6 +328,9 @@ export class RefundRepository {
       id: attempt.id,
       status: attempt.status,
       claimToken: attempt.claimToken,
+      claimUntil: attempt.claimUntil,
+      amount: attempt.amount,
+      lastSendAttemptAt: attempt.lastSendAttemptAt,
       actualAmount: attempt.actualAmount,
       pgTransactionId: attempt.pgTransactionId,
       refund: {
@@ -370,6 +379,47 @@ export class RefundRepository {
       select: { id: true },
     });
     return used !== null && used.id !== attemptId;
+  }
+
+  /**
+   * 전송 직전에 전송 시도 횟수·시각과 담당을 저장한다 (API 계약 §8)
+   * - 이 기록이 커밋된 뒤에만 PG에 보내므로, 전송 중 중단돼도 재기동 후 조회부터 처리할 수 있다
+   * @param tx 전송 준비 트랜잭션
+   * @param id PG 취소 요청 ID
+   * @param claim 담당 토큰·처리 기한·전송 시각
+   */
+  async markSendStarted(
+    tx: TransactionClient,
+    id: string,
+    claim: { claimToken: string; claimUntil: Date; now: Date },
+  ): Promise<void> {
+    await tx.paymentCancel.update({
+      where: { id },
+      data: {
+        sendAttemptCount: { increment: 1 },
+        lastSendAttemptAt: claim.now,
+        claimToken: claim.claimToken,
+        claimUntil: claim.claimUntil,
+      },
+    });
+  }
+
+  /**
+   * 응답이 확정되지 않은 전송 뒤 첫 조회를 예약하고 담당을 내려놓는다
+   * - 담당 토큰이 그대로일 때만 바꾼다(그사이 콜백 등이 확정했으면 아무것도 하지 않는다)
+   * @param id PG 취소 요청 ID
+   * @param claimToken 전송을 맡은 담당 토큰
+   * @param nextInquiryAt 첫 조회 예정 시각
+   */
+  async scheduleInquiryAfterSend(
+    id: string,
+    claimToken: string,
+    nextInquiryAt: Date,
+  ): Promise<void> {
+    await this.prisma.paymentCancel.updateMany({
+      where: { id, claimToken },
+      data: { nextInquiryAt, claimToken: null, claimUntil: null },
+    });
   }
 
   /**
