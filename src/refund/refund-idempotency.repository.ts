@@ -10,6 +10,7 @@ export type IdempotencyRecord = {
   responseStatus: number | null;
   responseBody: unknown;
   claimUntil: Date | null; // 처리 중 기록의 처리 기한. 지나면 다음 요청이 이어받는다
+  refundId?: string | null; // 처리(환불 확정)가 커밋됐으면 그 환불. 커밋 뒤 단계 전에 중단됐는지 판단한다
   createdAt: Date;
 };
 
@@ -172,19 +173,50 @@ export class RefundIdempotencyRepository {
   }
 
   /**
-   * 완료된 멱등 기록의 저장 응답을 바꾼다(커밋 뒤 PG 전송 결과를 최초 응답에 반영)
-   * @param scope 요청자·기능·키
-   * @param response 새 응답
+   * 처리(환불 확정)가 끝났음을 처리 트랜잭션 안에서 표시한다(최종 응답은 커밋 뒤 단계가 정한다)
+   * - 지금도 이 요청이 담당일 때만 표시한다. 아니면 오류로 처리 전체를 롤백한다
+   * @param tx 처리 트랜잭션
+   * @param id 멱등 기록 ID
+   * @param claimToken 담당 토큰
+   * @param refundId 확정한 환불
    */
-  async replaceCompletedResponse(
-    scope: IdempotencyScope,
+  async markHandledInTransaction(
+    tx: TransactionClient,
+    id: string,
+    claimToken: string,
+    refundId: string | undefined,
+  ): Promise<void> {
+    const { count } = await tx.refundIdempotencyRecord.updateMany({
+      where: { id, status: RefundIdempotencyStatus.IN_PROGRESS, claimToken },
+      data: { refundId },
+    });
+    if (count !== 1) {
+      throw new Error(
+        `멱등 기록의 담당이 아니어서 처리를 표시할 수 없습니다: ${id}`,
+      );
+    }
+  }
+
+  /**
+   * 커밋 뒤 단계(PG 전송 등)까지 끝난 최종 응답으로 기록을 완료한다(담당 토큰일 때만)
+   * @param id 멱등 기록 ID
+   * @param claimToken 담당 토큰
+   * @param response 최종 응답
+   */
+  async completeAfterCommit(
+    id: string,
+    claimToken: string,
     response: { status: number; body: unknown },
   ): Promise<void> {
     await this.prisma.refundIdempotencyRecord.updateMany({
-      where: { ...scope, status: RefundIdempotencyStatus.COMPLETED },
+      where: { id, status: RefundIdempotencyStatus.IN_PROGRESS, claimToken },
       data: {
+        status: RefundIdempotencyStatus.COMPLETED,
         responseStatus: response.status,
         responseBody: response.body as Prisma.InputJsonValue,
+        completedAt: new Date(),
+        claimToken: null,
+        claimUntil: null,
       },
     });
   }

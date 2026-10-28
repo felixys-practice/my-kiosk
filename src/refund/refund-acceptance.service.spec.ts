@@ -115,10 +115,11 @@ describe('RefundAcceptanceService', () => {
       execute: async (
         _command: unknown,
         handler: (t: TransactionClient) => Promise<unknown>,
+        after?: { afterCommit: (r: unknown) => Promise<unknown> },
       ) => {
         const result = await handler(tx);
         events.push('commit');
-        return result;
+        return after ? after.afterCommit(result) : result;
       },
     } as unknown as RefundIdempotencyService;
     service = new RefundAcceptanceService(

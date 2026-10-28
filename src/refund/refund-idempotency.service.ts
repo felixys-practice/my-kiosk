@@ -54,6 +54,17 @@ export type IdempotentResult<T> = {
 };
 
 /**
+ * 커밋 뒤 단계가 있는 처리의 옵션(예: 환불 확정 뒤 PG 전송)
+ * - 최초 응답은 커밋 뒤 단계까지 끝난 결과로 정하고, 그 전까지 같은 키 요청은 처리 중으로 거절한다
+ */
+export type IdempotentAfterCommit<T> = {
+  // 처리 커밋 뒤 실행하고 최종 응답을 돌려준다
+  afterCommit: (result: IdempotentResult<T>) => Promise<IdempotentResult<T>>;
+  // 커밋 뒤 단계 전에 중단된 처리를 이어받을 때 저장된 결과로 최종 응답을 만든다
+  rebuild: (refundId: string) => Promise<IdempotentResult<T>>;
+};
+
+/**
  * 환불 요청의 DB 기반 멱등 처리
  */
 @Injectable()
@@ -75,10 +86,12 @@ export class RefundIdempotencyService {
   async execute<T>(
     command: IdempotentCommand,
     handler: (tx: TransactionClient) => Promise<IdempotentResult<T>>,
+    after?: IdempotentAfterCommit<T>,
   ): Promise<IdempotentResult<T>> {
     // 키가 없으면 멱등 처리 없이 실행한다(상품당 확정 환불 unique가 중복 환불을 막는다)
     if (command.key === undefined) {
-      return this.repository.runInTransaction(handler);
+      const result = await this.repository.runInTransaction(handler);
+      return after ? after.afterCommit(result) : result;
     }
 
     // 키 형식 검사(API 계약 중복 요청: 1~128자 ASCII 비공백)
@@ -123,6 +136,16 @@ export class RefundIdempotencyService {
             command.authorize,
           )
         ) {
+          // 처리는 커밋됐지만 커밋 뒤 단계 전에 중단된 기록이면 처리를 다시 하지 않고 저장된 결과로 응답을 만든다
+          if (after && existing.refundId) {
+            const rebuilt = await after.rebuild(existing.refundId);
+            await this.repository.completeAfterCommit(
+              existing.id,
+              claimToken,
+              rebuilt,
+            );
+            return rebuilt;
+          }
           created = existing;
           break;
         }
@@ -133,9 +156,11 @@ export class RefundIdempotencyService {
     }
     if (!created) throw new IdempotencyRequestInProgressError();
 
-    // 처음 요청이면 처리한다. 처리와 최초 응답 저장을 한 트랜잭션으로 묶어 환불이 커밋되면 응답도 반드시 남긴다
+    // 처음 요청이면 처리한다. 커밋 뒤 단계가 없으면 처리와 최초 응답 저장을 한 트랜잭션으로 묶고,
+    // 있으면 처리 커밋 때 환불만 표시해 두고 커밋 뒤 단계가 끝난 최종 응답으로 완료한다
+    let handled: IdempotentResult<T>;
     try {
-      return await this.repository.runInTransaction(async (tx) => {
+      handled = await this.repository.runInTransaction(async (tx) => {
         // 트랜잭션을 시작하자마자 기록을 잡는다. 그 사이 다른 요청이 이어받았으면 처리하지 않는다
         if (
           !(await this.repository.acquireInTransaction(
@@ -147,12 +172,21 @@ export class RefundIdempotencyService {
           throw new IdempotencyRequestInProgressError();
         }
         const result = await handler(tx);
-        await this.repository.completeInTransaction(
-          tx,
-          created.id,
-          claimToken,
-          result,
-        );
+        if (after) {
+          await this.repository.markHandledInTransaction(
+            tx,
+            created.id,
+            claimToken,
+            result.refundId,
+          );
+        } else {
+          await this.repository.completeInTransaction(
+            tx,
+            created.id,
+            claimToken,
+            result,
+          );
+        }
         return result;
       });
     } catch (error) {
@@ -160,27 +194,12 @@ export class RefundIdempotencyService {
       await this.repository.remove(created.id, claimToken);
       throw error;
     }
-  }
+    if (!after) return handled;
 
-  /**
-   * 최초 응답을 바꾼다(커밋 뒤 PG 전송 결과를 반영한 응답을 같은 키 재응답에도 돌려주기 위해)
-   * - 키 없이 처리한 요청은 저장한 응답이 없으므로 아무것도 하지 않는다
-   * @param scope 요청자·기능·키(키 없으면 생략)
-   * @param response 새 최초 응답
-   */
-  async replaceResponse(
-    scope: { requesterId: string; operation: string; key?: string },
-    response: { status: number; body: unknown },
-  ): Promise<void> {
-    if (scope.key === undefined) return;
-    await this.repository.replaceCompletedResponse(
-      {
-        requesterId: scope.requesterId,
-        operation: scope.operation,
-        key: scope.key,
-      },
-      response,
-    );
+    // 커밋 뒤 단계가 실패하면 기록은 처리 중으로 남고, 처리 기한이 지난 뒤 같은 키 요청이 저장된 결과로 완료한다
+    const final = await after.afterCommit(handled);
+    await this.repository.completeAfterCommit(created.id, claimToken, final);
+    return final;
   }
 
   /**

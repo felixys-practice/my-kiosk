@@ -149,6 +149,7 @@ export class RefundStoreService {
         pending = confirmed.pending;
         return confirmed.result;
       },
+      this.acceptanceService.afterAcceptance(() => pending),
     );
 
     // 퇴실시킨 세션의 자동 종료 작업은 커밋 뒤 지운다. 실패해도 확정된 이용 종료·퇴실은 되돌리지 않는다
@@ -156,13 +157,7 @@ export class RefundStoreService {
       await this.removeSessionEndJob(endedSessionJobId);
     }
 
-    // PG 전송은 커밋 뒤에만 하고, 전송 결과를 응답과 멱등 기록에 반영한다
-    if (!pending) return result;
-    return this.acceptanceService.sendAccepted(pending, result, {
-      requesterId: actor.userId,
-      operation: 'STORE_REFUND',
-      key: command.idempotencyKey,
-    });
+    return result;
   }
 
   /**

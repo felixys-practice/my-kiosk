@@ -768,6 +768,41 @@ export class RefundRepository {
   }
 
   /**
+   * 접수 응답을 다시 만들 환불의 저장 상태를 읽는다
+   * @param refundId 환불 ID
+   * @returns 접수 응답에 담을 값
+   */
+  async findAcceptanceSnapshot(refundId: string) {
+    const refund = await this.prisma.refund.findUniqueOrThrow({
+      where: { id: refundId },
+      select: {
+        decisionStatus: true,
+        amount: true,
+        payoutStatus: true,
+        actionCode: true,
+        acceptedAt: true,
+        terminatedAt: true,
+        orderItem: { select: { ticket: { select: { id: true } } } },
+        paymentCancels: {
+          orderBy: { attemptNumber: 'desc' },
+          take: 1,
+          select: { id: true },
+        },
+      },
+    });
+    return {
+      decisionStatus: refund.decisionStatus,
+      amount: refund.amount,
+      payoutStatus: refund.payoutStatus,
+      actionCode: refund.actionCode,
+      acceptedAt: refund.acceptedAt!,
+      terminatedAt: refund.terminatedAt!,
+      ticketId: refund.orderItem!.ticket!.id,
+      paymentCancelId: refund.paymentCancels[0]?.id ?? null,
+    };
+  }
+
+  /**
    * 개별 확인 응답에 담을 환불의 최신 지급 상태를 읽는다
    * @param refundId 환불 ID
    * @returns 환불 요약

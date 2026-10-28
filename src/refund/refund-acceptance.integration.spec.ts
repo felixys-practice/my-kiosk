@@ -568,4 +568,88 @@ describe('환불 확정 저장 (실제 DB)', () => {
       manualResendCount: attempt.manualResendCount,
     }).toEqual({ sendAttemptCount: 1, resendCount: 0, manualResendCount: 0 });
   });
+
+  it('PG 전송 중에 같은 키로 다시 요청하면 처리 중으로 거절되고, 완료 뒤 재응답은 전송 결과를 반영한 최초 응답과 같다', async () => {
+    const issued = await createUnusedPeriodTicket();
+    let releaseSend!: () => void;
+    const sendHeld = new Promise<void>((resolve) => {
+      releaseSend = resolve;
+    });
+    let sendStarted!: () => void;
+    const sendStartedSignal = new Promise<void>((resolve) => {
+      sendStarted = resolve;
+    });
+    pgGateway.sendCancel.mockImplementationOnce(async () => {
+      sendStarted();
+      await sendHeld;
+      return { result: 'NOT_SENT', reason: 'PG 연결 설정 누락' };
+    });
+    const command = {
+      ticketId: issued.ticketId,
+      consentToTerminateTicket: true,
+      idempotencyKey: `key-${randomUUID()}`,
+    };
+    const actor = { userId: customerId, role: UserRole.USER };
+
+    const first = service.acceptCustomerRefund(actor, command);
+    await sendStartedSignal;
+    const duringSend = await service
+      .acceptCustomerRefund(actor, command)
+      .then(() => 'resolved')
+      .catch((error: { code?: string }) => error.code);
+    releaseSend();
+    const firstResponse = await first;
+    const replay = await service.acceptCustomerRefund(actor, command);
+
+    expect({
+      duringSend,
+      firstPayout: firstResponse.body.payoutStatus,
+      replay: { status: replay.status, body: replay.body },
+    }).toEqual({
+      duringSend: 'IDEMPOTENCY_REQUEST_IN_PROGRESS',
+      firstPayout: RefundPayoutStatus.ACTION_REQUIRED,
+      replay: { status: firstResponse.status, body: firstResponse.body },
+    });
+  });
+
+  it('확정은 커밋됐지만 PG 전송 단계 전에 중단되면, 처리 기한이 지난 뒤 같은 키 요청은 환불을 새로 만들지 않고 저장된 상태로 응답한다', async () => {
+    const issued = await createUnusedPeriodTicket();
+    pgGateway.sendCancel.mockRejectedValueOnce(new Error('서버 중단'));
+    const command = {
+      ticketId: issued.ticketId,
+      consentToTerminateTicket: true,
+      idempotencyKey: `key-${randomUUID()}`,
+    };
+    const actor = { userId: customerId, role: UserRole.USER };
+    await expect(service.acceptCustomerRefund(actor, command)).rejects.toThrow(
+      '서버 중단',
+    );
+    // 중단된 요청의 처리 기한이 지난 상태
+    await prisma.refundIdempotencyRecord.updateMany({
+      where: { requesterId: customerId, key: command.idempotencyKey },
+      data: { claimUntil: new Date(Date.now() - 1_000) },
+    });
+
+    const retried = await service.acceptCustomerRefund(actor, command);
+
+    const refunds = await prisma.refund.findMany({
+      where: { orderItemId: issued.orderItemId },
+    });
+    const record = await prisma.refundIdempotencyRecord.findFirstOrThrow({
+      where: { requesterId: customerId, key: command.idempotencyKey },
+    });
+    expect({
+      status: retried.status,
+      refundId: retried.body.refundId,
+      refunds: refunds.length,
+      sends: pgGateway.sendCancel.mock.calls.length,
+      record: record.status,
+    }).toEqual({
+      status: 202,
+      refundId: refunds[0].id,
+      refunds: 1,
+      sends: 1,
+      record: 'COMPLETED',
+    });
+  });
 });

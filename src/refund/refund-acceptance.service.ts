@@ -17,6 +17,7 @@ import {
 import { TransactionClient } from 'src/prisma/prisma.service';
 import { RefundLockingRepository } from './refund-locking.repository';
 import {
+  IdempotentAfterCommit,
   IdempotentResult,
   RefundIdempotencyService,
 } from './refund-idempotency.service';
@@ -138,28 +139,21 @@ export class RefundAcceptanceService {
         accepted = confirmed.pending;
         return confirmed.result;
       },
+      this.afterAcceptance(() => accepted),
     );
 
-    // PG 전송은 커밋 뒤에만 하고, 전송 결과를 응답과 멱등 기록에 반영한다
-    if (!accepted) return result;
-    return this.sendAccepted(accepted, result, {
-      requesterId: actor.userId,
-      operation: 'CUSTOMER_REFUND',
-      key: command.idempotencyKey,
-    });
+    return result;
   }
 
   /**
    * 커밋된 환불의 최초 PG 취소 요청을 보내고 결과를 응답·멱등 기록에 반영한다(고객·매장 공통)
    * @param pending 커밋 뒤 보낼 PG 취소 요청과 그 전송 담당
    * @param result 확정 트랜잭션이 만든 접수 응답
-   * @param scope 멱등 기록 범위(키 없으면 기록 갱신 없음)
    * @returns 전송 결과(지급 상태·조치 사유)를 반영한 접수 응답
    */
   async sendAccepted(
     pending: PendingSend,
     result: IdempotentResult<RefundAcceptance>,
-    scope: { requesterId: string; operation: string; key?: string },
   ): Promise<IdempotentResult<RefundAcceptance>> {
     const sendResult = await this.pgGateway.sendCancel({
       paymentCancelId: pending.paymentCancelId,
@@ -180,11 +174,54 @@ export class RefundAcceptanceService {
         actionCode: state.actionCode,
       },
     };
-    // 멱등 키로 저장한 최초 응답도 같은 내용으로 바꾼다(키 없이 처리한 요청은 저장 응답이 없음)
-    if (scope.key !== undefined) {
-      await this.idempotencyService.replaceResponse(scope, updated);
-    }
     return updated;
+  }
+
+  /**
+   * 환불 접수의 커밋 뒤 단계(최초 PG 전송)와 중단 복구를 멱등 처리에 넘길 형태로 만든다(고객·매장 공통)
+   * - 최초 응답은 전송 결과를 반영한 뒤 정해지고, 그 전까지 같은 키 요청은 처리 중으로 거절된다(API 계약 §4)
+   * @param pending 처리 함수가 확정한 PG 취소 요청을 돌려주는 함수(0원이면 없음)
+   * @returns 커밋 뒤 전송·중단 뒤 응답 재구성
+   */
+  afterAcceptance(
+    pending: () => PendingSend | undefined,
+  ): IdempotentAfterCommit<RefundAcceptance> {
+    return {
+      afterCommit: (handled) => {
+        const send = pending();
+        return send
+          ? this.sendAccepted(send, handled)
+          : Promise.resolve(handled);
+      },
+      rebuild: (refundId) => this.rebuildAcceptance(refundId),
+    };
+  }
+
+  /**
+   * 저장된 환불 상태로 접수 응답을 다시 만든다(커밋 뒤 전송 단계 전에 중단된 요청을 이어받을 때)
+   * @param refundId 확정된 환불
+   * @returns 접수 응답(0원 지급 완료면 200, 그 밖 202)
+   */
+  async rebuildAcceptance(
+    refundId: string,
+  ): Promise<IdempotentResult<RefundAcceptance>> {
+    const stored = await this.refundRepository.findAcceptanceSnapshot(refundId);
+    const isZero = stored.amount === 0;
+    return {
+      status: isZero ? 200 : 202,
+      refundId,
+      body: {
+        refundId,
+        decisionStatus: stored.decisionStatus,
+        ticketId: stored.ticketId,
+        amount: stored.amount,
+        payoutStatus: stored.payoutStatus,
+        paymentCancelId: stored.paymentCancelId,
+        actionCode: stored.actionCode,
+        acceptedAt: stored.acceptedAt.toISOString(),
+        terminatedAt: stored.terminatedAt.toISOString(),
+      },
+    };
   }
 
   /**
