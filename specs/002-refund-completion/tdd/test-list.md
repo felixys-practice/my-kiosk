@@ -507,7 +507,7 @@ suite_baseline: green
 | U192 | 재시도 사유가 trim 후 501자이면 400을 받는다 | FR-044 | example | DONE | `src/refund/dto/retry-refund.dto.spec.ts` › 앞뒤 공백을 지운 재시도 사유가 501자이면 형식 오류(400)다 |
 | U193 | 재시도에 Idempotency-Key가 없으면 IDEMPOTENCY_KEY_REQUIRED로 거절된다 | FR-044 | example | DONE | `test/refund-operations.e2e-spec.ts` › 운영자의 PG 직접 재시도에 Idempotency-Key가 없으면 400… |
 | U194 | OWNER의 재시도는 403 REFUND_FORBIDDEN으로 거절된다 | FR-050 | example | DONE | `test/refund-operations.e2e-spec.ts` › 점주의 PG 직접 재시도는 403 REFUND_FORBIDDEN으로… |
-| U195 | RETRY_EXHAUSTED로 FAILED인 요청을 개별 확인해 NOT_FOUND이면 새 PG 취소 요청을 즉시 보낸다 | FR-057 | example | PENDING | |
+| U195 | RETRY_EXHAUSTED로 FAILED인 요청을 개별 확인해 NOT_FOUND이면 새 PG 취소 요청을 즉시 보낸다 | FR-057 | example | DONE | `src/refund/refund-result.integration.spec.ts` › 실패가 확정된 요청의 개별 확인 › 한도 소진으로 실패한 요청을 개별 확인해 PG 미접수가 확인되면… |
 | U196 | SEND_FAILED로 FAILED인 요청을 개별 확인해 NOT_FOUND이면 새 PG 취소 요청을 즉시 보낸다 | FR-057 | example | PENDING | |
 | U197 | PG_REJECTED로 FAILED인 요청을 개별 확인해 거절 확정이면 새 PG 취소 요청을 즉시 보낸다 | FR-057 | example | PENDING | |
 | U198 | 세 사유 외의 확정 실패는 NO_PENDING_ATTEMPT를 받고 PG는 호출되지 않는다 | FR-056 | example | PENDING | |

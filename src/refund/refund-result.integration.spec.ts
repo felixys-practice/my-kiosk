@@ -2197,38 +2197,39 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
     );
   });
 
-  describe('MANAGER의 PG 직접 재시도', () => {
-    /**
-     * 최초 PG 취소 요청이 확정 실패해 조치 필요가 된 환불을 만든다
-     * @param failureCode 실패 사유
-     * @param resendCount 실패한 요청의 자동 재전송 횟수
-     * @returns 환불·실패한 요청·주문 ID
-     */
-    async function createFailedRefund(
-      failureCode: PaymentCancelFailureCode = PaymentCancelFailureCode.SEND_FAILED,
-      resendCount = 0,
-    ) {
-      const pending = await createPendingRefund();
-      await prisma.paymentCancel.update({
-        where: { id: pending.paymentCancelId },
-        data: {
-          status: PaymentCancelStatus.FAILED,
-          failureCode,
-          failedAt: new Date(),
-          resendCount,
-        },
-      });
-      await prisma.refund.update({
-        where: { id: pending.refundId },
-        data: {
-          payoutStatus: RefundPayoutStatus.ACTION_REQUIRED,
-          actionCode: failureCode,
-        },
-      });
-      return pending;
-    }
+  /**
+   * 최초 PG 취소 요청이 확정 실패해 조치 필요가 된 환불을 만든다
+   * @param failureCode 실패 사유
+   * @param resendCount 실패한 요청의 자동 재전송 횟수
+   * @returns 환불·실패한 요청·주문 ID
+   */
+  async function createFailedRefund(
+    failureCode: PaymentCancelFailureCode = PaymentCancelFailureCode.SEND_FAILED,
+    resendCount = 0,
+  ) {
+    const pending = await createPendingRefund();
+    await prisma.paymentCancel.update({
+      where: { id: pending.paymentCancelId },
+      data: {
+        status: PaymentCancelStatus.FAILED,
+        failureCode,
+        failedAt: new Date(),
+        resendCount,
+      },
+    });
+    await prisma.refund.update({
+      where: { id: pending.refundId },
+      data: {
+        payoutStatus: RefundPayoutStatus.ACTION_REQUIRED,
+        actionCode: failureCode,
+      },
+    });
+    return pending;
+  }
 
-    const manager = () => ({ userId: managerId, role: UserRole.MANAGER });
+  const manager = () => ({ userId: managerId, role: UserRole.MANAGER });
+
+  describe('MANAGER의 PG 직접 재시도', () => {
     const retryReason = 'PG 연결 설정을 복구해 다시 요청';
 
     it('확정 실패·지급액 0원이면 같은 금액의 새 PG 취소 요청을 만들어 보내고 이전 실패 기록·이용 종료는 그대로 둔다', async () => {
@@ -2333,6 +2334,67 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
         { resendCount: 5, manualResendCount: 0 },
         { resendCount: 0, manualResendCount: 0 },
       ]);
+    });
+  });
+
+  describe('실패가 확정된 요청의 개별 확인', () => {
+    it('한도 소진으로 실패한 요청을 개별 확인해 PG 미접수가 확인되면 같은 금액의 새 PG 취소 요청을 즉시 보내고 이전 실패 기록은 그대로 둔다', async () => {
+      const failed = await createFailedRefund(
+        PaymentCancelFailureCode.RETRY_EXHAUSTED,
+        5,
+      );
+      pgGateway.inquireCancel.mockResolvedValueOnce({
+        result: 'NOT_FOUND',
+        authoritative: true,
+      });
+      pgGateway.sendCancel.mockResolvedValueOnce({ result: 'ACCEPTED' });
+
+      const result = await app
+        .get(RefundPgCheckService)
+        .check(manager(), failed.refundId, new Date());
+
+      const attempts = await prisma.paymentCancel.findMany({
+        where: { refundId: failed.refundId },
+        orderBy: { attemptNumber: 'asc' },
+      });
+      const refund = await prisma.refund.findUniqueOrThrow({
+        where: { id: failed.refundId },
+      });
+      expect({
+        checkStatus: result.checkStatus,
+        inquiryResult: result.inquiryResult,
+        resendResult: result.resendResult,
+        inquired: pgGateway.inquireCancel.mock.calls,
+        attempts: attempts.map((attempt) => ({
+          status: attempt.status,
+          failureCode: attempt.failureCode,
+          resendCount: attempt.resendCount,
+          amount: attempt.amount,
+        })),
+        sent: pgGateway.sendCancel.mock.calls,
+        payoutStatus: refund.payoutStatus,
+      }).toEqual({
+        checkStatus: 'CHECKED',
+        inquiryResult: 'NOT_FOUND',
+        resendResult: 'ACCEPTED',
+        inquired: [[{ paymentCancelId: failed.paymentCancelId }]],
+        attempts: [
+          {
+            status: PaymentCancelStatus.FAILED,
+            failureCode: PaymentCancelFailureCode.RETRY_EXHAUSTED,
+            resendCount: 5,
+            amount: refundAmount,
+          },
+          {
+            status: PaymentCancelStatus.REQUESTED,
+            failureCode: null,
+            resendCount: 0,
+            amount: refundAmount,
+          },
+        ],
+        sent: [[{ paymentCancelId: attempts[1]?.id, amount: refundAmount }]],
+        payoutStatus: RefundPayoutStatus.PENDING,
+      });
     });
   });
 });

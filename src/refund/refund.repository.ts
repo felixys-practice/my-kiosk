@@ -90,6 +90,13 @@ export type AcceptedRefundInput = {
   sendClaim?: { claimToken: string; claimUntil: Date };
 };
 
+/** 개별 확인으로 새 요청을 보낼 수 있는 실패 사유 (API 계약 §8) */
+const retryableFailureCodes: readonly PaymentCancelFailureCode[] = [
+  PaymentCancelFailureCode.RETRY_EXHAUSTED,
+  PaymentCancelFailureCode.SEND_FAILED,
+  PaymentCancelFailureCode.PG_REJECTED,
+];
+
 /** PG 재시도 판정·저장 대상 */
 export type PayoutRetryTarget = {
   state: PayoutRetryState;
@@ -839,6 +846,97 @@ export class RefundRepository {
   }
 
   /**
+   * 개별 확인으로 새 요청을 보낼 수 있는 실패 확정 시도를 찾는다 (API 계약 §8, FR-057)
+   * - 환불의 가장 최근 시도가 RETRY_EXHAUSTED·SEND_FAILED·PG_REJECTED로 FAILED이고,
+   *   환불이 확정·PG 방식·금액 검토 중 아님일 때만 대상이다(지급액·예약·미확정 지급은 재시도 판정에서 확인)
+   * @param refundId 환불 ID
+   * @param tx 트랜잭션(잠금 뒤 다시 읽을 때)
+   * @returns 실패한 최근 시도의 조회 기록, 대상이 아니면 null
+   */
+  async findFailedRetryCandidate(
+    refundId: string,
+    tx: TransactionClient | PrismaService = this.prisma,
+  ): Promise<{
+    id: string;
+    lastInquiryAt: Date | null;
+    lastInquiryError: string | null;
+    claimUntil: Date | null;
+  } | null> {
+    const refund = await tx.refund.findFirst({
+      where: {
+        id: refundId,
+        decisionStatus: RefundDecisionStatus.ACCEPTED,
+        payoutMethod: RefundPayoutMethod.PG,
+        reviewRequired: false,
+      },
+      select: {
+        paymentCancels: {
+          orderBy: { attemptNumber: 'desc' },
+          take: 1,
+          select: {
+            id: true,
+            status: true,
+            failureCode: true,
+            lastInquiryAt: true,
+            lastInquiryError: true,
+            claimUntil: true,
+          },
+        },
+      },
+    });
+    const latest = refund?.paymentCancels[0];
+    if (
+      !latest ||
+      latest.status !== PaymentCancelStatus.FAILED ||
+      latest.failureCode === null ||
+      !retryableFailureCodes.includes(latest.failureCode)
+    ) {
+      return null;
+    }
+    return {
+      id: latest.id,
+      lastInquiryAt: latest.lastInquiryAt,
+      lastInquiryError: latest.lastInquiryError,
+      claimUntil: latest.claimUntil,
+    };
+  }
+
+  /**
+   * 환불의 가장 최근 PG 취소 요청의 조회 기록을 읽는다(개별 확인 응답용)
+   * @param refundId 환불 ID
+   * @returns 최근 조회 시각·마지막 조회 오류, 요청이 없으면 null
+   */
+  async findLatestAttemptInquiry(refundId: string): Promise<{
+    lastInquiryAt: Date | null;
+    lastInquiryError: string | null;
+  } | null> {
+    return this.prisma.paymentCancel.findFirst({
+      where: { refundId },
+      orderBy: { attemptNumber: 'desc' },
+      select: { lastInquiryAt: true, lastInquiryError: true },
+    });
+  }
+
+  /**
+   * 맡았던 PG 취소 요청의 담당을 내려놓는다(담당 토큰이 같을 때만)
+   * @param tx 트랜잭션
+   * @param id PG 취소 요청 ID
+   * @param claimToken 담당 토큰
+   * @returns 아직 자기 담당이어서 내려놓았으면 true
+   */
+  async releaseAttemptClaim(
+    tx: TransactionClient,
+    id: string,
+    claimToken: string,
+  ): Promise<boolean> {
+    const { count } = await tx.paymentCancel.updateMany({
+      where: { id, claimToken },
+      data: { claimToken: null, claimUntil: null },
+    });
+    return count === 1;
+  }
+
+  /**
    * 확정된 환불 아래 새 PG 취소 요청을 저장하고 환불을 지급 처리 중(PENDING/PG)으로 되돌린다
    * - 이전 요청의 상태·실패 사유·횟수는 바꾸지 않는다. 자동 재전송 횟수는 0부터 시작한다
    * - 커밋 뒤 바로 보낼 전송 기록(시도 1회·시각·담당)을 함께 저장한다
@@ -858,6 +956,7 @@ export class RefundRepository {
       retryReason: string;
       now: Date;
       sendClaim: { claimToken: string; claimUntil: Date };
+      lastInquiryAt?: Date | null; // 개별 확인으로 만든 요청은 실패 시도의 조회 시각을 승계한다
     },
   ): Promise<string> {
     const attempt = await tx.paymentCancel.create({
@@ -875,6 +974,7 @@ export class RefundRepository {
         lastSendAttemptAt: input.now,
         claimToken: input.sendClaim.claimToken,
         claimUntil: input.sendClaim.claimUntil,
+        lastInquiryAt: input.lastInquiryAt,
       },
       select: { id: true },
     });

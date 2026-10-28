@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { RefundAccessService, RefundActor } from './refund-access.service';
 import { RefundRepository } from './refund.repository';
 import { RefundRecoveryService } from './refund-recovery.service';
+import { RefundRetryService } from './refund-retry.service';
 
 /** 개별 확인 응답 (API 계약 §8 POST /refund/:refundId/pg-check) */
 export type PgCheckResult = {
@@ -26,6 +27,7 @@ export class RefundPgCheckService {
     private readonly recoveryService: RefundRecoveryService,
     private readonly configService: ConfigService,
     private readonly accessService: RefundAccessService,
+    private readonly retryService: RefundRetryService,
   ) {}
 
   /**
@@ -64,8 +66,8 @@ export class RefundPgCheckService {
     // 지정한 환불의 미확정 PG 취소 요청 한 건만 조회한다(자동 조회 예정 시각과 무관)
     const pending =
       await this.refundRepository.findPendingAttemptOfRefund(refundId);
-    // 지급 완료·0원·금액 검토·별도 지급 방식·예약 중 등 개별 PG 조회 대상이 아니면 저장 상태만 안내한다
-    if (!pending) return this.storedResult('NO_PENDING_ATTEMPT', null);
+    // 미확정 시도가 없으면 최근 시도가 이미 실패한 환불의 개별 확인(새 요청 경로)을 시도한다
+    if (!pending) return this.checkFailed(refundId, now, actorId);
     // 같은 환불의 전송·조회 담당이 유효하면 PG를 다시 부르지 않는다
     if (pending.claimUntil && pending.claimUntil > now) {
       return this.storedResult('ALREADY_RUNNING', pending);
@@ -100,6 +102,42 @@ export class RefundPgCheckService {
     return {
       ...this.storedResult('CHECKED', after),
       ...inquired,
+    };
+  }
+
+  /**
+   * 최근 시도가 이미 실패한 환불을 개별 확인한다 (API 계약 §8, FR-057)
+   * - 지급 완료·0원·금액 검토·별도 지급·예약 중 등 대상이 아니면 저장 상태만 안내한다
+   * @param refundId 확인할 환불
+   * @param now 요청 시각
+   * @param actorId 실행자
+   * @returns 환불 요약을 뺀 확인 결과
+   */
+  private async checkFailed(
+    refundId: string,
+    now: Date,
+    actorId: string,
+  ): Promise<Omit<PgCheckResult, 'refund'>> {
+    const outcome = await this.retryService.checkFailedAttempt(
+      refundId,
+      now,
+      actorId,
+    );
+    const stored =
+      await this.refundRepository.findLatestAttemptInquiry(refundId);
+    if (outcome.kind === 'NOT_ELIGIBLE') {
+      return this.storedResult('NO_PENDING_ATTEMPT', stored);
+    }
+    if (outcome.kind === 'RUNNING') {
+      return this.storedResult('ALREADY_RUNNING', stored);
+    }
+    if (outcome.kind === 'RECENT') {
+      return this.storedResult('RECENT_RESULT', stored);
+    }
+    return {
+      ...this.storedResult('CHECKED', stored),
+      inquiryResult: outcome.inquiryResult,
+      resendResult: outcome.resendResult,
     };
   }
 

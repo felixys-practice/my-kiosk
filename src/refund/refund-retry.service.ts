@@ -1,4 +1,12 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { randomUUID } from 'crypto';
+import {
+  REFUND_PG_GATEWAY,
+  type RefundPgGateway,
+} from 'src/pg/refund-pg.gateway';
+import type { PgCancelQueryResult } from 'src/pg/pg.types';
+import { TransactionClient } from 'src/prisma/prisma.service';
 import { RefundAccessService, RefundActor } from './refund-access.service';
 import {
   IdempotentResult,
@@ -46,6 +54,8 @@ export class RefundRetryService {
     private readonly lockingRepository: RefundLockingRepository,
     private readonly refundRepository: RefundRepository,
     private readonly dispatchService: RefundDispatchService,
+    private readonly configService: ConfigService,
+    @Inject(REFUND_PG_GATEWAY) private readonly pgGateway: RefundPgGateway,
   ) {}
 
   /**
@@ -140,7 +150,168 @@ export class RefundRetryService {
     if (pending) await this.dispatchService.sendPrepared(pending);
     return result;
   }
+
+  /**
+   * 최근 시도가 RETRY_EXHAUSTED·SEND_FAILED·PG_REJECTED로 이미 실패한 환불을 개별 확인한다 (API 계약 §8, FR-057)
+   * - 그 실패 시도를 맡아 PG에 다시 조회하고, 미접수가 확인되면 이전 실패를 보존한 채 같은 금액의 새 요청을 바로 보낸다
+   * @param refundId 확인할 환불
+   * @param now 요청 시각
+   * @param actorId 실행자(새 요청의 requestedById)
+   * @returns 확인 결과
+   */
+  async checkFailedAttempt(
+    refundId: string,
+    now: Date,
+    actorId: string,
+  ): Promise<FailedCheckOutcome> {
+    const candidate =
+      await this.refundRepository.findFailedRetryCandidate(refundId);
+    if (!candidate) return { kind: 'NOT_ELIGIBLE' };
+
+    // 1. Refund를 잠근 뒤 대상·담당·최근 조회 간격·재시도 조건을 다시 확인하고 실패 시도의 조회 담당을 맡는다
+    const claimToken = randomUUID();
+    const claimed = await this.refundRepository.runInTransaction(async (tx) => {
+      const target = await this.lockRetryTarget(tx, refundId);
+      const failed = await this.refundRepository.findFailedRetryCandidate(
+        refundId,
+        tx,
+      );
+      if (!target || failed?.id !== candidate.id) {
+        return { kind: 'NOT_ELIGIBLE' } as const;
+      }
+      if (failed.claimUntil && failed.claimUntil > now) {
+        return { kind: 'RUNNING' } as const;
+      }
+      if (
+        failed.lastInquiryAt &&
+        now.getTime() - failed.lastInquiryAt.getTime() <
+          this.seconds('queryIntervalSeconds') * 1000
+      ) {
+        return { kind: 'RECENT' } as const;
+      }
+      if (!evaluatePayoutRetry(target.state, now).allowed) {
+        return { kind: 'NOT_ELIGIBLE' } as const;
+      }
+      await this.refundRepository.markInquiryStarted(tx, failed.id, {
+        claimToken,
+        claimUntil: new Date(
+          now.getTime() + this.seconds('workLeaseSeconds') * 1000,
+        ),
+        now,
+      });
+      return null;
+    });
+    if (claimed) return claimed;
+
+    // 2. PG 조회는 트랜잭션 밖에서 한다
+    const inquiry = await this.pgGateway.inquireCancel({
+      paymentCancelId: candidate.id,
+    });
+
+    // 3. 결과 반영: 담당을 내려놓고 조건을 다시 확인한 뒤 미접수면 새 요청을 저장한다
+    let pending: PendingSend | undefined;
+    await this.refundRepository.runInTransaction(async (tx) => {
+      await this.lockRetryTarget(tx, refundId);
+      if (
+        !(await this.refundRepository.releaseAttemptClaim(
+          tx,
+          candidate.id,
+          claimToken,
+        ))
+      ) {
+        return;
+      }
+      if (inquiry.result !== 'NOT_FOUND') return;
+      const target = (await this.refundRepository.findPayoutRetryTarget(
+        refundId,
+        tx,
+      ))!;
+      const failed = await this.refundRepository.findFailedRetryCandidate(
+        refundId,
+        tx,
+      );
+      if (
+        failed?.id !== candidate.id ||
+        target.orderItemId === null ||
+        !evaluatePayoutRetry(target.state, now).allowed
+      ) {
+        return;
+      }
+      const sendClaim = this.dispatchService.newSendClaim(now);
+      const paymentCancelId = await this.refundRepository.createRetryAttempt(
+        tx,
+        {
+          refundId,
+          paymentId: target.paymentId,
+          orderItemId: target.orderItemId,
+          attemptNumber: target.nextAttemptNumber,
+          amount: target.state.amount,
+          requestedById: actorId,
+          retryReason: '개별 확인에서 PG 미접수 확인 후 재시도',
+          now,
+          sendClaim,
+          lastInquiryAt: failed.lastInquiryAt,
+        },
+      );
+      pending = {
+        paymentCancelId,
+        amount: target.state.amount,
+        claimToken: sendClaim.claimToken,
+        sentAt: now,
+      };
+    });
+
+    // 4. 새 요청은 커밋 뒤 바로 보낸다
+    const sent = pending
+      ? await this.dispatchService.sendPrepared(pending)
+      : null;
+    return {
+      kind: 'CHECKED',
+      inquiryResult: inquiry.result,
+      resendResult: sent ? sent.sendResult : null,
+    };
+  }
+
+  /**
+   * Refund → PG 취소 요청 → 별도 지급 순서로 잠근 뒤 재시도 판정 대상을 다시 읽는다
+   * @param tx 트랜잭션
+   * @param refundId 환불 ID
+   * @returns 잠근 뒤 읽은 대상, 없으면 null
+   */
+  private async lockRetryTarget(tx: TransactionClient, refundId: string) {
+    const unlocked = await this.refundRepository.findPayoutRetryTarget(
+      refundId,
+      tx,
+    );
+    if (!unlocked) return null;
+    await this.lockingRepository.lockForPayout(tx, {
+      refundId,
+      paymentCancelIds: unlocked.paymentCancelIds,
+      manualRefundPayoutIds: unlocked.manualRefundPayoutIds,
+    });
+    return this.refundRepository.findPayoutRetryTarget(refundId, tx);
+  }
+
+  /**
+   * 환불 처리 설정의 초 단위 값을 읽는다
+   * @param key 설정 키
+   * @returns 초
+   */
+  private seconds(key: 'queryIntervalSeconds' | 'workLeaseSeconds'): number {
+    return this.configService.get<number>(`refund.${key}`)!;
+  }
 }
+
+/** 실패 확정 시도의 개별 확인 결과 */
+export type FailedCheckOutcome =
+  | { kind: 'NOT_ELIGIBLE' } // 개별 확인으로 새 요청을 보낼 대상이 아님
+  | { kind: 'RUNNING' } // 다른 작업이 그 시도를 맡고 있음
+  | { kind: 'RECENT' } // 최근 조회 간격 안의 반복 실행
+  | {
+      kind: 'CHECKED';
+      inquiryResult: PgCancelQueryResult['result'];
+      resendResult: string | null; // 새 요청의 최초 전송 결과, 보내지 않았으면 null
+    };
 
 /**
  * 재시도 판정 거절을 계약 오류로 바꾼다 (API 계약 §10)
