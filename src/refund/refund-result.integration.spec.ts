@@ -4,6 +4,7 @@ import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import {
   LedgerStatus,
+  ManualRefundPayoutStatus,
   PaymentCancelFailureCode,
   PaymentCancelStatus,
   PaymentStatus,
@@ -187,6 +188,7 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
     const byOrder = { orderId: { in: orderIds } };
     const byRefund = { refund: { payment: byOrder } };
     await prisma.refundNotification.deleteMany({ where: byRefund });
+    await prisma.manualRefundPayout.deleteMany({ where: byRefund });
     await prisma.ledger.deleteMany({ where: { orderId: { in: orderIds } } });
     await prisma.paymentCancel.deleteMany({ where: { payment: byOrder } });
     await prisma.refund.deleteMany({ where: { payment: byOrder } });
@@ -1370,5 +1372,35 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       inquiries: pgGateway.inquireCancel.mock.calls.length,
       sends: pgGateway.sendCancel.mock.calls.length,
     }).toEqual({ inquiries: 0, sends: 0 });
+  });
+
+  /** 정기 탐색 테스트용 기준 연도(테스트마다 앞 테스트보다 이른 시각을 써서 남은 예정 건과 섞이지 않게 한다) */
+  let sweepYear = 1997;
+
+  /**
+   * 앞 테스트보다 이른 정기 탐색 기준 시각을 돌려준다
+   * @returns 해당 연도 1월 1일
+   */
+  function isolatedSweepBase(): Date {
+    return new Date(Date.UTC(sweepYear--, 0, 1));
+  }
+
+  it('별도 환불금 지급 예약이 있는 환불은 정기 탐색에서 조회·재전송하지 않는다', async () => {
+    const awaiting = await createAwaitingInquiry(0, isolatedSweepBase());
+    await prisma.manualRefundPayout.create({
+      data: {
+        refundId: awaiting.refundId,
+        status: ManualRefundPayoutStatus.RESERVED,
+        amount: refundAmount,
+        reservedById: customerId,
+        reservedAt: new Date(),
+        reason: '계좌 이체로 지급 예정',
+      },
+    });
+    pgGateway.inquireCancel.mockResolvedValue({ result: 'IN_PROGRESS' });
+
+    await app.get(RefundRecoveryService).sweep(awaiting.dueAt);
+
+    expect(pgGateway.inquireCancel.mock.calls.length).toBe(0);
   });
 });
