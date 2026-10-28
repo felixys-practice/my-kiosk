@@ -304,13 +304,22 @@ export async function createRefundTestContext(options: {
   /**
    * 이 컨텍스트가 만든 데이터를 FK 역순으로 지우고 앱을 닫는다
    * - 다른 E2E 파일의 데이터는 건드리지 않도록 사용자·매장 ID로만 지운다
-   * - 새 환불 테이블은 스키마 작업(T007~T010)에서 생기면 여기에 추가한다
    */
   async function close(): Promise<void> {
     const byOrderUser = { order: { userId: { in: userIds } } };
+    const byRefund = { refund: { payment: byOrderUser } };
+    await prisma.refundNotificationReceipt.deleteMany({
+      where: { notification: byRefund },
+    });
+    await prisma.refundNotification.deleteMany({ where: byRefund });
+    await prisma.refundIdempotencyRecord.deleteMany({
+      where: { requesterId: { in: userIds } },
+    });
     await prisma.ledger.deleteMany({ where: { shopId: { in: shopIds } } });
+    await prisma.manualRefundPayout.deleteMany({ where: byRefund });
     await prisma.refundLock.deleteMany({ where: { orderItem: byOrderUser } });
     await prisma.paymentCancel.deleteMany({ where: { payment: byOrderUser } });
+    await prisma.refund.deleteMany({ where: { payment: byOrderUser } });
     await prisma.ticketSeatChange.deleteMany({
       where: { ticket: { userId: { in: userIds } } },
     });
