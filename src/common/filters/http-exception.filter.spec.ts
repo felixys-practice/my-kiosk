@@ -56,11 +56,14 @@ describe('HttpExceptionFilter', () => {
    * 필터가 응답으로 보낸 본문을 꺼낸다
    * @returns 응답 본문
    */
-  function sentBody(): { statusCode: number; error: { code: string } } {
+  function sentBody(): {
+    statusCode: number;
+    error: { code: string; details?: unknown };
+  } {
     const [[body]] = json.mock.calls as unknown[][];
     return body as {
       statusCode: number;
-      error: { code: string };
+      error: { code: string; details?: unknown };
     };
   }
 
@@ -77,5 +80,22 @@ describe('HttpExceptionFilter', () => {
     filter.catch(new DomainConflictError('코드 없는 충돌'), host);
 
     expect(sentBody().error.code).toBe('DomainConflictError');
+  });
+
+  it('도메인 오류에 details가 있으면 응답 error.details로 그대로 나간다', () => {
+    const error = codedError(DomainConflictError, 'USED_TICKET') as Error & {
+      details: unknown;
+    };
+    error.details = {
+      violations: ['USED_TICKET', 'EXPIRED_TICKET'],
+      action: 'CONTACT_SHOP',
+    };
+
+    filter.catch(error, host);
+
+    expect(sentBody().error.details).toEqual({
+      violations: ['USED_TICKET', 'EXPIRED_TICKET'],
+      action: 'CONTACT_SHOP',
+    });
   });
 });
