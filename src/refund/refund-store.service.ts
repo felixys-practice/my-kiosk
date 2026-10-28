@@ -2,7 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { RefundSource, UserRole } from '@prisma/client';
 import { REFUND_PG_GATEWAY } from 'src/pg/refund-pg.gateway';
 import type { RefundPgGateway } from 'src/pg/refund-pg.gateway';
-import { RefundActor } from './refund-access.service';
+import { RefundAccessService, RefundActor } from './refund-access.service';
 import {
   IdempotentResult,
   RefundIdempotencyService,
@@ -36,6 +36,7 @@ export type StoreRefundCommand = {
 @Injectable()
 export class RefundStoreService {
   constructor(
+    private readonly accessService: RefundAccessService,
     private readonly acceptanceService: RefundAcceptanceService,
     private readonly idempotencyService: RefundIdempotencyService,
     @Inject(REFUND_PG_GATEWAY) private readonly pgGateway: RefundPgGateway,
@@ -48,6 +49,7 @@ export class RefundStoreService {
    * @param command 이용권·금액·사유·동의·멱등 키
    * @returns 접수 응답(양수 202, 0원 200)
    * @throws RefundForbiddenError OWNER가 아닐 때(403)
+   * @throws ShopNotFoundError 요청 매장의 현재 점주가 아닐 때(404)
    */
   async acceptStoreRefund(
     actor: RefundActor,
@@ -56,6 +58,8 @@ export class RefundStoreService {
   ): Promise<IdempotentResult<RefundAcceptance>> {
     // 새 매장 환불은 OWNER만 요청한다(MANAGER도 거절, API 계약 §2·FR-050)
     if (actor.role !== UserRole.OWNER) throw new RefundForbiddenError();
+    // 지금 이 매장의 점주여야 한다. 같은 키 재응답에도 먼저 확인한다(범위 밖은 404)
+    await this.accessService.assertShopScope(actor, shopId);
 
     // 이번 요청이 실제로 확정한 PG 취소 요청(저장된 응답을 재생한 경우는 없음)
     let pending: { paymentCancelId: string; amount: number } | undefined;

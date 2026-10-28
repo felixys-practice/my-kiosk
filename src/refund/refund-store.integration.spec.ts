@@ -15,7 +15,7 @@ import { AppModule } from 'src/app.module';
 import { REFUND_PG_GATEWAY } from 'src/pg/refund-pg.gateway';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { RefundStoreService } from './refund-store.service';
-import { TicketNotFoundError } from './errors';
+import { ShopNotFoundError, TicketNotFoundError } from './errors';
 
 /**
  * 매장 환불 확정의 저장 결과를 실제 PostgreSQL에서 확인한다 (US2, tasks T051~T056)
@@ -32,6 +32,7 @@ describe('매장 환불 확정 저장 (실제 DB)', () => {
   let service: RefundStoreService;
   let customerId: string;
   let ownerId: string;
+  let strangerOwnerId: string;
   let shopId: string;
   let otherShopId: string;
   let productId: string;
@@ -125,6 +126,15 @@ describe('매장 환불 확정 저장 (실제 DB)', () => {
       },
     });
     ownerId = owner.id;
+    // 다른 매장을 가진 점주(이 매장의 점주가 아님)
+    const strangerOwner = await prisma.user.create({
+      data: {
+        email: `refund-store-stranger-${suffix}@test.com`,
+        role: UserRole.OWNER,
+        password: 'hashed',
+      },
+    });
+    strangerOwnerId = strangerOwner.id;
     const shop = await prisma.shop.create({
       data: { name: `매장환불검증매장-${suffix}` },
     });
@@ -173,7 +183,7 @@ describe('매장 환불 확정 저장 (실제 DB)', () => {
       where: { id: { in: [shopId, otherShopId] } },
     });
     await prisma.user.deleteMany({
-      where: { id: { in: [customerId, ownerId] } },
+      where: { id: { in: [customerId, ownerId, strangerOwnerId] } },
     });
     await app.close();
   });
@@ -244,5 +254,26 @@ describe('매장 환불 확정 저장 (실제 DB)', () => {
       status: ticket.status,
       refunds: ticket.orderItem.refunds.length,
     }).toEqual({ status: TicketStatus.ACTIVE, refunds: 0 });
+  });
+
+  it('요청 매장의 현재 점주가 아닌 OWNER는 SHOP_NOT_FOUND로 거절되고 아무것도 저장하지 않는다', async () => {
+    const issued = await createUsedPeriodTicket();
+
+    await expect(
+      service.acceptStoreRefund(
+        { userId: strangerOwnerId, role: UserRole.OWNER },
+        shopId,
+        {
+          ticketId: issued.ticketId,
+          amount: 7000,
+          reason: '보상',
+          consentToTerminateTicket: true,
+        },
+      ),
+    ).rejects.toBeInstanceOf(ShopNotFoundError);
+    const ticket = await prisma.ticket.findUniqueOrThrow({
+      where: { id: issued.ticketId },
+    });
+    expect(ticket.status).toBe(TicketStatus.ACTIVE);
   });
 });
