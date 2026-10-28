@@ -1035,3 +1035,17 @@ U10~U15를 마친 뒤, 관계 검증의 비교 대상 설정을 생략하면 정
   - 결제 전체 환불(PAYMENT 대상, orderItemId null)은 마지막 요청의 대상 상품으로 새 요청을 만든다. 요청이 하나도 없으면 NOT_ACTIONABLE이다. US6 전에 정할 미결 사항(PAYMENT 대상 orderItemId)과 연결된다.
 - 결과: 단위 508 passed, E2E 129 passed(`55d522e`).
 
+## US10 공통 PG 재요청 Codex 검수 1차 (2026-10-29)
+
+- 범위 `ff8788d..b8a3cfd`. 판정 **수정 필요**: P2 2건.
+  1. ACTION_REQUIRED가 아닌 환불(예: PENDING이지만 시도는 모두 FAILED)도 재시도를 허용한다. 계약 §5의 필수 조건이다.
+  2. PENDING_APPROVAL 시도를 최종 상태처럼 취급한다("모든 PG 결과 최종" 조건 위반).
+- U202 해석(QUERY_ERROR로 봄)은 타당하다는 의견을 받았다. 다음 단계에서 PG 응답 분류부터 확인한다.
+
+| 동작 | red | green | 커밋 |
+|---|---|---|---|
+| U363 | `npx jest src/refund/refund-retry.policy.spec.ts` → `+ "allowed": true`(PENDING·시도 모두 확정) | 마지막 판정에 `payoutStatus ≠ ACTION_REQUIRED`를 추가해 NOT_ACTIONABLE. UNRESOLVED 우선순위는 유지 | `cf56742` |
+| U364 | 같은 파일 → `+ "allowed": true`(PENDING_APPROVAL 시도) | 미확정 판정을 "최종 상태(SUCCEEDED·FAILED)가 아닌 시도"로 바꿨다 | `cf56742` |
+
+- 결과: 단위 510, E2E 129 passed(`cf56742`).
+

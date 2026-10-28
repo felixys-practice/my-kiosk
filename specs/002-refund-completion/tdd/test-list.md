@@ -270,8 +270,8 @@ suite_baseline: green
 | U360 | 담당을 잃은 요청은 자기 최종 응답을 확정하지 않고, 이어받은 요청이 저장한 최초 응답을 돌려준다 (Phase 7a 검수 2차 2) | FR-035 | example | DONE | `src/refund/refund-acceptance.integration.spec.ts` › PG 전송이 처리 기한을 넘겨 다른 요청이 이어받아 완료했으면… |
 | U361 | 일반 정기 탐색은 건마다 경과 시간을 반영한 시각으로 조회 담당을 정한다 (Phase 7a 검수 2차 3) | FR-022 | example | DONE | `src/refund/refund-result.integration.spec.ts` › 일반 정기 탐색의 뒤쪽 건은 앞 건 조회에 걸린 시간을 반영한 시각으로 조회 담당을 정한다 |
 | U362 | 정기 탐색 작업은 장애 복구 확인을 탐색이 끝난 뒤의 현재 시각으로 시작한다 (Phase 7a 검수 2차 3, U361에서 분리) | FR-026 | example | DONE | `src/refund/refund-recovery.processor.spec.ts` › 장애 복구 확인은 탐색이 끝난 뒤의 현재 시각으로 시작한다 |
-| U363 | PG 재시도는 환불이 조치 필요(ACTION_REQUIRED)일 때만 허용하고, 그 밖의 상태는 미확정 판정 뒤 REFUND_PAYOUT_NOT_ACTIONABLE로 거절한다 (US10 재요청 검수 1) | FR-044 | example | PENDING | |
-| U364 | PG 재시도는 SUCCEEDED·FAILED가 아닌 시도(PENDING_APPROVAL 포함)가 있으면 REFUND_PAYOUT_UNRESOLVED로 거절한다 (US10 재요청 검수 2) | FR-043 | example | PENDING | |
+| U363 | PG 재시도는 환불이 조치 필요(ACTION_REQUIRED)일 때만 허용하고, 그 밖의 상태는 미확정 판정 뒤 REFUND_PAYOUT_NOT_ACTIONABLE로 거절한다 (US10 재요청 검수 1) | FR-044 | example | DONE | `src/refund/refund-retry.policy.spec.ts` › 조치 필요가 아닌 환불(…)은 REFUND_PAYOUT_NOT_ACTIONABLE로 거절한다 |
+| U364 | PG 재시도는 SUCCEEDED·FAILED가 아닌 시도(PENDING_APPROVAL 포함)가 있으면 REFUND_PAYOUT_UNRESOLVED로 거절한다 (US10 재요청 검수 2) | FR-043 | example | DONE | `src/refund/refund-retry.policy.spec.ts` › 최종 결과가 아닌 과거 승인 대기(PENDING_APPROVAL) 시도가 있으면… |
 
 ### `src/refund/refund-idempotency.service.ts`
 
