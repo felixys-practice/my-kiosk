@@ -157,20 +157,20 @@
 
 ### HTTP 인수 테스트
 
-- [ ] T064 [US4] [A30] E2E: `test/refund-ledger.e2e-spec.ts`에 명세 4-1의 Given/When으로 요청하고 다음 결과를 검증한다: 원장에 그 매장·주문의 실제 PG 취소 금액만큼 음수 기록 1건이 생긴다. 테스트 이름 끝에 `(QS-4-1)`를 붙인다.
-- [ ] T065 [US4] [A31] E2E: `test/refund-ledger.e2e-spec.ts`에 명세 4-2의 Given/When으로 요청하고 다음 결과를 검증한다: 원장 기록은 1건 그대로다. 테스트 이름 끝에 `(QS-4-2)`를 붙인다.
-- [ ] T066 [US4] [A32] E2E: `test/refund-ledger.e2e-spec.ts`에 명세 4-3의 Given/When으로 요청하고 다음 결과를 검증한다: 원장에는 아무 기록도 생기지 않는다. 테스트 이름 끝에 `(QS-4-3)`를 붙인다.
-- [ ] T067 [US4] [A33] E2E: `test/refund-ledger.e2e-spec.ts`에 명세 4-4의 Given/When으로 요청하고 다음 결과를 검증한다: 원장에는 아무 기록도 없다. 테스트 이름 끝에 `(QS-4-4)`를 붙인다.
+- [X] T064 [US4] [A30] E2E: `test/refund-ledger.e2e-spec.ts`에 명세 4-1의 Given/When으로 요청하고 다음 결과를 검증한다: 원장에 그 매장·주문의 실제 PG 취소 금액만큼 음수 기록 1건이 생긴다. 테스트 이름 끝에 `(QS-4-1)`를 붙인다.
+- [X] T065 [US4] [A31] E2E: `test/refund-ledger.e2e-spec.ts`에 명세 4-2의 Given/When으로 요청하고 다음 결과를 검증한다: 원장 기록은 1건 그대로다. 테스트 이름 끝에 `(QS-4-2)`를 붙인다.
+- [X] T066 [US4] [A32] E2E: `test/refund-ledger.e2e-spec.ts`에 명세 4-3의 Given/When으로 요청하고 다음 결과를 검증한다: 원장에는 아무 기록도 생기지 않는다. 테스트 이름 끝에 `(QS-4-3)`를 붙인다.
+- [X] T067 [US4] [A33] E2E: `test/refund-ledger.e2e-spec.ts`에 명세 4-4의 Given/When으로 요청하고 다음 결과를 검증한다: 원장에는 아무 기록도 없다. 테스트 이름 끝에 `(QS-4-4)`를 붙인다.
 
 ### 단위 테스트와 구현
 
-- [ ] T068 [US4] [U129] [U130] [U131] [U132] [U133] [U134] [U135] [U136] [U137] [U138] [U139] `src/refund/refund-result.service.spec.ts`, `src/ledger/refund-ledger.repository.spec.ts`에 PG 성공·실패·금액 부족/초과·중복/모순 결과·저장 중단을 테스트한다.
-- [ ] T069 [US4] [U130] `src/ledger/refund-ledger.repository.ts`에 실제 지급액의 음수·원래 shopId/orderId·RELEASABLE 원장을 현재 트랜잭션으로 저장한다. paymentCancelId, manualRefundPayoutId, 0원 refundId 고유성으로 지급별 중복을 막는다.
-- [ ] T070 [US4] [U129] [U130] [U131] [U132] [U133] [U137] `src/refund/refund-result.service.ts`, `src/refund/refund.repository.ts`에 Refund→PaymentCancel 잠금 후 최종 상태·실제액·paidAmount·원장·필요 알림을 원자적으로 반영한다. 정상액은 PAID, 부족/초과액은 ACTION_REQUIRED·reviewRequired로 기록하고 확정된 환불 금액을 바꾸지 않는다. 실패·미확정에는 원장을 생성하지 않는다.
-- [ ] T071 [US4] [U134] [U135] [U136] `src/refund/refund-result.service.ts`, `src/refund/refund-event.repository.ts`에 같은 최종 결과 재반영 방지와 모순되는 늦은 통보의 검토 필요·알림 기록을 구현한다. 담당 토큰이 바뀐 작업은 저장 결과를 반환하고 합산하지 않는다.
-- [ ] T072 [US4] [U138] [U139] `src/refund/refund.controller.ts`, `src/refund/dto/pg-refund-callback.dto.ts`에서 콜백 대상을 PaymentCancel→Refund로 대조하고 공통 결과 처리로 연결한다. PAYMENT 대상 orderItemId는 null, PG 취소 거래 ID는 원승인과 구별한다. US7 완료 전에는 콜백을 공개 배포하지 않는다.
+- [X] T068 [US4] [U129] [U130] [U131] [U132] [U133] [U134] [U135] [U136] [U137] [U138] [U139] `src/refund/refund-result.service.spec.ts`, `src/ledger/refund-ledger.repository.spec.ts`에 PG 성공·실패·금액 부족/초과·중복/모순 결과·저장 중단을 테스트한다.
+- [X] T069 [US4] [U130] `src/ledger/refund-ledger.repository.ts`에 실제 지급액의 음수·원래 shopId/orderId·RELEASABLE 원장을 현재 트랜잭션으로 저장한다. paymentCancelId, manualRefundPayoutId, 0원 refundId 고유성으로 지급별 중복을 막는다.
+- [X] T070 [US4] [U129] [U130] [U131] [U132] [U133] [U137] `src/refund/refund-result.service.ts`, `src/refund/refund.repository.ts`에 Refund→PaymentCancel 잠금 후 최종 상태·실제액·paidAmount·원장·필요 알림을 원자적으로 반영한다. 정상액은 PAID, 부족/초과액은 ACTION_REQUIRED·reviewRequired로 기록하고 확정된 환불 금액을 바꾸지 않는다. 실패·미확정에는 원장을 생성하지 않는다.
+- [X] T071 [US4] [U134] [U135] [U136] `src/refund/refund-result.service.ts`, `src/refund/refund-event.repository.ts`에 같은 최종 결과 재반영 방지와 모순되는 늦은 통보의 검토 필요·알림 기록을 구현한다. 담당 토큰이 바뀐 작업은 저장 결과를 반환하고 합산하지 않는다.
+- [X] T072 [US4] [U138] [U139] `src/refund/refund.controller.ts`, `src/refund/dto/pg-refund-callback.dto.ts`에서 콜백 대상을 PaymentCancel→Refund로 대조하고 공통 결과 처리로 연결한다. PAYMENT 대상 orderItemId는 null, PG 취소 거래 ID는 원승인과 구별한다. US7 완료 전에는 콜백을 공개 배포하지 않는다.
 
-- [ ] T182 [US4] [A30] [A31] [A32] [A33] `test/refund-ledger.e2e-spec.ts`의 사용자 스토리 4 인수 테스트 A30부터 A33까지 4개가 모두 통과하는지 실행해 확인한 뒤에만 이 스토리를 완료로 표시한다.
+- [X] T182 [US4] [A30] [A31] [A32] [A33] `test/refund-ledger.e2e-spec.ts`의 사용자 스토리 4 인수 테스트 A30부터 A33까지 4개가 모두 통과하는지 실행해 확인한 뒤에만 이 스토리를 완료로 표시한다.
 
 **검수 관문**: T064부터 T072까지의 작업과 T182 작업을 마치면 실행 규칙의 Phase 검수 절차에 따라 Codex 검수를 받는다. "통과" 판정 전에는 다음 Phase로 넘어가지 않는다.
 

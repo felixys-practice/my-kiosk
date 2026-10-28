@@ -63,10 +63,10 @@ suite_baseline: green
 | A27 | Given 환불 확정으로 이용이 종료됐고 지급도 완료된 이용권일 때, When 입실하려 하면, Then 이용 종료 오류로 거부된다. | QS-3-1 | example | PENDING | |
 | A28 | Given 환불 확정으로 이용이 종료됐고 환불금 지급 처리 중이거나 PG 취소 결과 확인 실패인 이용권일 때, When 입실하려 하면, Then 환불금 지급 완료 여부와 관계없이 이용 종료 오류로 거부된다. | QS-3-2 | example | PENDING | |
 | A29 | Given 환불 확정 후 PG 취소 요청이 실패한 이용권일 때, When 입실하려 하면, Then 이용 종료 오류로 거부된다. 환불금 지급 실패를 이유로 이용권·고정석을 복구하지 않는다. | QS-3-3 | example | PENDING | |
-| A30 | Given 환불금 지급 처리 중인 환불이 있을 때, When PG가 취소를 확정하면, | QS-4-1 | example | PENDING | |
-| A31 | Given 1번으로 실제 지급과 원장 기록이 반영됐을 때, When 같은 지급 확정 통보가 다시 오거나 거래조회로 다시 반영을 시도하면, | QS-4-2 | example | PENDING | |
-| A32 | Given 환불금 지급 처리 중인 환불이 있을 때, When PG가 PG 취소 요청 실패를 확정하면, Then 원장에는 아무 기록도 생기지 않는다. | QS-4-3 | example | PENDING | |
-| A33 | Given 환불금 지급 처리 중이거나 PG 취소 결과 확인 실패인 환불이 있을 때, When 아직 확정되지 않았으면, Then 원장에는 아무 기록도 없다. | QS-4-4 | example | PENDING | |
+| A30 | Given 환불금 지급 처리 중인 환불이 있을 때, When PG가 취소를 확정하면, | QS-4-1 | example | DONE | `test/refund-ledger.e2e-spec.ts` |
+| A31 | Given 1번으로 실제 지급과 원장 기록이 반영됐을 때, When 같은 지급 확정 통보가 다시 오거나 거래조회로 다시 반영을 시도하면, | QS-4-2 | example | DONE | `test/refund-ledger.e2e-spec.ts` |
+| A32 | Given 환불금 지급 처리 중인 환불이 있을 때, When PG가 PG 취소 요청 실패를 확정하면, Then 원장에는 아무 기록도 생기지 않는다. | QS-4-3 | example | DONE | `test/refund-ledger.e2e-spec.ts` |
+| A33 | Given 환불금 지급 처리 중이거나 PG 취소 결과 확인 실패인 환불이 있을 때, When 아직 확정되지 않았으면, Then 원장에는 아무 기록도 없다. | QS-4-4 | example | DONE | `test/refund-ledger.e2e-spec.ts` |
 | A34 | Given 이용 종료·환불 금액이 확정됐을 때, When PG 취소 요청이 보내기 전에 실패하면, Then PG 취소 요청 실패·환불금 지급 조치 필요를 기록하고 운영자에게 알린다. 접수된 환불과 이용 종료는 유지하며 응답에서도 이용 종료 완료와 미지급 상태를 구분한다. | QS-5-1 | example | PENDING | |
 | A35 | Given 응답 없음으로 환불금 지급 처리 중일 때, When 정해진 시간이 지나고 거래조회 결과가 확정된 환불 금액의 취소 완료이면, Then 환불금 지급 완료와 실제 금액의 원장 기록을 함께 반영한다. 이용 종료·좌석 해제는 반복하지 않는다. | QS-5-2 | example | PENDING | |
 | A36 | Given 2번과 같을 때, When 거래조회 결과가 PG 거절이면, Then PG 취소 요청 실패와 환불금 지급 조치 필요를 기록하고 알린다. 확정된 환불 금액과 이용 종료는 유지한다. | QS-5-3 | example | PENDING | |
@@ -368,17 +368,17 @@ suite_baseline: green
 
 | id | behavior | traces | kind | state | test |
 |---|---|---|---|---|---|
-| U129 | PG 성공 실제액이 확정된 환불 금액과 같으면 Refund가 PAID가 된다 | FR-023 | example | PENDING | |
-| U130 | PG 성공 시 실제액의 음수 원장 1건이 원래 shopId·orderId·RELEASABLE로 같은 트랜잭션에 저장된다 | FR-018 | example | PENDING | |
-| U131 | PG 실제액이 확정 금액보다 적으면 ACTION_REQUIRED와 부족액이 기록되고 확정 금액은 그대로다 | FR-027 | example | PENDING | |
-| U132 | PG 실제액이 확정 금액보다 많으면 ACTION_REQUIRED와 초과액이 기록되고 확정 금액은 그대로다 | FR-027 | example | PENDING | |
-| U133 | PG 거절이면 그 PG 취소 요청은 FAILED, Refund는 ACTION_REQUIRED가 되고 원장은 생기지 않는다 | FR-023, FR-020 | example | PENDING | |
-| U134 | 같은 성공 결과를 두 번 반영해도 원장과 paidAmount는 한 번만 늘어난다 | FR-019 | example | PENDING | |
-| U135 | 이미 FAILED인 PG 취소 요청에 성공 통보가 오면 검토 필요와 운영자 알림을 기록하고 지급액을 더하지 않는다 | FR-057 | example | PENDING | |
-| U136 | 담당 토큰이 바뀐 작업의 결과 저장은 지급액을 더하지 않고 저장된 상태를 반환한다 | FR-055 | example | PENDING | |
-| U137 | 결과 저장 중 중단되면 PAID·원장 어느 것도 저장되지 않는다 | FR-018 | example | PENDING | |
-| U138 | 콜백의 PG 취소 요청이 없으면 404 PG_CALLBACK_TARGET_NOT_FOUND를 받는다 | FR-032 | example | PENDING | |
-| U139 | 콜백의 PG 취소 요청이 다른 환불에 속하면 409 PG_CALLBACK_TARGET_MISMATCH를 받는다 | FR-032 | example | PENDING | |
+| U129 | PG 성공 실제액이 확정된 환불 금액과 같으면 Refund가 PAID가 된다 | FR-023 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
+| U130 | PG 성공 시 실제액의 음수 원장 1건이 원래 shopId·orderId·RELEASABLE로 같은 트랜잭션에 저장된다 | FR-018 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
+| U131 | PG 실제액이 확정 금액보다 적으면 ACTION_REQUIRED와 부족액이 기록되고 확정 금액은 그대로다 | FR-027 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
+| U132 | PG 실제액이 확정 금액보다 많으면 ACTION_REQUIRED와 초과액이 기록되고 확정 금액은 그대로다 | FR-027 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
+| U133 | PG 거절이면 그 PG 취소 요청은 FAILED, Refund는 ACTION_REQUIRED가 되고 원장은 생기지 않는다 | FR-023, FR-020 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
+| U134 | 같은 성공 결과를 두 번 반영해도 원장과 paidAmount는 한 번만 늘어난다 | FR-019 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
+| U135 | 이미 FAILED인 PG 취소 요청에 성공 통보가 오면 검토 필요와 운영자 알림을 기록하고 지급액을 더하지 않는다 | FR-057 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
+| U136 | 담당 토큰이 바뀐 작업의 결과 저장은 지급액을 더하지 않고 저장된 상태를 반환한다 | FR-055 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
+| U137 | 결과 저장 중 중단되면 PAID·원장 어느 것도 저장되지 않는다 | FR-018 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
+| U138 | 콜백의 PG 취소 요청이 없으면 404 PG_CALLBACK_TARGET_NOT_FOUND를 받는다 | FR-032 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
+| U139 | 콜백의 PG 취소 요청이 다른 환불에 속하면 409 PG_CALLBACK_TARGET_MISMATCH를 받는다 | FR-032 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
 
 ### `src/refund/refund-dispatch.service.ts, src/refund/refund-sweep.service.ts, src/refund/refund-recovery.service.ts`
 

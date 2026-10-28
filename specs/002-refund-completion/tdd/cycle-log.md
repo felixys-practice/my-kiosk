@@ -639,3 +639,37 @@ U10~U15를 마친 뒤, 관계 검증의 비교 대상 설정을 생략하면 정
 ## Phase 3 완료
 
 - T019~T034·T179 완료, Codex 재검수 통과. 다음은 Phase 4(US2 점주의 매장 환불, T035~T056·T180)다.
+
+## Phase 6 (US4 실제 지급별 원장) 사이클 (2026-10-28)
+
+- 실행 순서: tasks.md의 권장 구현 순서(기반 → US1 → **US4 공통 결과** → US2·US3)를 따라 Phase 4(US2)보다 먼저 진행했다. US2의 2-2·2-13(PG 결과 반영)이 이 공통 결과 처리를 필요로 하기 때문이다.
+- 바깥 루프: A30(QS-4-1)을 먼저 작성해 red를 확인하고(`expected 200 "OK", got 201 "Created"`, 기존 콜백) scratchpad에 보관한 뒤 안쪽 루프를 진행했다.
+- 단위 테스트 위치: tasks T068은 `refund-result.service.spec.ts`·`refund-ledger.repository.spec.ts`를 적었다. 하지만 잠금·원자성·unique를 목(mock)으로는 확인할 수 없어서 `src/refund/refund-result.integration.spec.ts`(실제 DB) 한 파일에 모았다.
+
+| 동작 | 테스트 | red | green·검증 | 커밋 |
+|---|---|---|---|---|
+| U129 | 성공 실제액 = 확정 금액이면 PAID | `paidAmount 0`·PAID 아님(1 failed) | `RefundResultService.applyPgResult`: 조회 → `lockForPayout`(Refund → PaymentCancel) → 재조회, 시도 SUCCEEDED·실제액, paidAmount 합산, PAID·paidAt | `863730e` |
+| U130 | 실제액의 음수 원장 1건(원래 매장·주문·RELEASABLE·paymentCancelId) | Expected 원장 1건 / Received `[]` | `RefundLedgerRepository.recordPayout`를 같은 트랜잭션에서 | `89372a3` |
+| U131 | 실제액 부족 → ACTION_REQUIRED·reviewRequired·AMOUNT_MISMATCH, 금액 불변 | PAID로 기록됨 | paidAmount === amount면 PAID, 아니면 조치·검토 필요 | `f87d9de` |
+| U132 | 실제액 초과도 같은 처리 | 첫 통과 → 뮤턴트(`>=`이면 PAID) 1 failed | 구현 변경 없음 | `1f0d747` |
+| U133 | PG 거절 → 시도 FAILED·PG_REJECTED, Refund ACTION_REQUIRED, 원장 없음 | 시도 REQUESTED·actionCode null | `markAttemptFailed`(예정·담당 지움) | `36540ed` |
+| U134 | 같은 성공 결과 두 번 → 원장·paidAmount 한 번 | `Unique constraint failed on the fields: (payment_cancel_id)` | 시도가 REQUESTED·QUERY_FAILED일 때만 반영 | `83deb67` |
+| U135 | FAILED 시도에 성공 통보 → 검토 필요·PG_RESULT_CONFLICT·운영자 알림, 지급 없음 | actionCode PG_REJECTED·알림 없음 | 확정 상태와 결과 종류가 다르면 모순 기록. `RefundEventRepository`(eventKey `pg-result-conflict:<시도ID>`, skipDuplicates) | `f8bcc5a` |
+| U136 | 담당 토큰이 바뀐 작업의 결과 → 저장하지 않고 저장 상태 반환 | 반환값 undefined·지급 반영됨 | `{applied, attemptStatus, payoutStatus}` 반환, 토큰 불일치면 저장 상태 반환 | `24d39ef` |
+| U137 | 저장 중단 시 PAID·원장·시도 성공 모두 롤백 | 첫 통과 → 뮤턴트(시도 성공 저장을 트랜잭션 밖 `this.prisma`로) 1 failed | 구현 변경 없음. 중단은 `updateRefundPayout` 스파이로 재현 | `44e881d` |
+| U138 | 콜백 대상 PG 취소 요청 없음 → PG_CALLBACK_TARGET_NOT_FOUND(404) | `Received promise resolved instead of rejected` | `applyCallback` → `applyPgResult`가 null이면 오류 | `d377c65` |
+| U139 | 콜백 대상이 다른 환불 → PG_CALLBACK_TARGET_MISMATCH(409), 반영 없음 | `Received promise resolved instead of rejected` | 잠근 뒤 Refund.orderItemId와 콜백 orderItemId 대조, 다르면 오류(롤백) | `0b758ce` |
+| A30 | (E2E) 성공 콜백 → 그 매장·주문의 실제액 음수 원장 1건 (QS-4-1) | 위 바깥 루프 red | 컨트롤러 연결(아래), `@HttpCode(200)` | `d8a6920` |
+| A31~A33 | (E2E) 중복 성공 통보 원장 1건 / PG 실패 원장 없음 / 미확정 원장 없음 (QS-4-2~4) | 사후 작성, 첫 통과 → 뮤턴트 각각 1 failed(재반영 막기 제거 / 실패에도 원장 / 양수 확정에도 원장) | 구현 변경 없음 | `f480742` |
+
+- 사용자 결정(콜백 연결): "대상별 분기 + 200 통일". Refund에 연결된 PG 취소 요청은 공통 결과 처리로, refundId가 없는 기존 요청은 US6·Phase 13 전환 전까지 기존 `refundService.callback`으로 보낸다. 응답은 계약 §7대로 모두 200이다. 그래서 `test/seat-type.e2e-spec.ts`(QS 자동 결제 취소)의 기대 상태를 201→200으로 바꿨다. 동작 검증은 바꾸지 않았다.
+- 이탈:
+  - U138의 첫 테스트는 `statusCode: 404`를 단언했다. 도메인 오류에는 없는 속성이라 단언이 틀렸다. `DomainNotFoundError` 인스턴스(필터가 404로 매핑)와 code를 확인하도록 고쳤고, 이 정정은 구현과 같은 커밋에 들어갔다.
+  - A31~A33은 안쪽 루프 뒤에 작성했다(사후 작성). 뮤턴트로 각 테스트가 결함을 잡는지 확인했다.
+- T072에서 다루지 않은 것(tasks 체크는 마커 동작 기준으로 했다):
+  - PAYMENT 대상 콜백의 orderItemId null 허용: DTO는 아직 UUID 필수다. US6 전 결정 사항과 함께 다룬다.
+  - PG 취소 거래 ID를 원승인 ID와 구별하는 전역 unique 검증
+  - 성공 amount의 정수 검증
+  - 서명 인증(US7)
+- 남은 연결: A31의 "거래조회로 다시 반영"은 US5 조회 경로에서 같은 `applyPgResult`를 쓸 때 다시 확인한다. SUCCEEDED 뒤 FAILED 통보도 같은 모순 규칙으로 처리되지만 별도 테스트는 없다.
+- 결과: 단위 368 passed, E2E 74 passed(`f480742`). 스위트 실행 중 ticket-pause E2E에서 426 간헐 실패가 1회 있었고(e2e-141915), 재실행에서 통과했다.
