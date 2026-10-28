@@ -52,23 +52,10 @@ export function evaluateCustomerRefund(
     return { eligible: false, code: 'TICKET_NOT_FOUND' };
   }
 
-  // 2. 결제가 성공 상태여야 한다
-  if (candidate.paymentStatus !== PaymentStatus.SUCCESS) {
-    return { eligible: false, code: 'PAYMENT_NOT_COMPLETED' };
-  }
-
-  // 3. 같은 상품의 확정 환불: 지급까지 끝났으면 이미 환불됨
-  const accepted = candidate.existingRefunds.filter(
-    (refund) => refund.decisionStatus === RefundDecisionStatus.ACCEPTED,
-  );
-  if (
-    accepted.some((refund) => refund.payoutStatus === RefundPayoutStatus.PAID)
-  ) {
-    return { eligible: false, code: 'ALREADY_REFUNDED' };
-  }
-  // 4. 확정됐지만 지급이 끝나지 않은 환불이 있으면 진행 중
-  if (accepted.length > 0) {
-    return { eligible: false, code: 'REFUND_IN_PROGRESS' };
+  // 2~4. 결제 상태와 같은 상품의 기존 확정 환불
+  const targetRejection = targetRuleRejection(candidate);
+  if (targetRejection) {
+    return { eligible: false, code: targetRejection };
   }
 
   // 5·6. 가능 조건(사용 여부 → 미사용 기한): 위반을 모두 모으고 대표 사유는 USED_TICKET을 우선한다
@@ -83,6 +70,36 @@ export function evaluateCustomerRefund(
   }
   // 고객 환불 금액은 실결제액 전액이다
   return { eligible: true, amount: candidate.paidAmount };
+}
+
+/**
+ * 고객·매장 환불이 함께 쓰는 대상 여부 규칙을 확인한다 (API 계약 §4)
+ * - 결제 SUCCESS → 지급 완료된 확정 환불(ALREADY_REFUNDED) → 지급이 끝나지 않은 확정 환불(REFUND_IN_PROGRESS)
+ * @param candidate 이용권·결제·기존 환불 정보
+ * @returns 거절 코드, 통과하면 null
+ */
+function targetRuleRejection(
+  candidate: CustomerRefundCandidate,
+): string | null {
+  // 2. 결제가 성공 상태여야 한다
+  if (candidate.paymentStatus !== PaymentStatus.SUCCESS) {
+    return 'PAYMENT_NOT_COMPLETED';
+  }
+
+  // 3. 같은 상품의 확정 환불: 지급까지 끝났으면 이미 환불됨
+  const accepted = candidate.existingRefunds.filter(
+    (refund) => refund.decisionStatus === RefundDecisionStatus.ACCEPTED,
+  );
+  if (
+    accepted.some((refund) => refund.payoutStatus === RefundPayoutStatus.PAID)
+  ) {
+    return 'ALREADY_REFUNDED';
+  }
+  // 4. 확정됐지만 지급이 끝나지 않은 환불이 있으면 진행 중
+  if (accepted.length > 0) {
+    return 'REFUND_IN_PROGRESS';
+  }
+  return null;
 }
 
 /**
@@ -172,6 +189,11 @@ export function evaluateStoreRefund(
   // 매장 범위에서 찾지 못한 이용권은 다른 매장에 있더라도 드러내지 않고 찾을 수 없음으로 판정한다
   if (!candidate) {
     return { eligible: false, code: 'TICKET_NOT_FOUND' };
+  }
+  // 결제 상태와 기존 확정 환불은 고객 환불과 같은 규칙·코드로 판정한다
+  const targetRejection = targetRuleRejection(candidate);
+  if (targetRejection) {
+    return { eligible: false, code: targetRejection };
   }
   // 금액 상한: 실결제액을 넘을 수 없다
   if (input.amount > candidate.paidAmount) {
