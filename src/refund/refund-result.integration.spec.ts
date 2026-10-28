@@ -1972,4 +1972,30 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       }).toEqual({ checkStatus: 'NO_PENDING_ATTEMPT', inquired: 0 });
     },
   );
+
+  it('PG 결과 모순이 기록된 환불은 개별 확인에서 재전송 없이 저장된 상태를 받는다', async () => {
+    const target = await createInquiredBefore(60);
+    await prisma.refund.update({
+      where: { id: target.refundId },
+      data: {
+        payoutStatus: RefundPayoutStatus.ACTION_REQUIRED,
+        reviewRequired: true,
+        actionCode: 'PG_RESULT_CONFLICT',
+      },
+    });
+    pgGateway.inquireCancel.mockResolvedValue({
+      result: 'NOT_FOUND',
+      authoritative: true,
+    });
+
+    const result = await app
+      .get(RefundPgCheckService)
+      .check(operator, target.refundId, target.now);
+
+    expect({
+      checkStatus: result.checkStatus,
+      inquired: pgGateway.inquireCancel.mock.calls.length,
+      sent: pgGateway.sendCancel.mock.calls.length,
+    }).toEqual({ checkStatus: 'NO_PENDING_ATTEMPT', inquired: 0, sent: 0 });
+  });
 });
