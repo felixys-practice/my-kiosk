@@ -9,7 +9,11 @@ import {
 import { REFUND_PG_GATEWAY } from 'src/pg/refund-pg.gateway';
 import type { RefundPgGateway } from 'src/pg/refund-pg.gateway';
 import { SeatAssignmentService } from 'src/seat-assignment/seat-assignment.service';
-import { CustomerRefundTarget, RefundRepository } from './refund.repository';
+import {
+  AcceptedRefundInput,
+  CustomerRefundTarget,
+  RefundRepository,
+} from './refund.repository';
 import { TransactionClient } from 'src/prisma/prisma.service';
 import { RefundLockingRepository } from './refund-locking.repository';
 import {
@@ -106,26 +110,9 @@ export class RefundAcceptanceService {
           throw new RefundTerminationConsentRequiredError();
         }
 
-        // 이용권을 종료한다
-        await this.refundRepository.terminateTicket(command.ticketId, now, tx);
-        // 진행 중이던 정지 기록을 재개 없이 닫는다
-        await this.refundRepository.closeOpenPausesForRefund(
-          command.ticketId,
-          now,
-          tx,
-        );
-
-        // 고정석 배정을 해제한다(자유석이면 할 일 없음)
-        await this.seatAssignmentService.releaseByTicket(
-          command.ticketId,
-          SeatReleaseReason.TICKET_REVOKED,
-          now,
-          tx,
-        );
-
-        // 확정된 환불과 최초 PG 취소 요청을 저장한다
-        const created = await this.refundRepository.createAcceptedRefund(
+        const confirmed = await this.confirmAcceptedRefund(
           {
+            ticketId: command.ticketId,
             paymentId: target!.paymentId,
             orderItemId: target!.orderItemId,
             orderId: target!.orderId,
@@ -137,31 +124,8 @@ export class RefundAcceptanceService {
           },
           tx,
         );
-        // 0원은 PG 취소 요청이 없으므로 보내지 않는다
-        if (created.paymentCancelId !== null) {
-          accepted = {
-            paymentCancelId: created.paymentCancelId,
-            amount: decision.amount,
-          };
-        }
-        // 양수는 202 접수·지급 처리 중, 0원은 200 지급 완료(API 계약 §4)
-        const isZero = created.paymentCancelId === null;
-        return {
-          status: isZero ? 200 : 202,
-          refundId: created.refundId,
-          body: {
-            refundId: created.refundId,
-            decisionStatus: RefundDecisionStatus.ACCEPTED,
-            ticketId: command.ticketId,
-            amount: decision.amount,
-            payoutStatus: isZero
-              ? RefundPayoutStatus.PAID
-              : RefundPayoutStatus.PENDING,
-            paymentCancelId: created.paymentCancelId,
-            acceptedAt: now.toISOString(),
-            terminatedAt: now.toISOString(),
-          },
-        };
+        accepted = confirmed.pending;
+        return confirmed.result;
       },
     );
 
@@ -173,13 +137,71 @@ export class RefundAcceptanceService {
   }
 
   /**
+   * 검증을 마친 환불을 확정한다(고객·매장 공통, API 계약 §4)
+   * - 이용권 종료 → 진행 중 정지 닫기 → 고정석 해제 → 확정 환불과 최초 PG 취소 요청(0원은 지급 완료) 저장
+   * - 호출하는 쪽의 트랜잭션 안에서 실행하며, PG 전송은 커밋 뒤 호출하는 쪽이 한다
+   * @param input 이용권·대상·경로·금액·실행자·시각과 매장 환불의 사유·퇴실 정보
+   * @param tx 확정 트랜잭션
+   * @returns 멱등 기록에 저장할 응답과, 커밋 뒤 보낼 PG 취소 요청(0원이면 없음)
+   */
+  async confirmAcceptedRefund(
+    input: AcceptedRefundInput & { ticketId: string },
+    tx: TransactionClient,
+  ): Promise<{
+    result: IdempotentResult<RefundAcceptance>;
+    pending?: { paymentCancelId: string; amount: number };
+  }> {
+    const { ticketId, ...refundInput } = input;
+    const { now } = input;
+    // 이용권을 종료한다
+    await this.refundRepository.terminateTicket(ticketId, now, tx);
+    // 진행 중이던 정지 기록을 재개 없이 닫는다
+    await this.refundRepository.closeOpenPausesForRefund(ticketId, now, tx);
+    // 고정석 배정을 해제한다(자유석이면 할 일 없음)
+    await this.seatAssignmentService.releaseByTicket(
+      ticketId,
+      SeatReleaseReason.TICKET_REVOKED,
+      now,
+      tx,
+    );
+    // 확정된 환불과 최초 PG 취소 요청을 저장한다
+    const created = await this.refundRepository.createAcceptedRefund(
+      refundInput,
+      tx,
+    );
+    // 양수는 202 접수·지급 처리 중, 0원은 PG 요청 없이 200 지급 완료(API 계약 §4)
+    const isZero = created.paymentCancelId === null;
+    return {
+      pending: isZero
+        ? undefined
+        : { paymentCancelId: created.paymentCancelId!, amount: input.amount },
+      result: {
+        status: isZero ? 200 : 202,
+        refundId: created.refundId,
+        body: {
+          refundId: created.refundId,
+          decisionStatus: RefundDecisionStatus.ACCEPTED,
+          ticketId,
+          amount: input.amount,
+          payoutStatus: isZero
+            ? RefundPayoutStatus.PAID
+            : RefundPayoutStatus.PENDING,
+          paymentCancelId: created.paymentCancelId,
+          acceptedAt: now.toISOString(),
+          terminatedAt: now.toISOString(),
+        },
+      },
+    };
+  }
+
+  /**
    * 공유 잠금 순서로 대상 행을 잠근 뒤 판정에 쓸 대상을 다시 읽는다
    * - 같은 이용권의 동시 신청은 잠금을 기다린 뒤 먼저 커밋된 확정 환불을 보고 판정한다
    * @param ticketId 이용권 ID
    * @param tx 확정 트랜잭션
    * @returns 잠근 뒤 읽은 대상, 이용권이 없으면 null
    */
-  private async findLockedTarget(
+  async findLockedTarget(
     ticketId: string,
     tx: TransactionClient,
   ): Promise<CustomerRefundTarget | null> {

@@ -11,6 +11,7 @@ import { RefundAccessService } from './refund-access.service';
 import { RefundLockingRepository } from './refund-locking.repository';
 import { RefundAcceptanceService } from './refund-acceptance.service';
 import { RefundResultService } from './refund-result.service';
+import { RefundStoreService } from './refund-store.service';
 import { RefundEventRepository } from './refund-event.repository';
 import { RefundLedgerRepository } from 'src/ledger/refund-ledger.repository';
 
@@ -30,6 +31,8 @@ import { RefundLedgerRepository } from 'src/ledger/refund-ledger.repository';
     RefundResultService,
     RefundLedgerRepository,
     RefundEventRepository,
+    // 점주 매장 환불(US2)
+    RefundStoreService,
   ],
   controllers: [RefundController],
   exports: [RefundService],
