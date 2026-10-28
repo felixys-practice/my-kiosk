@@ -14,7 +14,10 @@ import { DomainConflictError } from '../errors/domain-conflict.error';
 import { DomainNotFoundError } from '../errors/domain-not-found.error';
 import { DomainBadRequestError } from '../errors/domain-bad-request.error';
 import { DomainForbiddenError } from '../errors/domain-forbidden.error';
-import { DomainUnauthorizedError } from '../errors';
+import {
+  DomainServiceUnavailableError,
+  DomainUnauthorizedError,
+} from '../errors';
 
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
@@ -67,6 +70,11 @@ export class HttpExceptionFilter implements ExceptionFilter {
       errorDetail.message = exception.message;
     } else if (exception instanceof DomainUnauthorizedError) {
       status = HttpStatus.UNAUTHORIZED;
+      errorDetail.code = this.codeOf(exception);
+      errorDetail.details = this.detailsOf(exception);
+      errorDetail.message = exception.message;
+    } else if (exception instanceof DomainServiceUnavailableError) {
+      status = HttpStatus.SERVICE_UNAVAILABLE;
       errorDetail.code = this.codeOf(exception);
       errorDetail.details = this.detailsOf(exception);
       errorDetail.message = exception.message;

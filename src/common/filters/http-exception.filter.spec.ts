@@ -4,6 +4,7 @@ import {
   DomainConflictError,
   DomainForbiddenError,
   DomainNotFoundError,
+  DomainServiceUnavailableError,
   DomainUnauthorizedError,
 } from '../errors';
 import { HttpExceptionFilter } from './http-exception.filter';
@@ -97,5 +98,20 @@ describe('HttpExceptionFilter', () => {
       violations: ['USED_TICKET', 'EXPIRED_TICKET'],
       action: 'CONTACT_SHOP',
     });
+  });
+
+  it('일시적 처리 불가 도메인 오류는 503과 지정한 code로 나간다', () => {
+    const error = new DomainServiceUnavailableError('저장 실패') as Error & {
+      code: string;
+    };
+    error.code = 'REFUND_STORAGE_UNAVAILABLE';
+
+    filter.catch(error, host);
+
+    const [[sentStatus]] = status.mock.calls as number[][];
+    expect({
+      status: sentStatus,
+      code: sentBody().error.code,
+    }).toEqual({ status: 503, code: 'REFUND_STORAGE_UNAVAILABLE' });
   });
 });
