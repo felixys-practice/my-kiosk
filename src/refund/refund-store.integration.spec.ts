@@ -18,6 +18,7 @@ import { AppModule } from 'src/app.module';
 import { REFUND_PG_GATEWAY } from 'src/pg/refund-pg.gateway';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { RefundStoreService } from './refund-store.service';
+import { SessionLifecycleService } from 'src/session-lifecycle/session-lifecycle.service';
 import { ShopNotFoundError, TicketNotFoundError } from './errors';
 
 /**
@@ -517,6 +518,49 @@ describe('매장 환불 확정 저장 (실제 DB)', () => {
       session: UsageSessionStatus.ACTIVE,
       endedAt: null,
       remainingMinutes: 500,
+    });
+  });
+
+  it('퇴실 동의를 다시 받는 사이에 이미 퇴실한 세션은 사용 시간을 다시 차감하지 않는다', async () => {
+    const issued = await createUsedTimeTicket();
+    const sessionId = await startSession(issued.ticketId);
+    const owner = { userId: ownerId, role: UserRole.OWNER };
+    const request = {
+      ticketId: issued.ticketId,
+      amount: 5000,
+      reason: '보상',
+      consentToTerminateTicket: true,
+    };
+    // 1) 퇴실 동의 없이 요청해 TICKET_IN_USE로 거절된다
+    await expect(
+      service.acceptStoreRefund(owner, shopId, request),
+    ).rejects.toMatchObject({ code: 'TICKET_IN_USE' });
+    // 2) 그사이 고객이 기존 퇴실 규칙으로 퇴실한다
+    await prisma.$transaction((tx) =>
+      app.get(SessionLifecycleService).endSession(sessionId, new Date(), tx),
+    );
+    const afterExit = await prisma.ticket.findUniqueOrThrow({
+      where: { id: issued.ticketId },
+    });
+
+    // 3) 퇴실 동의를 담아 다시 요청한다
+    const { body } = await service.acceptStoreRefund(owner, shopId, {
+      ...request,
+      consentToEndSession: true,
+    });
+
+    const ticket = await prisma.ticket.findUniqueOrThrow({
+      where: { id: issued.ticketId },
+    });
+    const refund = await prisma.refund.findUniqueOrThrow({
+      where: { id: body.refundId },
+    });
+    expect({
+      remainingMinutes: ticket.remainingMinutes,
+      endedSessionId: refund.endedSessionId,
+    }).toEqual({
+      remainingMinutes: afterExit.remainingMinutes,
+      endedSessionId: null,
     });
   });
 });
