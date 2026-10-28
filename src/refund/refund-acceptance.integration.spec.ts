@@ -356,4 +356,21 @@ describe('환불 확정 저장 (실제 DB)', () => {
       await prisma.refund.count({ where: { orderItemId: issued.orderItemId } }),
     ).toBe(1);
   });
+
+  it('PG 전송 결과가 NOT_SENT여도 접수는 성공하고 이용권은 REVOKED로 남는다', async () => {
+    const issued = await createUnusedPeriodTicket();
+    pgGateway.sendCancel.mockResolvedValue({
+      result: 'NOT_SENT',
+      reason: 'PG 미연동',
+    });
+
+    await expect(accept(issued.ticketId)).resolves.toMatchObject({
+      status: 202,
+    });
+
+    const ticket = await prisma.ticket.findUniqueOrThrow({
+      where: { id: issued.ticketId },
+    });
+    expect(ticket.status).toBe(TicketStatus.REVOKED);
+  });
 });
