@@ -11,7 +11,6 @@ import { SeatHoldExpiredError } from 'src/seat-assignment/errors/seat-hold-expir
 import { SeatAssignmentService } from 'src/seat-assignment/seat-assignment.service';
 import { TransactionLoggerService } from 'src/logger/transaction-logger.service';
 import { RefundService } from 'src/refund/refund.service';
-import { PaymentAmountMismatchError } from './errors';
 import { PaymentRepository } from './payment.repository';
 import { PaymentService } from './payment.service';
 import { PeriodPaymentData, TimePaymentData } from './payment.types';
@@ -215,10 +214,10 @@ describe('PaymentService', () => {
       );
     });
 
-    it('승인 금액이 다르면 선점을 PAYMENT_FAILED로 해제한다', async () => {
+    it('승인 금액이 다르면 선점을 PAYMENT_FAILED로 해제하고 콜백은 수신 확인으로 끝난다', async () => {
       await expect(
         service.callbackPayment({ ...successPayload, amount: 1 }),
-      ).rejects.toBeInstanceOf(PaymentAmountMismatchError);
+      ).resolves.toBeUndefined();
 
       expect(seatAssignmentService.releaseByOrderItems).toHaveBeenCalledWith(
         ['item-fixed', 'item-free'],

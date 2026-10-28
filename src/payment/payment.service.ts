@@ -1,11 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PaymentRepository } from './payment.repository';
 import { PgPayload, PeriodPaymentData, TimePaymentData } from './payment.types';
-import {
-  PaymentAmountMismatchError,
-  PaymentNotFoundError,
-  PaymentAlreadyClosedError,
-} from './errors';
+import { PaymentNotFoundError, PaymentAlreadyClosedError } from './errors';
 import { OrderItemRepository } from 'src/order-item/order-item.repository';
 import { addDays } from 'date-fns';
 import { SeatReleaseReason, SeatType, TicketStatus } from '@prisma/client';
@@ -90,7 +86,6 @@ export class PaymentService {
    * @returns 없음
    * @throws PaymentNotFoundError 결제가 없을 때
    * @throws PaymentAlreadyClosedError 종결된 결제에 승인 성공이 왔을 때
-   * @throws PaymentAmountMismatchError 승인 금액이 결제 금액과 다를 때
    */
   async callbackPayment(payload: PgPayload): Promise<void> {
     const payment = await this.paymentRepository.getPaymentByPgTransactionId(
@@ -122,14 +117,14 @@ export class PaymentService {
       return;
     }
 
-    // 결재 금액 다름 - 결제 실패 처리와 좌석 선점 해제 후 예외(기존 예외는 유지)
+    // 결재 금액 다름 - 결제 실패 처리와 좌석 선점 해제. 콜백은 수신 확인으로 끝낸다(API 계약 §7)
     if (payload.amount !== payment.amount) {
       await this.failPaymentAndReleaseHolds(
         payment.id,
         payment.order.id,
         `결재 금액이 일치하지 않습니다: (승인금액:${payload.amount})`,
       );
-      throw new PaymentAmountMismatchError(payment.id);
+      return;
     }
 
     /** 승인 처리 */

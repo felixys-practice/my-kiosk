@@ -275,6 +275,7 @@ suite_baseline: green
 | U365 | (실제 DB) 결제 전체 대상 환불(PAYMENT) 아래 PG 취소 요청은 주문 항목 없이 저장된다 (US6 전 사용자 결정: nullable 전환) | FR-030 | example | DONE | `src/prisma/refund-constraints.integration.spec.ts` › PaymentCancel › 결제 전체 대상 환불 아래 PG 취소 요청은 주문 항목 없이 저장된다 |
 | U366 | (실제 DB) 환불에 연결된 PG 취소 요청의 주문 항목이 환불의 주문 항목과 다르면 저장이 실패한다 (data-model §4 '새 행의 연결은 Refund와 같아야 한다', 사용자 결정) | FR-030 | example | DONE | `src/prisma/refund-constraints.integration.spec.ts` › PaymentCancel › 환불에 연결된 PG 취소 요청의 주문 항목이 환불의 주문 항목과 다르면 저장이 실패한다 |
 | U367 | 결제 전체 대상 환불(PAYMENT)도 MANAGER 재시도로 대상 상품 없는 새 PG 취소 요청을 만든다 (U365 결정에 따른 재시도 경로 정리) | FR-044 | example | DONE | `src/refund/refund-result.integration.spec.ts` › MANAGER의 PG 직접 재시도 › 결제 전체 대상 환불도 재시도하면 대상 상품 없는 새 PG 취소 요청을 만든다 |
+| U368 | 승인 금액 불일치 콜백은 예외 없이 수신 확인(200)으로 끝난다 (계약 §7 '콜백은 200 수신 확인', 기존 payment spec 단언 변경 — 사용자 결정) | FR-030 | example | PENDING | |
 
 ### `src/refund/refund-idempotency.service.ts`
 
