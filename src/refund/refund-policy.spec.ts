@@ -95,6 +95,15 @@ describe('evaluateCustomerRefund', () => {
       expect(decision).toEqual({ eligible: false, code: 'REFUND_IN_PROGRESS' });
     },
   );
+  it('이용 중인 이용권은 USED_TICKET으로 판정된다', () => {
+    const decision = evaluateCustomerRefund(
+      candidate({}, { inUse: true }),
+      customerId,
+      now,
+    );
+
+    expect(decision).toMatchObject({ eligible: false, code: 'USED_TICKET' });
+  });
 });
 
 void RefundDecisionStatus;

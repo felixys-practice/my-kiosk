@@ -70,6 +70,11 @@ export function evaluateCustomerRefund(
   if (accepted.length > 0) {
     return { eligible: false, code: 'REFUND_IN_PROGRESS' };
   }
+
+  // 5. 사용 여부: 지금 이용 중이면 사용 이력이 있다
+  if (candidate.ticket.inUse) {
+    return { eligible: false, code: 'USED_TICKET' };
+  }
   void now;
   return { eligible: true, amount: 0 };
 }
