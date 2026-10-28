@@ -47,9 +47,12 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
 
   /**
    * 이용 종료가 확정되고 PG 취소 결과를 기다리는 환불을 만든다
+   * @param source 환불 경로(기본 고객 환불). 신청자는 경로와 무관하게 이 테스트의 사용자로 둔다
    * @returns 환불·PG 취소 요청과 원래 주문
    */
-  async function createPendingRefund(): Promise<{
+  async function createPendingRefund(
+    source: RefundSource = RefundSource.CUSTOMER,
+  ): Promise<{
     refundId: string;
     paymentCancelId: string;
     orderId: string;
@@ -101,7 +104,7 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
         paymentId: payment.id,
         orderItemId: orderItem.id,
         targetKind: RefundTargetKind.ORDER_ITEM,
-        source: RefundSource.CUSTOMER,
+        source,
         decisionStatus: RefundDecisionStatus.ACCEPTED,
         policyVersion: 'v0.4',
         amount: refundAmount,
@@ -671,6 +674,23 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
         shopId,
         paymentCancelId: pending.paymentCancelId,
       },
+    ]);
+  });
+
+  it('매장 환불의 PG 거절은 점주·운영자에게 알리고 고객에게는 알리지 않는다', async () => {
+    const pending = await createPendingRefund(RefundSource.STORE);
+
+    await service.applyPgResult({
+      paymentCancelId: pending.paymentCancelId,
+      outcome: { kind: 'FAILED', reason: '취소 가능 기간 경과' },
+    });
+
+    const notifications = await prisma.refundNotification.findMany({
+      where: { refundId: pending.refundId, kind: 'PG_REJECTED' },
+    });
+    expect(notifications.map((n) => n.audience).sort()).toEqual([
+      RefundNotificationAudience.OPERATOR,
+      RefundNotificationAudience.SHOP,
     ]);
   });
 });

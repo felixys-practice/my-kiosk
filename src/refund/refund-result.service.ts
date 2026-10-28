@@ -4,6 +4,7 @@ import {
   PaymentCancelStatus,
   RefundNotificationAudience,
   RefundPayoutStatus,
+  RefundSource,
 } from '@prisma/client';
 import { TransactionClient } from 'src/prisma/prisma.service';
 import { RefundLedgerRepository } from 'src/ledger/refund-ledger.repository';
@@ -245,6 +246,8 @@ export class RefundResultService {
       ...base,
       audience: RefundNotificationAudience.SHOP,
     });
+    // 고객 본인에게는 고객 환불일 때만 알린다(매장 환불은 점주가 처리한 건)
+    if (attempt.refund.source !== RefundSource.CUSTOMER) return;
     await this.eventRepository.recordNotification(tx, {
       ...base,
       audience: RefundNotificationAudience.CUSTOMER,
