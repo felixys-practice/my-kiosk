@@ -318,4 +318,31 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       ledgers: 0,
     });
   });
+
+  it('같은 성공 결과를 두 번 반영해도 원장과 지급 합계는 한 번만 늘어난다', async () => {
+    const pending = await createPendingRefund();
+    const outcome = {
+      kind: 'SUCCEEDED' as const,
+      pgTransactionId: `pg-cancel-${randomUUID()}`,
+      actualAmount: refundAmount,
+    };
+    await service.applyPgResult({
+      paymentCancelId: pending.paymentCancelId,
+      outcome,
+    });
+
+    await service.applyPgResult({
+      paymentCancelId: pending.paymentCancelId,
+      outcome,
+    });
+
+    const refund = await prisma.refund.findUniqueOrThrow({
+      where: { id: pending.refundId },
+      include: { ledgers: true },
+    });
+    expect({
+      paidAmount: refund.paidAmount,
+      ledgers: refund.ledgers.length,
+    }).toEqual({ paidAmount: refundAmount, ledgers: 1 });
+  });
 });

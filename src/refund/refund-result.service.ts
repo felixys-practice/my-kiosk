@@ -1,5 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import { PaymentCancelFailureCode, RefundPayoutStatus } from '@prisma/client';
+import {
+  PaymentCancelFailureCode,
+  PaymentCancelStatus,
+  RefundPayoutStatus,
+} from '@prisma/client';
 import { RefundLedgerRepository } from 'src/ledger/refund-ledger.repository';
 import { RefundRepository } from './refund.repository';
 import { RefundLockingRepository } from './refund-locking.repository';
@@ -8,6 +12,12 @@ import { RefundLockingRepository } from './refund-locking.repository';
 export type PgCancelOutcome =
   | { kind: 'SUCCEEDED'; pgTransactionId: string; actualAmount: number }
   | { kind: 'FAILED'; reason: string };
+
+/** 결과를 반영할 수 있는 미확정 PG 취소 요청 상태 */
+const unresolvedAttemptStatuses: readonly PaymentCancelStatus[] = [
+  PaymentCancelStatus.REQUESTED,
+  PaymentCancelStatus.QUERY_FAILED,
+];
 
 /** 결과 반영 요청 */
 export type ApplyPgResultCommand = {
@@ -50,6 +60,8 @@ export class RefundResultService {
         command.paymentCancelId,
         tx,
       ))!;
+      // 결과는 미확정 시도에만 한 번 반영한다(이미 확정된 시도는 저장된 결과를 유지)
+      if (!unresolvedAttemptStatuses.includes(attempt.status)) return;
       const now = new Date();
       const { outcome } = command;
       // PG 거절: 그 시도만 실패로 끝내고 환불은 미지급 조치 필요로 둔다(원장 없음, 이용 종료 유지)
