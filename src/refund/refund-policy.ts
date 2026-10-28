@@ -72,15 +72,7 @@ export function evaluateCustomerRefund(
   }
 
   // 5·6. 가능 조건(사용 여부 → 미사용 기한): 위반을 모두 모으고 대표 사유는 USED_TICKET을 우선한다
-  const violations: string[] = [];
-  if (candidate.ticket.inUse || !isUnused(candidate.ticket)) {
-    violations.push('USED_TICKET');
-  }
-  // 신청 시각이 기한보다 늦어야 초과(기한과 같은 시각은 허용)
-  const deadline = unusedDeadlineOf(candidate.ticket);
-  if (deadline !== null && now.getTime() > deadline.getTime()) {
-    violations.push('EXPIRED_TICKET');
-  }
+  const violations = unusedRuleViolations(candidate.ticket, now);
   if (violations.length > 0) {
     return {
       eligible: false,
@@ -91,6 +83,28 @@ export function evaluateCustomerRefund(
   }
   // 고객 환불 금액은 실결제액 전액이다
   return { eligible: true, amount: candidate.paidAmount };
+}
+
+/**
+ * 고객 환불 가능 조건(미사용·기한 안) 위반을 모두 모은다
+ * @param ticket 이용권
+ * @param now 신청 시각
+ * @returns 위반 사유 목록(USED_TICKET → EXPIRED_TICKET 순), 위반이 없으면 빈 배열
+ */
+function unusedRuleViolations(
+  ticket: CustomerRefundCandidate['ticket'],
+  now: Date,
+): string[] {
+  const violations: string[] = [];
+  if (ticket.inUse || !isUnused(ticket)) {
+    violations.push('USED_TICKET');
+  }
+  // 신청 시각이 기한보다 늦어야 초과(기한과 같은 시각은 허용)
+  const deadline = unusedDeadlineOf(ticket);
+  if (deadline !== null && now.getTime() > deadline.getTime()) {
+    violations.push('EXPIRED_TICKET');
+  }
+  return violations;
 }
 
 /**
@@ -155,10 +169,17 @@ export function evaluateStoreRefund(
   input: StoreRefundInput,
   now: Date,
 ): StoreRefundDecision {
-  void now;
   // 금액 상한: 실결제액을 넘을 수 없다
   if (candidate && input.amount > candidate.paidAmount) {
     return { eligible: false, code: 'REFUND_AMOUNT_EXCEEDED' };
+  }
+  // 어긴 규칙이 없는(기한 안 미사용) 이용권은 실결제액 전액만 환불할 수 있다
+  if (
+    candidate &&
+    unusedRuleViolations(candidate.ticket, now).length === 0 &&
+    input.amount !== candidate.paidAmount
+  ) {
+    return { eligible: false, code: 'UNUSED_TICKET_FULL_REFUND_REQUIRED' };
   }
   // 사유는 앞뒤 공백을 지운 값으로 본다. 공백만 있으면 사유가 없는 것이다
   const reason = input.reason?.trim() || null;

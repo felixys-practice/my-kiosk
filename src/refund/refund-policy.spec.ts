@@ -386,4 +386,16 @@ describe('evaluateStoreRefund', () => {
       code: 'REFUND_REASON_REQUIRED',
     });
   });
+  it('기한 안 미사용 이용권에 실결제액보다 1원 적은 금액이면 UNUSED_TICKET_FULL_REFUND_REQUIRED로 거절된다', () => {
+    const decision = evaluateStoreRefund(
+      usedCandidate({}, { activatedAt: null }),
+      { amount: paidAmount - 1, reason: '부분 환불' },
+      now,
+    );
+
+    expect(decision).toEqual({
+      eligible: false,
+      code: 'UNUSED_TICKET_FULL_REFUND_REQUIRED',
+    });
+  });
 });
