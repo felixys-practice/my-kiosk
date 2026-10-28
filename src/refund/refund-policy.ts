@@ -71,15 +71,23 @@ export function evaluateCustomerRefund(
     return { eligible: false, code: 'REFUND_IN_PROGRESS' };
   }
 
-  // 5. 사용 여부: 지금 이용 중이면 사용 이력이 있다
+  // 5·6. 가능 조건(사용 여부 → 미사용 기한): 위반을 모두 모으고 대표 사유는 USED_TICKET을 우선한다
+  const violations: string[] = [];
   if (candidate.ticket.inUse || !isUnused(candidate.ticket)) {
-    return { eligible: false, code: 'USED_TICKET' };
+    violations.push('USED_TICKET');
   }
-
-  // 6. 미사용 기한: 신청 시각이 기한보다 늦어야 초과(기한과 같은 시각은 허용)
+  // 신청 시각이 기한보다 늦어야 초과(기한과 같은 시각은 허용)
   const deadline = unusedDeadlineOf(candidate.ticket);
   if (deadline !== null && now.getTime() > deadline.getTime()) {
-    return { eligible: false, code: 'EXPIRED_TICKET' };
+    violations.push('EXPIRED_TICKET');
+  }
+  if (violations.length > 0) {
+    return {
+      eligible: false,
+      code: violations[0],
+      violations,
+      action: 'CONTACT_SHOP',
+    };
   }
   return { eligible: true, amount: 0 };
 }

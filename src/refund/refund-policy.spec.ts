@@ -259,6 +259,26 @@ describe('evaluateCustomerRefund', () => {
 
     expect(decision).toMatchObject({ eligible: false, code: 'USED_TICKET' });
   });
+  it('가능 조건 거절 결과에 매장 문의 안내(CONTACT_SHOP)와 위반 사유 목록이 담긴다', () => {
+    const decision = evaluateCustomerRefund(
+      candidate(
+        {},
+        {
+          activatedAt: new Date('2026-09-20T09:00:00Z'),
+          activationDeadline: new Date('2026-10-01T00:00:00Z'),
+        },
+      ),
+      customerId,
+      now,
+    );
+
+    expect(decision).toEqual({
+      eligible: false,
+      code: 'USED_TICKET',
+      action: 'CONTACT_SHOP',
+      violations: ['USED_TICKET', 'EXPIRED_TICKET'],
+    });
+  });
 });
 
 void RefundDecisionStatus;
