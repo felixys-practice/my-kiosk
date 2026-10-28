@@ -39,4 +39,18 @@ describe('매장 환불 요청 DTO(StoreRefundDto)', () => {
 
     expect(Object.keys(constraints)).toEqual(['amount']);
   });
+  it('앞뒤 공백을 지운 사유가 500자이면 허용된다', async () => {
+    await expect(
+      constraintsOf({ ...validBody, reason: `  ${'가'.repeat(500)}  ` }),
+    ).resolves.toEqual({});
+  });
+
+  it('앞뒤 공백을 지운 사유가 501자이면 형식 오류(400)다', async () => {
+    const constraints = await constraintsOf({
+      ...validBody,
+      reason: `  ${'가'.repeat(501)}  `,
+    });
+
+    expect(Object.keys(constraints)).toEqual(['reason']);
+  });
 });

@@ -4,8 +4,10 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  MaxLength,
   Min,
 } from 'class-validator';
+import { Transform } from 'class-transformer';
 
 /**
  * 매장 환불 요청 본문 (API 계약 §4 매장: POST /refund/shop/:shopId)
@@ -20,9 +22,13 @@ export class StoreRefundDto {
   @Min(0)
   amount!: number;
 
-  // 점주 사유(선택)
+  // 점주 사유(선택). 앞뒤 공백을 지운 뒤 500자 이하(공백만 있으면 사유 누락으로 서비스에서 판단)
   @IsOptional()
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
   @IsString()
+  @MaxLength(500)
   reason?: string;
 
   // 이용 종료와 환불 금액에 대한 동의(누락·false 거절은 서비스에서)
