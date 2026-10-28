@@ -144,15 +144,19 @@ export class RefundAcceptanceService {
             amount: decision.amount,
           };
         }
+        // 양수는 202 접수·지급 처리 중, 0원은 200 지급 완료(API 계약 §4)
+        const isZero = created.paymentCancelId === null;
         return {
-          status: 202,
+          status: isZero ? 200 : 202,
           refundId: created.refundId,
           body: {
             refundId: created.refundId,
             decisionStatus: RefundDecisionStatus.ACCEPTED,
             ticketId: command.ticketId,
             amount: decision.amount,
-            payoutStatus: RefundPayoutStatus.PENDING,
+            payoutStatus: isZero
+              ? RefundPayoutStatus.PAID
+              : RefundPayoutStatus.PENDING,
             paymentCancelId: created.paymentCancelId,
             acceptedAt: now.toISOString(),
             terminatedAt: now.toISOString(),

@@ -308,4 +308,24 @@ describe('RefundAcceptanceService', () => {
       ),
     ).rejects.toBeInstanceOf(RefundForbiddenError);
   });
+
+  it('0원 고객 환불 응답은 200과 지급 완료(PAID)다', async () => {
+    const zeroTarget = eligibleTarget();
+    zeroTarget.candidate.paidAmount = 0;
+    repository.findCustomerRefundTarget.mockResolvedValue(zeroTarget);
+    repository.createAcceptedRefund.mockResolvedValue({
+      refundId: 'refund-1',
+      paymentCancelId: null,
+    });
+
+    const result = await service.acceptCustomerRefund(customer, {
+      ticketId,
+      consentToTerminateTicket: true,
+    });
+
+    expect(result).toMatchObject({
+      status: 200,
+      body: { amount: 0, payoutStatus: 'PAID', paymentCancelId: null },
+    });
+  });
 });
