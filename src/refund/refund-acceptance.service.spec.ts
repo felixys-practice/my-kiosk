@@ -39,6 +39,8 @@ describe('RefundAcceptanceService', () => {
   >;
   let pgGateway: jest.Mocked<RefundPgGateway>;
   let service: RefundAcceptanceService;
+  /** 커밋·PG 호출 순서 기록 */
+  let events: string[];
 
   /**
    * 환불 가능한 고객 이용권(본인·결제 완료·미사용·기한 안 정기권)을 만든다
@@ -88,12 +90,21 @@ describe('RefundAcceptanceService', () => {
       sendCancel: jest.fn().mockResolvedValue({ result: 'ACCEPTED' }),
       inquireCancel: jest.fn(),
     };
-    // 멱등 처리 대역: 키와 무관하게 처리를 트랜잭션 안에서 한 번 실행한다
+    // 멱등 처리 대역: 처리를 트랜잭션 안에서 실행하고, 끝나면 커밋으로 기록한다
+    events = [];
+    pgGateway.sendCancel.mockImplementation(() => {
+      events.push('pg-send');
+      return Promise.resolve({ result: 'ACCEPTED' });
+    });
     const idempotency = {
-      execute: (
+      execute: async (
         _command: unknown,
-        handler: (t: TransactionClient) => unknown,
-      ) => handler(tx),
+        handler: (t: TransactionClient) => Promise<unknown>,
+      ) => {
+        const result = await handler(tx);
+        events.push('commit');
+        return result;
+      },
     } as unknown as RefundIdempotencyService;
     service = new RefundAcceptanceService(
       repository as unknown as RefundRepository,
@@ -195,5 +206,18 @@ describe('RefundAcceptanceService', () => {
         expect(repository.createAcceptedRefund).not.toHaveBeenCalled();
       },
     );
+  });
+
+  it('PG 전송은 확정 트랜잭션이 커밋된 뒤에만 확정 금액으로 호출된다', async () => {
+    await service.acceptCustomerRefund(customer, {
+      ticketId,
+      consentToTerminateTicket: true,
+    });
+
+    expect(events).toEqual(['commit', 'pg-send']);
+    expect(pgGateway.sendCancel).toHaveBeenCalledWith({
+      paymentCancelId: 'pc-1',
+      amount: 10000,
+    });
   });
 });

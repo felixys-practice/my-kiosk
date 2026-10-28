@@ -69,7 +69,9 @@ export class RefundAcceptanceService {
     actor: RefundActor,
     command: CustomerRefundCommand,
   ): Promise<IdempotentResult<RefundAcceptance>> {
-    return this.idempotencyService.execute(
+    // 이번 요청이 실제로 확정한 PG 취소 요청(저장된 응답을 재생한 경우는 없음)
+    let accepted: { paymentCancelId: string; amount: number } | undefined;
+    const result = await this.idempotencyService.execute(
       {
         requesterId: actor.userId,
         operation: 'CUSTOMER_REFUND',
@@ -130,6 +132,10 @@ export class RefundAcceptanceService {
           },
           tx,
         );
+        accepted = {
+          paymentCancelId: created.paymentCancelId,
+          amount: decision.amount,
+        };
         return {
           status: 202,
           refundId: created.refundId,
@@ -146,6 +152,12 @@ export class RefundAcceptanceService {
         };
       },
     );
+
+    // PG 전송은 커밋 뒤에만 한다. 전송 결과 저장은 PG 처리 흐름(US5)에서 한다
+    if (accepted) {
+      await this.pgGateway.sendCancel(accepted);
+    }
+    return result;
   }
 }
 
