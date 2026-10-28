@@ -16,6 +16,7 @@ import { SessionLifecycleService } from 'src/session-lifecycle/session-lifecycle
 import { ChangeTicketSeatDto } from './dto/change-ticket-seat.dto';
 import { SeatAlreadyOccupiedError } from 'src/usage-session/errors/seat-already-occupied.error';
 import { TicketClosedError } from '../errors/ticket-closed.error';
+import { TicketTerminatedError } from '../errors/ticket-terminated.error';
 import { TicketNotFoundError } from '../errors/ticket-not-found.error';
 import { TicketPausedError } from '../errors/ticket-paused.error';
 import { TicketSeatUnchangedError } from '../errors/ticket-seat-unchanged.error';
@@ -53,6 +54,10 @@ export class TicketSeatService {
         if (!ticket) throw new TicketNotFoundError();
 
         // 종료된 이용권(만료·소진·환불 소멸)은 좌석을 바꿀 수 없다
+        // 환불로 이용이 종료된 이용권은 입실·재개와 같은 오류로 거절한다(API 계약 §10)
+        if (ticket.status === TicketStatus.REVOKED) {
+          throw new TicketTerminatedError();
+        }
         const closedStatuses: TicketStatus[] = [
           TicketStatus.EXPIRED,
           TicketStatus.EXHAUSTED,

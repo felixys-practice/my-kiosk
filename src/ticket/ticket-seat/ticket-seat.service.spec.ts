@@ -14,6 +14,7 @@ import { SeatTypeMismatchError } from 'src/seat-assignment/errors/seat-type-mism
 import { SessionLifecycleService } from 'src/session-lifecycle/session-lifecycle.service';
 import { SeatAlreadyOccupiedError } from 'src/usage-session/errors/seat-already-occupied.error';
 import { TicketClosedError } from '../errors/ticket-closed.error';
+import { DomainConflictError } from 'src/common/errors';
 import { TicketNotFoundError } from '../errors/ticket-not-found.error';
 import { TicketPausedError } from '../errors/ticket-paused.error';
 import { TicketSeatUnchangedError } from '../errors/ticket-seat-unchanged.error';
@@ -326,12 +327,8 @@ describe('TicketSeatService', () => {
       expect(seatAssignmentService.releaseByTicket).not.toHaveBeenCalled();
     });
 
-    it.each([
-      TicketStatus.EXPIRED,
-      TicketStatus.EXHAUSTED,
-      TicketStatus.REVOKED,
-    ])(
-      '종료 상태(EXPIRED·EXHAUSTED·REVOKED) 이용권이면 TicketClosedError다 (%s)',
+    it.each([TicketStatus.EXPIRED, TicketStatus.EXHAUSTED])(
+      '종료 상태(EXPIRED·EXHAUSTED) 이용권이면 TicketClosedError다 (%s)',
       async (status) => {
         repository.getTicketForUpdate.mockResolvedValue({
           ...lockedTicket(SeatType.FREE),
@@ -347,6 +344,22 @@ describe('TicketSeatService', () => {
         ).rejects.toBeInstanceOf(TicketClosedError);
       },
     );
+
+    it('환불로 종료된(REVOKED) 이용권의 좌석 타입 변경은 TICKET_TERMINATED(409)로 거절된다', async () => {
+      repository.getTicketForUpdate.mockResolvedValue({
+        ...lockedTicket(SeatType.FREE),
+        status: TicketStatus.REVOKED,
+      });
+
+      const change = service.changeSeat(
+        ticketId,
+        { seatType: SeatType.FIXED, seatId: 'seat-1', reason: '요청' },
+        ownerId,
+      );
+
+      await expect(change).rejects.toBeInstanceOf(DomainConflictError);
+      await expect(change).rejects.toMatchObject({ code: 'TICKET_TERMINATED' });
+    });
 
     it('일시정지 중인 이용권이면 TicketPausedError다', async () => {
       repository.hasActivePause.mockResolvedValue(true);
