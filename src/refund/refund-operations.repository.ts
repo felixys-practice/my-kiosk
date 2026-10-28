@@ -125,14 +125,20 @@ export class RefundOperationsRepository {
 
   /**
    * 별도 지급액을 환불 지급 합계에 더하고, 미지급액이 없으면 지급 완료로 바꾼다
+   * - 부족액 지급으로 미지급액이 0이 되면 부족 지급 검토도 함께 완료한다(검토자·시각·증빙)
    * @param tx Refund 잠금 트랜잭션
    * @param refundId 환불
-   * @param input 새 지급 합계·지급 완료 여부·시각
+   * @param input 새 지급 합계·지급 완료 여부·시각·검토 완료 정보
    */
   async applyManualPaid(
     tx: TransactionClient,
     refundId: string,
-    input: { paidAmount: number; settled: boolean; now: Date },
+    input: {
+      paidAmount: number;
+      settled: boolean;
+      now: Date;
+      review?: { reviewedById: string; evidenceReference: string };
+    },
   ): Promise<void> {
     await tx.refund.update({
       where: { id: refundId },
@@ -142,6 +148,12 @@ export class RefundOperationsRepository {
             payoutStatus: RefundPayoutStatus.PAID,
             paidAt: input.now,
             actionCode: null,
+            ...(input.review && {
+              reviewRequired: false,
+              reviewedById: input.review.reviewedById,
+              reviewedAt: input.now,
+              reviewEvidenceReference: input.review.evidenceReference,
+            }),
           }
         : { paidAmount: input.paidAmount },
     });

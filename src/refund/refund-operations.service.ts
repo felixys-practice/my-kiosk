@@ -242,10 +242,14 @@ export class RefundOperationsService {
           });
           const paidAmount = refund.paidAmount + payout.amount;
           const settled = paidAmount === refund.amount;
+          // 부족액 지급으로 미지급액이 0이 되면 이 증빙으로 부족 지급 검토도 함께 마친다(API 계약 §5 confirm)
           await this.operationsRepository.applyManualPaid(tx, refundId, {
             paidAmount,
             settled,
             now,
+            review: refund.reviewRequired
+              ? { reviewedById: actor.userId, evidenceReference }
+              : undefined,
           });
           return {
             status: 200,

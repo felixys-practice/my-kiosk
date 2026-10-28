@@ -2947,5 +2947,53 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
         status: ManualRefundPayoutStatus.RESERVED,
       });
     });
+
+    it('PG가 적게 취소한 환불의 부족액 지급 결과를 등록하면 부족 지급 검토도 함께 완료하고 지급 완료가 된다', async () => {
+      const shortfall = 3000;
+      const pending = await createPendingRefund();
+      await succeed(pending.paymentCancelId, refundAmount - shortfall);
+      const reserved = await app
+        .get(RefundOperationsService)
+        .reserveManualPayout(manager(), pending.refundId, {
+          amount: shortfall,
+          reason: reserveReason,
+          idempotencyKey: `reserve-${randomUUID()}`,
+        });
+      const evidenceReference = '부족액 이체 확인증';
+
+      await confirm(
+        { refundId: pending.refundId, payoutId: reserved.body.payoutId },
+        { amount: shortfall, evidenceReference },
+      );
+
+      const refund = await prisma.refund.findUniqueOrThrow({
+        where: { id: pending.refundId },
+      });
+      const ledgers = await prisma.ledger.findMany({
+        where: { refundId: pending.refundId },
+        orderBy: { amount: 'asc' },
+      });
+      expect({
+        refund: {
+          paidAmount: refund.paidAmount,
+          payoutStatus: refund.payoutStatus,
+          reviewRequired: refund.reviewRequired,
+          reviewedById: refund.reviewedById,
+          reviewEvidenceReference: refund.reviewEvidenceReference,
+          reviewedAt: refund.reviewedAt instanceof Date,
+        },
+        ledgers: ledgers.map((ledger) => ledger.amount),
+      }).toEqual({
+        refund: {
+          paidAmount: refundAmount,
+          payoutStatus: RefundPayoutStatus.PAID,
+          reviewRequired: false,
+          reviewedById: managerId,
+          reviewEvidenceReference: evidenceReference,
+          reviewedAt: true,
+        },
+        ledgers: [-(refundAmount - shortfall), -shortfall],
+      });
+    });
   });
 });
