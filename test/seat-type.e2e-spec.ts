@@ -18,6 +18,7 @@ import {
 } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { JwtService } from '@nestjs/jwt';
+import { listenOnLoopback } from './helpers/listen-on-loopback';
 
 /**
  * 좌석 타입(고정석·자유석) 기능 E2E 테스트
@@ -357,7 +358,7 @@ describe('좌석 타입 (E2E)', () => {
     app.useGlobalInterceptors(new TransformInterceptor());
     app.useGlobalFilters(new HttpExceptionFilter());
 
-    await app.init();
+    await listenOnLoopback(app);
 
     server = app.getHttpServer();
     prisma = app.get(PrismaService);

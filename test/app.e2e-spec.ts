@@ -3,6 +3,7 @@ import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
+import { listenOnLoopback } from './helpers/listen-on-loopback';
 
 describe('AppController (e2e)', () => {
   let app: INestApplication<App>;
@@ -13,7 +14,7 @@ describe('AppController (e2e)', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
-    await app.init();
+    await listenOnLoopback(app);
   });
 
   // Redis·BullMQ 연결을 닫아 Jest가 종료되게 한다

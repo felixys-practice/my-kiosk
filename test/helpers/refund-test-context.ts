@@ -10,6 +10,7 @@ import { AppModule } from '../../src/app.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { TransformInterceptor } from '../../src/common/interceptors/transform.interceptor';
 import { HttpExceptionFilter } from '../../src/common/filters/http-exception.filter';
+import { listenOnLoopback } from './listen-on-loopback';
 
 /**
  * 환불 E2E 공용 컨텍스트
@@ -112,7 +113,7 @@ export async function createRefundTestContext(options: {
   );
   app.useGlobalInterceptors(new TransformInterceptor());
   app.useGlobalFilters(new HttpExceptionFilter());
-  await app.init();
+  await listenOnLoopback(app);
 
   const server: App = app.getHttpServer();
   const prisma = app.get(PrismaService);
