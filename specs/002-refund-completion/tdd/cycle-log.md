@@ -592,3 +592,30 @@ U10~U15를 마친 뒤, 관계 검증의 비교 대상 설정을 생략하면 정
 - **역할 검사**: `POST /refund`에 역할 데코레이터를 붙이지 않았다. 다른 고객·점주의 요청은 본인 이용권 범위 검사에서 TICKET_NOT_FOUND가 된다. 계약 §2의 "USER·본인 이용권" 범위와 결과는 같지만, 점주·운영자가 자기 이용권을 신청하는 경우의 역할 거절은 따로 검증하지 않았다.
 - **E2E 간헐 실패**: VS Code Jest 감시를 끈 뒤에도 seat-type·ticket-pause에서 401·403·404·426 실패가 이어졌고, 재실행하면 통과했다. "IDE 동시 실행"만으로는 설명되지 않는다. 원인은 미확정이다.
 - 결과: 단위 352 passed, E2E 69 passed(`edd5079`).
+
+## Phase 3 Codex 검수 1차 (2026-10-28)
+
+- 범위: `335951f..992ec0c`, T019~T034·T179
+- 판정: **수정 필요**. 구현 결함 3건(모두 P2)이다.
+  1. 고객 환불의 역할 제한과 멱등 재응답의 권한 확인이 없다. OWNER·MANAGER가 자기 이용권을 신청하면 확정과 PG 호출이 진행된다. 계약 §2(USER·본인 이용권)에 따라 403 `REFUND_FORBIDDEN`이어야 한다. 기존 RoleGuard는 401이므로 그대로 쓰면 안 된다.
+  2. 실결제액 0원 고객 환불도 PG 취소 요청을 만들고 0원을 전송한다. PG 요청 없이 이용 종료·좌석 해제·PAID·0원 원장을 함께 저장해야 한다.
+  3. 닫힌 정지가 주문 조회(`order.repository.ts`)와 이용권 조회(`ticket.repository.ts`)에서 `resumedAt: null`만 보기 때문에 계속 활성 정지로 표시된다(REVOKED·isPaused:true 재현).
+- 타당하다고 본 것: 사용자 결정에 따른 기존 경로 유지, QS-21 변경, 서비스의 동의 검사 순서, U305·U306 추가.
+- 추가 의견:
+  - PG 결과 저장은 후속 미완료로 구분한다. US4·US5 연결 때 실제 최초 응답과 멱등 기록의 응답이 일치하는지 검증한다.
+  - session-lifecycle은 US2·US3의 경쟁 처리 검증으로 추적하고, 이번 판정을 동시성 검증 완료로 보지 않는다.
+  - A2~A10의 사후 작성은 TDD 절차 이탈이며, 뮤턴트 검증은 보충 근거다.
+- Codex는 Herdr 환경 확인(HERDR_ENV) 실패로 Claude 패널에 결과를 보내지 못했다. 결과는 Codex 패널에서 직접 읽었다.
+
+## 사이클: Phase 3 검수 1차 수정 (U307~U311)
+
+| 동작 | 테스트 | red | green | 커밋 |
+|---|---|---|---|---|
+| U307 | `refund-acceptance.service.spec.ts` OWNER·MANAGER의 고객 환불은 저장 없이 REFUND_FORBIDDEN | 2 failed, `Received promise resolved instead of rejected` | 멱등 처리 전에 `assertCustomerRole`(USER가 아니면 403) | `2839197` |
+| U308 | 같은 키 재응답도 현재 역할이 USER가 아니면 REFUND_FORBIDDEN | 첫 통과(U307 확인이 재생 요청에도 실행) → 뮤턴트(역할 확인을 최초 처리 안으로만) 1 failed | 구현 변경 없음 | `9995c93` |
+| U309 | (실제 DB) 0원 환불은 PG 취소 요청 없이 REVOKED·PAID·paidAt·0원 원장(RELEASABLE, 지급 연결 없음), PG 미호출 | `- Expected - 12 / + Received + 4`(PENDING·시도 1·원장 없음) | `createAcceptedRefund` 0원 분기, 대상에 orderId·shopId 추가, PG 취소 요청이 없으면 전송 안 함 | `5158283` |
+| U310 | 0원 응답은 200·PAID·paymentCancelId null | `- Expected - 2 / + Received + 2`(202·PENDING) | PG 취소 요청이 없으면 200·PAID | `76dc9a1` |
+| U311 | (E2E) 환불로 닫힌 정지는 주문 조회 isPaused·시간권 상세 pausedAt에 나타나지 않음 | `orderTicketIsPaused` 기대 false / 실제 true | 공용 조건 `activePauseWhere`(resumedAt·closedAt null)를 주문 조회, 이용권 조회 2곳, 좌석 변경, 정지 저장소, 환불 저장소에 적용 | `dd073d0` |
+
+- U311 테스트는 주문 조회와 시간권 상세만 직접 확인한다. 좌석 변경·정지 저장소의 활성 정지 조회는 같은 상수로 바뀌었지만 별도 테스트가 없다. 다만 정지 재개는 REVOKED 이용권을 이미 거절한다(Codex 확인).
+- 결과: 단위 357 passed, E2E 70 passed(`dd073d0`). `ticket.repository.ts`의 eslint 6건은 HEAD에도 있는 기존 오류다.
