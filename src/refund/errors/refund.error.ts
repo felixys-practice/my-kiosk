@@ -1,4 +1,5 @@
 import {
+  DomainBadRequestError,
   DomainConflictError,
   DomainForbiddenError,
   DomainNotFoundError,
@@ -46,5 +47,15 @@ export class ShopNotFoundError extends DomainNotFoundError {
   constructor(shopId: string) {
     super(`매장을 찾을 수 없습니다: ${shopId}`);
     this.name = 'ShopNotFoundError';
+  }
+}
+
+/** 이용 종료와 환불 금액에 대한 동의 누락 (400) */
+export class RefundTerminationConsentRequiredError extends DomainBadRequestError {
+  readonly code = 'REFUND_TERMINATION_CONSENT_REQUIRED';
+
+  constructor() {
+    super('이용 종료와 환불 금액에 대한 동의가 필요합니다');
+    this.name = 'RefundTerminationConsentRequiredError';
   }
 }

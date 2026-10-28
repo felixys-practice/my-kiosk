@@ -2,15 +2,103 @@ import { Injectable } from '@nestjs/common';
 import {
   PaymentCancelFailureCode,
   PaymentCancelStatus,
+  RefundSource,
   TicketStatus,
   UsageSessionStatus,
 } from '@prisma/client';
+import { CustomerRefundCandidate } from './refund-policy';
+import { AcceptanceLockTargets } from './refund-locking.repository';
 import { PrismaService, TransactionClient } from 'src/prisma/prisma.service';
 import { DomainConflictError } from 'src/common/errors';
+
+/** 고객 환불 판정 후보와 잠글 행 */
+export type CustomerRefundTarget = {
+  candidate: CustomerRefundCandidate;
+  lockTargets: AcceptanceLockTargets;
+  paymentId: string;
+  orderItemId: string;
+};
+
+/** 확정할 환불 내용 */
+export type AcceptedRefundInput = {
+  paymentId: string;
+  orderItemId: string;
+  source: RefundSource;
+  amount: number;
+  requestedById: string;
+  now: Date; // 신청·확정·종료·동의 시각
+  reason?: string;
+  exitConsentedAt?: Date;
+  endedSessionId?: string;
+};
 
 @Injectable()
 export class RefundRepository {
   constructor(private readonly prisma: PrismaService) {}
+
+  /**
+   * 고객 환불 판정·확정에 필요한 이용권·결제·기존 환불과 잠글 행을 조회한다
+   * @param ticketId 이용권 ID
+   * @param tx 트랜잭션 클라이언트
+   * @returns 판정 후보와 잠글 행, 이용권이 없으면 null
+   */
+  async findCustomerRefundTarget(
+    ticketId: string,
+    tx: TransactionClient,
+  ): Promise<CustomerRefundTarget | null> {
+    void ticketId;
+    void tx;
+    return Promise.resolve(null);
+  }
+
+  /**
+   * 환불 확정으로 이용권을 종료(REVOKED)한다. 만료 시각·남은 시간은 바꾸지 않는다
+   * @param ticketId 이용권 ID
+   * @param now 종료 시각
+   * @param tx 트랜잭션 클라이언트
+   */
+  async terminateTicket(
+    ticketId: string,
+    now: Date,
+    tx: TransactionClient,
+  ): Promise<void> {
+    void ticketId;
+    void now;
+    void tx;
+    return Promise.resolve();
+  }
+
+  /**
+   * 진행 중인 정지 기록을 재개 없이 환불 종료 사유로 닫는다
+   * @param ticketId 이용권 ID
+   * @param now 닫은 시각
+   * @param tx 트랜잭션 클라이언트
+   */
+  async closeOpenPausesForRefund(
+    ticketId: string,
+    now: Date,
+    tx: TransactionClient,
+  ): Promise<void> {
+    void ticketId;
+    void now;
+    void tx;
+    return Promise.resolve();
+  }
+
+  /**
+   * 확정된 환불과 최초 PG 취소 요청(시도 1, REQUESTED)을 저장한다
+   * @param input 환불 내용
+   * @param tx 트랜잭션 클라이언트
+   * @returns 환불·PG 취소 요청 ID
+   */
+  async createAcceptedRefund(
+    input: AcceptedRefundInput,
+    tx: TransactionClient,
+  ): Promise<{ refundId: string; paymentCancelId: string }> {
+    void input;
+    void tx;
+    return Promise.reject(new Error('미구현'));
+  }
 
   /**
    * 사용자가 지금 이 매장의 점주(ShopOwner)인지 확인한다
