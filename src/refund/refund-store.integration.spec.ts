@@ -19,6 +19,7 @@ import { REFUND_PG_GATEWAY } from 'src/pg/refund-pg.gateway';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { RefundStoreService } from './refund-store.service';
 import { SessionLifecycleService } from 'src/session-lifecycle/session-lifecycle.service';
+import { SessionEndJobQueue } from 'src/session-lifecycle/session-end-job.queue';
 import { ShopNotFoundError, TicketNotFoundError } from './errors';
 
 /**
@@ -561,6 +562,50 @@ describe('매장 환불 확정 저장 (실제 DB)', () => {
     }).toEqual({
       remainingMinutes: afterExit.remainingMinutes,
       endedSessionId: null,
+    });
+  });
+
+  it('커밋 뒤 세션 자동 종료 작업 제거가 실패해도 환불은 확정되고 이용권·퇴실은 복구되지 않는다', async () => {
+    const issued = await createUsedTimeTicket();
+    const sessionId = await startSession(issued.ticketId);
+    await prisma.usageSession.update({
+      where: { id: sessionId },
+      data: { bullmqJobId: `job-${sessionId}` },
+    });
+    const jobRemoval = jest
+      .spyOn(app.get(SessionEndJobQueue), 'remove')
+      .mockRejectedValueOnce(new Error('redis unavailable'));
+
+    const accepted = await service.acceptStoreRefund(
+      { userId: ownerId, role: UserRole.OWNER },
+      shopId,
+      {
+        ticketId: issued.ticketId,
+        amount: 5000,
+        reason: '보상',
+        consentToTerminateTicket: true,
+        consentToEndSession: true,
+      },
+    );
+
+    const removalCalls = jobRemoval.mock.calls;
+    jobRemoval.mockRestore();
+    const session = await prisma.usageSession.findUniqueOrThrow({
+      where: { id: sessionId },
+    });
+    const ticket = await prisma.ticket.findUniqueOrThrow({
+      where: { id: issued.ticketId },
+    });
+    expect({
+      status: accepted.status,
+      removalCalls,
+      session: session.status,
+      ticket: ticket.status,
+    }).toEqual({
+      status: 202,
+      removalCalls: [[`job-${sessionId}`]],
+      session: UsageSessionStatus.ENDED,
+      ticket: TicketStatus.REVOKED,
     });
   });
 });

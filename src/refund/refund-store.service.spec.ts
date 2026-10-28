@@ -11,6 +11,7 @@ import {
 import { RefundAcceptanceService } from './refund-acceptance.service';
 import { RefundAccessService } from './refund-access.service';
 import { SessionLifecycleService } from 'src/session-lifecycle/session-lifecycle.service';
+import { SessionEndJobQueue } from 'src/session-lifecycle/session-end-job.queue';
 import { RefundIdempotencyService } from './refund-idempotency.service';
 import { RefundForbiddenError } from './errors';
 
@@ -26,6 +27,7 @@ describe('RefundStoreService', () => {
       {} as RefundAcceptanceService,
       {} as RefundIdempotencyService,
       {} as SessionLifecycleService,
+      {} as SessionEndJobQueue,
       { sendCancel: jest.fn(), inquireCancel: jest.fn() },
     );
   });

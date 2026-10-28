@@ -1,8 +1,9 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { RefundSource, UserRole } from '@prisma/client';
 import { REFUND_PG_GATEWAY } from 'src/pg/refund-pg.gateway';
 import type { RefundPgGateway } from 'src/pg/refund-pg.gateway';
 import { SessionLifecycleService } from 'src/session-lifecycle/session-lifecycle.service';
+import { SessionEndJobQueue } from 'src/session-lifecycle/session-end-job.queue';
 import { RefundAccessService, RefundActor } from './refund-access.service';
 import {
   IdempotentResult,
@@ -39,11 +40,14 @@ export type StoreRefundCommand = {
  */
 @Injectable()
 export class RefundStoreService {
+  private readonly logger = new Logger(RefundStoreService.name);
+
   constructor(
     private readonly accessService: RefundAccessService,
     private readonly acceptanceService: RefundAcceptanceService,
     private readonly idempotencyService: RefundIdempotencyService,
     private readonly sessionLifecycleService: SessionLifecycleService,
+    private readonly sessionEndJobQueue: SessionEndJobQueue,
     @Inject(REFUND_PG_GATEWAY) private readonly pgGateway: RefundPgGateway,
   ) {}
 
@@ -68,6 +72,8 @@ export class RefundStoreService {
 
     // 이번 요청이 실제로 확정한 PG 취소 요청(저장된 응답을 재생한 경우는 없음)
     let pending: { paymentCancelId: string; amount: number } | undefined;
+    // 이번 요청이 퇴실시킨 세션의 자동 종료 지연 작업(커밋 뒤 제거)
+    let endedSessionJobId: string | null = null;
     const result = await this.idempotencyService.execute(
       {
         requesterId: actor.userId,
@@ -116,11 +122,12 @@ export class RefundStoreService {
         let endedSessionId: string | undefined;
         if (target!.candidate.ticket.inUse) {
           endedSessionId = target!.lockTargets.usageSessionIds[0];
-          await this.sessionLifecycleService.endSession(
+          const ended = await this.sessionLifecycleService.endSession(
             endedSessionId,
             now,
             tx,
           );
+          endedSessionJobId = ended.bullmqJobId;
         }
 
         // 이용권 종료·좌석 해제·확정 환불·최초 PG 취소 요청을 함께 저장한다
@@ -146,11 +153,32 @@ export class RefundStoreService {
       },
     );
 
+    // 퇴실시킨 세션의 자동 종료 작업은 커밋 뒤 지운다. 실패해도 확정된 이용 종료·퇴실은 되돌리지 않는다
+    if (endedSessionJobId) {
+      await this.removeSessionEndJob(endedSessionJobId);
+    }
+
     // PG 전송은 커밋 뒤에만 한다
     if (pending) {
       await this.pgGateway.sendCancel(pending);
     }
     return result;
+  }
+
+  /**
+   * 퇴실시킨 세션의 자동 종료 지연 작업을 지운다
+   * - 지우지 못해도 처리기는 이미 종료된 세션을 다시 종료하지 않으므로(endSession 멱등) 경고만 남긴다
+   * @param jobId BullMQ 작업 ID
+   */
+  private async removeSessionEndJob(jobId: string): Promise<void> {
+    try {
+      await this.sessionEndJobQueue.remove(jobId);
+    } catch (error) {
+      this.logger.warn(
+        `환불로 퇴실한 세션의 자동 종료 작업을 지우지 못했습니다: ${jobId}`,
+        error instanceof Error ? error.stack : String(error),
+      );
+    }
   }
 }
 
