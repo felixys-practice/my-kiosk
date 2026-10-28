@@ -448,4 +448,27 @@ describe('evaluateStoreRefund', () => {
       reason: '기한 경과 일부 환불',
     });
   });
+  it('남은 시간이 0인 시간권도 금액과 사유로 매장 환불이 확정된다', () => {
+    const decision = evaluateStoreRefund(
+      usedCandidate(
+        {},
+        {
+          type: TicketType.TIME,
+          activatedAt: null,
+          activationDeadline: null,
+          purchasedMinutes: 600,
+          remainingMinutes: 0,
+          minuteExpireDeadline: new Date('2026-11-27T12:00:00Z'),
+        },
+      ),
+      { amount: 2000, reason: '소진 후 불편 보상' },
+      now,
+    );
+
+    expect(decision).toEqual({
+      eligible: true,
+      amount: 2000,
+      reason: '소진 후 불편 보상',
+    });
+  });
 });
