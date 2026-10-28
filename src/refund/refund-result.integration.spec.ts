@@ -730,6 +730,22 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
     ]);
   });
 
+  it('시스템 자동 취소 환불의 PG 거절은 운영자에게만 알린다', async () => {
+    const pending = await createPendingRefund(RefundSource.SYSTEM);
+
+    await service.applyPgResult({
+      paymentCancelId: pending.paymentCancelId,
+      outcome: { kind: 'FAILED', reason: '취소 가능 기간 경과' },
+    });
+
+    const notifications = await prisma.refundNotification.findMany({
+      where: { refundId: pending.refundId, kind: 'PG_REJECTED' },
+    });
+    expect(notifications.map((n) => n.audience)).toEqual([
+      RefundNotificationAudience.OPERATOR,
+    ]);
+  });
+
   it('PG 실제액 불일치는 운영자 알림을 저장한다', async () => {
     const pending = await createPendingRefund();
 

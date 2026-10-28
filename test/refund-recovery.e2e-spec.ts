@@ -919,7 +919,7 @@ describe('PG 결과 조회·재전송·장애 복구 (E2E)', () => {
     });
   });
 
-  it('시스템 자동 취소 건의 지급 결과를 받지 못하면 같은 조회·미지급 관리 규칙을 적용해 거래조회의 PG 거절은 실패·조치 필요·운영자 알림으로 남기고, 승인 금액 불일치 건은 이용권을 만들지 않는다 (QS-5-12)', async () => {
+  it('시스템 자동 취소 건의 지급 결과를 받지 못하면 같은 조회·미지급 관리 규칙을 적용해 거래조회의 PG 거절은 실패·조치 필요·운영자에게만 알리며, 승인 금액 불일치 건은 이용권을 만들지 않는다 (QS-5-12)', async () => {
     const auto = await systemAutoCancel({
       result: 'UNKNOWN',
       reason: '응답 시간 초과',
@@ -941,9 +941,9 @@ describe('PG 결과 조회·재전송·장애 복구 (E2E)', () => {
         refund.paymentCancels[0].failureCode,
       ],
       payoutStatus: refund.payoutStatus,
-      operatorNotified: refund.notifications.some(
-        (n) => n.audience === RefundNotificationAudience.OPERATOR,
-      ),
+      audiences: refund.notifications
+        .filter((n) => n.kind === 'PG_REJECTED')
+        .map((n) => n.audience),
       tickets,
     }).toEqual({
       attempt: [
@@ -951,7 +951,7 @@ describe('PG 결과 조회·재전송·장애 복구 (E2E)', () => {
         PaymentCancelFailureCode.PG_REJECTED,
       ],
       payoutStatus: RefundPayoutStatus.ACTION_REQUIRED,
-      operatorNotified: true,
+      audiences: [RefundNotificationAudience.OPERATOR],
       tickets: 0,
     });
   });

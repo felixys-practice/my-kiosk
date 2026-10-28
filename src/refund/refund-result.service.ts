@@ -486,6 +486,8 @@ export class RefundResultService {
     actionLogs: TransactionLog[],
   ): Promise<void> {
     await this.notifyOperator(tx, attempt, kind, actionLogs);
+    // 시스템 자동 취소는 운영자만 처리한다(API 계약 §9 수신자 표)
+    if (attempt.refund.source === RefundSource.SYSTEM) return;
     await this.eventRepository.recordNotification(tx, {
       ...this.notificationBase(attempt, kind),
       audience: RefundNotificationAudience.SHOP,
