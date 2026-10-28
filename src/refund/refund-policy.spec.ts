@@ -163,6 +163,35 @@ describe('evaluateCustomerRefund', () => {
       expect(decision).toMatchObject({ eligible: false, code: 'USED_TICKET' });
     });
   });
+  it('결제 미완료와 사용 이력이 함께 있으면 PAYMENT_NOT_COMPLETED가 먼저 판정된다', () => {
+    const decision = evaluateCustomerRefund(
+      candidate({ paymentStatus: PaymentStatus.FAILED }, { inUse: true }),
+      customerId,
+      now,
+    );
+
+    expect(decision).toMatchObject({ code: 'PAYMENT_NOT_COMPLETED' });
+  });
+
+  it('미지급 확정 환불과 사용 이력이 함께 있으면 REFUND_IN_PROGRESS가 먼저 판정된다', () => {
+    const decision = evaluateCustomerRefund(
+      candidate(
+        {
+          existingRefunds: [
+            {
+              decisionStatus: RefundDecisionStatus.ACCEPTED,
+              payoutStatus: RefundPayoutStatus.PENDING,
+            },
+          ],
+        },
+        { activatedAt: new Date('2026-10-20T09:00:00Z') },
+      ),
+      customerId,
+      now,
+    );
+
+    expect(decision).toMatchObject({ code: 'REFUND_IN_PROGRESS' });
+  });
 });
 
 void RefundDecisionStatus;
