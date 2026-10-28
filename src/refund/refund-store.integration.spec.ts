@@ -20,6 +20,7 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { RefundStoreService } from './refund-store.service';
 import { SessionLifecycleService } from 'src/session-lifecycle/session-lifecycle.service';
 import { SessionEndJobQueue } from 'src/session-lifecycle/session-end-job.queue';
+import { UsageSessionService } from 'src/usage-session/usage-session.service';
 import { ShopNotFoundError, TicketNotFoundError } from './errors';
 
 /**
@@ -606,6 +607,71 @@ describe('매장 환불 확정 저장 (실제 DB)', () => {
       removalCalls: [[`job-${sessionId}`]],
       session: UsageSessionStatus.ENDED,
       ticket: TicketStatus.REVOKED,
+    });
+  });
+
+  /**
+   * 이용 중 시간권을 퇴실 동의와 함께 매장 환불한 뒤의 세션·이용권 상태를 만든다
+   * @returns 세션 ID와 환불 직후의 세션 종료 시각·남은 시간
+   */
+  async function refundedInUseTimeTicket() {
+    const issued = await createUsedTimeTicket();
+    const sessionId = await startSession(issued.ticketId);
+    await service.acceptStoreRefund(
+      { userId: ownerId, role: UserRole.OWNER },
+      shopId,
+      {
+        ticketId: issued.ticketId,
+        amount: 5000,
+        reason: '보상',
+        consentToTerminateTicket: true,
+        consentToEndSession: true,
+      },
+    );
+    const session = await prisma.usageSession.findUniqueOrThrow({
+      where: { id: sessionId },
+    });
+    const ticket = await prisma.ticket.findUniqueOrThrow({
+      where: { id: issued.ticketId },
+    });
+    return {
+      ticketId: issued.ticketId,
+      sessionId,
+      endedAt: session.endedAt,
+      remainingMinutes: ticket.remainingMinutes,
+    };
+  }
+
+  it('환불 뒤 도착한 자동 종료 작업은 세션 종료 상태(종료 시각)를 덮어쓰지 않는다', async () => {
+    const refunded = await refundedInUseTimeTicket();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    // 지연된 자동 종료 작업(처리기와 같은 호출)
+    await app.get(UsageSessionService).endUsageSession(refunded.sessionId);
+
+    const session = await prisma.usageSession.findUniqueOrThrow({
+      where: { id: refunded.sessionId },
+    });
+    expect({ status: session.status, endedAt: session.endedAt }).toEqual({
+      status: UsageSessionStatus.ENDED,
+      endedAt: refunded.endedAt,
+    });
+  });
+
+  it('환불 뒤 도착한 자동 종료 작업은 사용 시간을 다시 차감하지 않는다', async () => {
+    const refunded = await refundedInUseTimeTicket();
+
+    await app.get(UsageSessionService).endUsageSession(refunded.sessionId);
+
+    const ticket = await prisma.ticket.findUniqueOrThrow({
+      where: { id: refunded.ticketId },
+    });
+    expect({
+      status: ticket.status,
+      remainingMinutes: ticket.remainingMinutes,
+    }).toEqual({
+      status: TicketStatus.REVOKED,
+      remainingMinutes: refunded.remainingMinutes,
     });
   });
 });
