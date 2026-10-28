@@ -122,6 +122,37 @@ describe('evaluateCustomerRefund', () => {
 
     expect(decision).toMatchObject({ eligible: true });
   });
+  describe('시간권', () => {
+    const purchasedMinutes = 600;
+
+    /**
+     * 시간권 후보를 만든다
+     * @param remainingMinutes 남은 시간(분)
+     * @returns 후보
+     */
+    function timeTicket(remainingMinutes: number): CustomerRefundCandidate {
+      return candidate(
+        {},
+        {
+          type: TicketType.TIME,
+          activationDeadline: null,
+          purchasedMinutes,
+          remainingMinutes,
+          minuteExpireDeadline: new Date('2026-11-27T12:00:00Z'),
+        },
+      );
+    }
+
+    it('남은 시간이 구매 시간보다 1분 적은 시간권은 USED_TICKET으로 판정된다', () => {
+      const decision = evaluateCustomerRefund(
+        timeTicket(purchasedMinutes - 1),
+        customerId,
+        now,
+      );
+
+      expect(decision).toMatchObject({ eligible: false, code: 'USED_TICKET' });
+    });
+  });
 });
 
 void RefundDecisionStatus;

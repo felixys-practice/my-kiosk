@@ -82,9 +82,20 @@ export function evaluateCustomerRefund(
 /**
  * 이용권이 미사용인지 판정한다(이용 중 여부는 호출하는 쪽에서 먼저 본다)
  * - 정기권: 활성화 전이면 미사용
+ * - 시간권: 남은 시간이 구매 시간과 같으면 미사용
  * @param ticket 이용권
  * @returns 미사용이면 true
  */
 function isUnused(ticket: CustomerRefundCandidate['ticket']): boolean {
-  return ticket.activatedAt === null;
+  switch (ticket.type) {
+    case TicketType.PERIOD:
+      return ticket.activatedAt === null;
+    case TicketType.TIME:
+      // 남은 시간이 구매 시간과 같아야 미사용. 값이 비어 있으면 보수적으로 사용 이력 있음
+      return (
+        ticket.remainingMinutes !== null &&
+        ticket.purchasedMinutes !== null &&
+        ticket.remainingMinutes === ticket.purchasedMinutes
+      );
+  }
 }
