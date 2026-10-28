@@ -32,6 +32,28 @@ export type PayoutRetryDecision =
   { allowed: true } | { allowed: false; code: PayoutRetryRejection };
 
 /**
+ * 확인되지 않은 환불금 지급이 있는지 판단한다(PG 재시도·별도 지급 예약 공통, API 계약 §5)
+ * - 결과가 확정되지 않은 PG 취소 요청, 활성 별도 지급 예약, 실패한 요청의 유효한 개별 조회 담당, PG 결과 모순
+ * @param state Refund 잠금 뒤 읽은 지급 상태
+ * @param now 판정 시각(조회 담당 기한 비교)
+ * @returns 하나라도 있으면 true
+ */
+export function hasUnresolvedPayout(
+  state: PayoutRetryState,
+  now: Date,
+): boolean {
+  return (
+    state.activeManualPayout ||
+    state.actionCode === 'PG_RESULT_CONFLICT' ||
+    state.attempts.some(
+      (attempt) =>
+        !finalStatuses.includes(attempt.status) ||
+        (attempt.claimUntil !== null && attempt.claimUntil > now),
+    )
+  );
+}
+
+/**
  * 확정된 환불에 새 PG 취소 요청을 만들어도 되는지 판정한다 (API 계약 §5 처리 순서 3·4)
  * @param state Refund 잠금 뒤 읽은 지급 상태
  * @param now 판정 시각(조회 담당 기한 비교)
@@ -48,20 +70,8 @@ export function evaluatePayoutRetry(
   ) {
     return { allowed: false, code: 'REFUND_PAYOUT_NOT_ACTIONABLE' };
   }
-  // 결과가 확정되지 않은 PG 취소 요청이나 활성 별도 지급 예약이 있으면 새 요청을 만들지 않는다
-  if (
-    state.activeManualPayout ||
-    state.attempts.some((attempt) => !finalStatuses.includes(attempt.status))
-  ) {
-    return { allowed: false, code: 'REFUND_PAYOUT_UNRESOLVED' };
-  }
-  // 실패한 요청을 다른 작업(개별 조회)이 유효하게 맡고 있거나 PG 결과 모순을 확인해야 하면 기다린다
-  if (
-    state.actionCode === 'PG_RESULT_CONFLICT' ||
-    state.attempts.some(
-      (attempt) => attempt.claimUntil !== null && attempt.claimUntil > now,
-    )
-  ) {
+  // 확인되지 않은 지급이 있으면 새 요청을 만들지 않는다
+  if (hasUnresolvedPayout(state, now)) {
     return { allowed: false, code: 'REFUND_PAYOUT_UNRESOLVED' };
   }
   // 일부만 지급됐으면 PG 전액 재시도 대신 미지급액의 별도 지급으로 처리한다
