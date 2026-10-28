@@ -3,6 +3,7 @@ import request from 'supertest';
 import { randomUUID } from 'crypto';
 import {
   ManualRefundPayoutStatus,
+  RefundNotificationAudience,
   PaymentCancelFailureCode,
   PaymentCancelStatus,
   RefundPayoutStatus,
@@ -14,6 +15,7 @@ import {
   RefundTestContext,
 } from './helpers/refund-test-context';
 import { RefundPgStub } from './helpers/refund-pg.stub';
+import { RefundRecoveryService } from '../src/refund/refund-recovery.service';
 
 /**
  * 사용자 스토리 10: 점주·운영자의 미지급 환불금 재처리 (E2E)
@@ -72,6 +74,53 @@ describe('미지급 환불금 재처리 (E2E)', () => {
       .set('Authorization', `Bearer ${token}`)
       .set('Idempotency-Key', key)
       .send({ reason });
+  }
+
+  /**
+   * 점주·운영자가 환불의 PG 결과를 개별 확인한다
+   * @param refundId 환불
+   * @param token 요청자 토큰(기본 점주)
+   * @returns 응답
+   */
+  function pgCheck(refundId: string, token = ctx.owner.token) {
+    return request(ctx.server)
+      .post(`/refund/${refundId}/pg-check`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({});
+  }
+
+  /**
+   * 정해진 사유로 최초 PG 취소 요청이 실패한 고객 환불을 만든다
+   * - 전송 전 실패·PG 거절은 실제 전송 결과로, 한도 소진은 전송 전 실패 뒤 사유만 바꿔 만든다
+   * @param failureCode 실패 사유
+   * @returns 환불·이용권 ID
+   */
+  async function createRefundFailedWith(
+    failureCode: PaymentCancelFailureCode,
+  ): Promise<{ refundId: string; ticketId: string }> {
+    const issued = await ctx.issuePeriodTicket();
+    pgStub.respondToSend(
+      failureCode === PaymentCancelFailureCode.PG_REJECTED
+        ? { result: 'REJECTED', reason: '카드사 거절' }
+        : { result: 'NOT_SENT', reason: 'PG 연결 설정 누락' },
+    );
+    const res = await request(ctx.server)
+      .post('/refund')
+      .set('Authorization', `Bearer ${ctx.customer.token}`)
+      .send({ ticketId: issued.ticketId, consentToTerminateTicket: true })
+      .expect(202);
+    const refundId = res.body.data.refundId as string;
+    if (failureCode === PaymentCancelFailureCode.RETRY_EXHAUSTED) {
+      await ctx.prisma.paymentCancel.updateMany({
+        where: { refundId },
+        data: { failureCode, resendCount: 3 },
+      });
+      await ctx.prisma.refund.update({
+        where: { id: refundId },
+        data: { actionCode: failureCode },
+      });
+    }
+    return { refundId, ticketId: issued.ticketId };
   }
 
   beforeAll(async () => {
@@ -308,6 +357,178 @@ describe('미지급 환불금 재처리 (E2E)', () => {
       partialNew: [409, 'REFUND_PARTIAL_PAYOUT_REQUIRES_MANUAL'],
       addedAttempts: 0,
       addedSends: 0,
+    });
+  });
+
+  it('최근 PG 취소 요청이 한도 소진·전송 전 실패·PG 거절로 이미 실패한 자기 매장 환불을 점주가 개별 확인해 미접수 또는 거절 확정이면 별도 버튼·사유 없이 새 PG 취소 요청 식별자로 즉시 보내고 이전 실패·이용 종료를 유지하며, 조회 오류면 보내지 않고 처리 중이면 운영자에게 알리고 추가 지급을 막는다 (QS-10-1a)', async () => {
+    const reasons = [
+      PaymentCancelFailureCode.RETRY_EXHAUSTED,
+      PaymentCancelFailureCode.SEND_FAILED,
+      PaymentCancelFailureCode.PG_REJECTED,
+    ];
+    const retried: { refundId: string; ticketId: string }[] = [];
+    for (const reason of reasons) {
+      retried.push(await createRefundFailedWith(reason));
+    }
+    const queryError = await createRefundFailedWith(
+      PaymentCancelFailureCode.SEND_FAILED,
+    );
+    const inProgress = await createRefundFailedWith(
+      PaymentCancelFailureCode.SEND_FAILED,
+    );
+    pgStub.reset();
+
+    const checks: unknown[] = [];
+    for (const [index, target] of retried.entries()) {
+      pgStub
+        .respondToInquiry(
+          reasons[index] === PaymentCancelFailureCode.PG_REJECTED
+            ? { result: 'FAILED', reason: '카드사 거절' }
+            : { result: 'NOT_FOUND', authoritative: true },
+        )
+        .respondToSend({ result: 'ACCEPTED' });
+      const res = await pgCheck(target.refundId).expect(200);
+      checks.push([res.body.data.checkStatus, res.body.data.resendResult]);
+    }
+    pgStub.respondToInquiry({ result: 'QUERY_ERROR', reason: '조회 지연' });
+    const queryErrorRes = await pgCheck(queryError.refundId).expect(200);
+    pgStub.respondToInquiry({ result: 'IN_PROGRESS' });
+    await pgCheck(inProgress.refundId).expect(200);
+
+    const refunds = await ctx.prisma.refund.findMany({
+      where: {
+        id: {
+          in: [...retried, queryError, inProgress].map((t) => t.refundId),
+        },
+      },
+      include: {
+        paymentCancels: { orderBy: { attemptNumber: 'asc' } },
+        notifications: true,
+        orderItem: { include: { ticket: true } },
+      },
+    });
+    const byId = (refundId: string) =>
+      refunds.find((refund) => refund.id === refundId)!;
+    expect({
+      checks,
+      retried: retried.map((target, index) => {
+        const refund = byId(target.refundId);
+        const [previous, created] = refund.paymentCancels;
+        return {
+          previous: [previous.status, previous.failureCode],
+          created: [created?.status, created?.requestedById],
+          sentNew: pgStub.sendCalls.some(
+            (call) => call.paymentCancelId === created?.id,
+          ),
+          payoutStatus: refund.payoutStatus,
+          ticket: refund.orderItem?.ticket?.status,
+          reason: reasons[index],
+        };
+      }),
+      queryError: {
+        inquiryResult: queryErrorRes.body.data.inquiryResult,
+        attempts: byId(queryError.refundId).paymentCancels.length,
+        payoutStatus: byId(queryError.refundId).payoutStatus,
+      },
+      inProgress: {
+        attempts: byId(inProgress.refundId).paymentCancels.length,
+        actionCode: byId(inProgress.refundId).actionCode,
+        operatorNotified: byId(inProgress.refundId).notifications.some(
+          (n) =>
+            n.audience === RefundNotificationAudience.OPERATOR &&
+            n.kind === 'PG_RESULT_CONFLICT',
+        ),
+      },
+      sends: pgStub.sendCalls.length,
+    }).toEqual({
+      checks: reasons.map(() => ['CHECKED', 'ACCEPTED']),
+      retried: reasons.map((reason) => ({
+        previous: [PaymentCancelStatus.FAILED, reason],
+        created: [PaymentCancelStatus.REQUESTED, ctx.owner.id],
+        sentNew: true,
+        payoutStatus: RefundPayoutStatus.PENDING,
+        ticket: TicketStatus.REVOKED,
+        reason,
+      })),
+      queryError: {
+        inquiryResult: 'QUERY_ERROR',
+        attempts: 1,
+        payoutStatus: RefundPayoutStatus.ACTION_REQUIRED,
+      },
+      inProgress: {
+        attempts: 1,
+        actionCode: 'PG_RESULT_CONFLICT',
+        operatorNotified: true,
+      },
+      sends: 3,
+    });
+  });
+
+  it('개별 확인으로 새 PG 취소 요청 식별자로 보낸 요청의 응답이 없고 자동 조회에서 미접수가 확인되면 정해진 횟수까지만 다시 보내고, 소진 뒤 미접수면 자동 처리를 멈추며 이전 실패 요청은 바꾸지 않고 점주는 개별 확인을 다시 실행할 수 있다 (QS-10-1b)', async () => {
+    const failed = await createRefundFailedWith(
+      PaymentCancelFailureCode.SEND_FAILED,
+    );
+    pgStub.reset();
+    pgStub
+      .respondToInquiry({ result: 'NOT_FOUND', authoritative: true })
+      .respondToSend({ result: 'UNKNOWN', reason: '응답 시간 초과' });
+    await pgCheck(failed.refundId).expect(200);
+    const created = await ctx.prisma.paymentCancel.findFirstOrThrow({
+      where: { refundId: failed.refundId, attemptNumber: 2 },
+    });
+    // 자동 조회: 한도(3회)까지 미접수 → 재전송, 그 뒤 미접수 → 실패 확정
+    const recovery = ctx.app.get(RefundRecoveryService);
+    const resendLimit = 3;
+    let at = Date.now() - 86_400_000;
+    for (let round = 0; round <= resendLimit; round++) {
+      pgStub.respondToInquiry({ result: 'NOT_FOUND', authoritative: true });
+      if (round < resendLimit) {
+        pgStub.respondToSend({ result: 'UNKNOWN', reason: '응답 시간 초과' });
+      }
+      at += 600_000;
+      await recovery.inquireAttempt(created.id, new Date(at));
+    }
+    const autoAttempts = await ctx.prisma.paymentCancel.findMany({
+      where: { refundId: failed.refundId },
+      orderBy: { attemptNumber: 'asc' },
+    });
+    pgStub
+      .respondToInquiry({ result: 'NOT_FOUND', authoritative: true })
+      .respondToSend({ result: 'ACCEPTED' });
+
+    const again = await pgCheck(failed.refundId).expect(200);
+
+    const finalAttempts = await ctx.prisma.paymentCancel.count({
+      where: { refundId: failed.refundId },
+    });
+    expect({
+      previous: [
+        autoAttempts[0].status,
+        autoAttempts[0].failureCode,
+        autoAttempts[0].resendCount,
+      ],
+      created: [
+        autoAttempts[1].status,
+        autoAttempts[1].failureCode,
+        autoAttempts[1].resendCount,
+      ],
+      autoAttempts: autoAttempts.length,
+      again: [again.body.data.checkStatus, again.body.data.resendResult],
+      finalAttempts,
+    }).toEqual({
+      previous: [
+        PaymentCancelStatus.FAILED,
+        PaymentCancelFailureCode.SEND_FAILED,
+        0,
+      ],
+      created: [
+        PaymentCancelStatus.FAILED,
+        PaymentCancelFailureCode.RETRY_EXHAUSTED,
+        resendLimit,
+      ],
+      autoAttempts: 2,
+      again: ['CHECKED', 'ACCEPTED'],
+      finalAttempts: 3,
     });
   });
 });
