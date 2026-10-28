@@ -28,4 +28,23 @@ describe('고객 환불 요청 DTO(RefundDto)', () => {
       constraintsOf({ ticketId, consentToTerminateTicket: 'true' }),
     ).resolves.toEqual({ consentToTerminateTicket: ['isBoolean'] });
   });
+
+  it('ticketId가 UUID 형식이 아니면 오류다', async () => {
+    await expect(
+      constraintsOf({ ticketId: 'ticket-1', consentToTerminateTicket: true }),
+    ).resolves.toEqual({ ticketId: ['isUuid'] });
+  });
+
+  it.each(['amount', 'userId', 'shopId'])(
+    '본문에 %s를 넣으면 허용하지 않는 필드로 오류다',
+    async (field) => {
+      await expect(
+        constraintsOf({
+          ticketId,
+          consentToTerminateTicket: true,
+          [field]: field === 'amount' ? 1000 : ticketId,
+        }),
+      ).resolves.toEqual({ [field]: ['whitelistValidation'] });
+    },
+  );
 });
