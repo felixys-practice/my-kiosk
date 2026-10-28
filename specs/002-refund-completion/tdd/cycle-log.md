@@ -877,3 +877,19 @@ U10~U15를 마친 뒤, 관계 검증의 비교 대상 설정을 생략하면 정
 - 이탈: U125 커밋 때 python 문자열 불일치로 `closedStatuses` 정리가 빠졌다. 구조 변경 커밋 `eb66a31`로 따로 반영했다(동작 동일).
 - 잠금 순서: 정지·재개(`ticket-pause.repository`)와 좌석 변경(`ticket-seat.repository`)은 이미 이용권을 먼저 `FOR UPDATE`한다. 입실은 이번에 이용권 → 좌석·배정 순서가 됐다. 세션 종료는 Phase 4에서 이용권 → 세션 순서로 맞췄다. 그래서 T062의 저장소 코드는 따로 바꿀 것이 없었다.
 - 결과: 단위 435 passed, E2E 100 passed(`08d4370`).
+
+## Phase 5 Codex 검수 1차 (2026-10-28)
+
+- 범위: `ed2801b..4704491`
+- 판정: **수정 필요**. P2 1건이다.
+  - 입실 커밋 → (작업 ID 등록 전) 매장 환불이 퇴실 확정 → 작업 ID 등록 실패 순서가 생기면, 입실 서비스의 실패 처리가 조건 없는 `failSession`으로 ENDED를 JOB_REGISTER_FAILED로 덮어쓴다. 작업 생성 실패와 외부 API 실패도 같은 메서드를 쓴다. Codex가 서비스·저장소와 DB 대역으로 재현했다.
+- 타당하다고 본 것: Ticket 잠금 뒤 REVOKED 재확인, 정지 재개·좌석 변경의 오류 우선순위.
+- 사용자 결정 필요 항목 없음(종료 상태 보존 규칙 FR-042).
+
+## 사이클: Phase 5 검수 1차 수정 (U341)
+
+| 동작 | red | green | 커밋 |
+|---|---|---|---|
+| U341 (실제 DB) 입실 후속 실패 처리는 환불로 이미 종료된 세션을 덮어쓰지 않음 | status JOB_REGISTER_FAILED·failureReason 기록 | `failSession`을 `updateMany(where id·status ACTIVE)`로 조건부 갱신(세 실패 경로 모두 적용) | `c93f20e` |
+
+- 결과: 단위 436 passed, E2E 100 passed(`c93f20e`).

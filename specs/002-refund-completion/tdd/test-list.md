@@ -248,6 +248,7 @@ suite_baseline: green
 | U338 | 매장 환불 판정 거절은 계약 오류로 응답한다: 금액 상한·전액 원칙·사유 누락은 400, 대상 여부 규칙은 409 (US2 진행 중 추가) | FR-012 | example | DONE | `src/refund/refund-store.service.spec.ts` |
 | U339 | (실제 DB) 환불이 이용권을 먼저 잠근 상태에서 일반 퇴실(endSession)이 같은 세션을 종료해도 교착 없이 둘 다 끝난다: 퇴실도 Ticket → UsageSession 순서로 잠근다 (Phase 4 검수 1 P2) | 계약 §6 | example | DONE | `src/session-lifecycle/session-lifecycle.integration.spec.ts`(실제 DB) |
 | U340 | 매장 환불 요청에 공백만 있는 사유를 보내면 형식 오류(400)다: 제공한 사유는 trim 후 1~500자 (Phase 4 검수 1 P2) | 계약 §4 | example | DONE | `src/refund/dto/store-refund.dto.spec.ts` |
+| U341 | (실제 DB) 입실 후속 실패 처리(failSession)는 이미 종료된(환불 퇴실) 세션을 덮어쓰지 않는다 (Phase 5 검수 1 P2) | FR-042 | example | DONE | `src/refund/refund-store.integration.spec.ts`(실제 DB) |
 
 ### `src/refund/refund-idempotency.service.ts`
 
