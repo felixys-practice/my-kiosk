@@ -136,9 +136,11 @@ export class RefundIdempotencyService {
             command.authorize,
           )
         ) {
-          // 처리는 커밋됐지만 커밋 뒤 단계 전에 중단된 기록이면 처리를 다시 하지 않고 저장된 결과로 응답을 만든다
-          if (after && existing.refundId) {
-            const rebuilt = await after.rebuild(existing.refundId);
+          // 처리는 커밋됐지만 커밋 뒤 단계 전에 중단된 기록이면 처리를 다시 하지 않고 저장된 결과로 응답을 만든다.
+          // 이어받기가 이전 처리 트랜잭션의 커밋을 기다렸을 수 있으므로 이어받은 뒤의 최신 기록으로 판단한다
+          const current = after ? await this.repository.find(scope) : null;
+          if (after && current?.refundId) {
+            const rebuilt = await after.rebuild(current.refundId);
             await this.repository.completeAfterCommit(
               existing.id,
               claimToken,

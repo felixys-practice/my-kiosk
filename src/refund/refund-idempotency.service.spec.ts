@@ -541,4 +541,55 @@ describe('RefundIdempotencyService', () => {
       expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
     });
   });
+
+  describe('커밋 뒤 단계가 있는 처리', () => {
+    it('이어받기가 기다리는 동안 처리가 커밋됐으면 이어받은 뒤의 최신 기록으로 판단해 처리를 다시 하지 않고 저장 상태로 응답한다', async () => {
+      // 기록 생성은 이미 있어 실패하고, 그때 쓴 본문 해시를 기록 대역에 그대로 쓴다
+      let fingerprint = '';
+      const staleRecord = (refundId: string | null) => ({
+        id: 'record-1',
+        requestFingerprint: fingerprint,
+        status: RefundIdempotencyStatus.IN_PROGRESS,
+        responseStatus: null,
+        responseBody: null,
+        claimUntil: new Date(Date.now() - 1_000),
+        refundId,
+        createdAt: new Date(),
+      });
+      const doubled = {
+        createInProgress: jest.fn((_scope: unknown, hash: string) => {
+          fingerprint = hash;
+          return Promise.resolve(null);
+        }),
+        // 이어받기 전 조회에는 아직 커밋 전(환불 없음), 이어받은 뒤 조회에는 커밋된 환불이 보인다
+        find: jest
+          .fn()
+          .mockImplementationOnce(() => Promise.resolve(staleRecord(null)))
+          .mockImplementation(() => Promise.resolve(staleRecord('refund-1'))),
+        takeOver: jest.fn(() => Promise.resolve(true)),
+        completeAfterCommit: jest.fn(() => Promise.resolve(true)),
+        runInTransaction: jest.fn(),
+        remove: jest.fn(),
+      };
+      const isolated = new RefundIdempotencyService(
+        doubled as unknown as RefundIdempotencyRepository,
+        { get: () => workLeaseSeconds } as unknown as ConfigService,
+      );
+      const rebuilt = { status: 202, body: { refundId: 'refund-1' } };
+
+      const result = await isolated.execute(
+        { requesterId, operation, key, request, authorize: allow },
+        () => Promise.resolve({ status: 202, body: { refundId: 'refund-2' } }),
+        {
+          afterCommit: (handled) => Promise.resolve(handled),
+          rebuild: () => Promise.resolve(rebuilt),
+        },
+      );
+
+      expect({
+        result,
+        reprocessed: doubled.runInTransaction.mock.calls.length,
+      }).toEqual({ result: rebuilt, reprocessed: 0 });
+    });
+  });
 });
