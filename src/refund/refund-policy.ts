@@ -56,6 +56,16 @@ export function evaluateCustomerRefund(
   if (candidate.paymentStatus !== PaymentStatus.SUCCESS) {
     return { eligible: false, code: 'PAYMENT_NOT_COMPLETED' };
   }
+
+  // 3. 같은 상품의 확정 환불: 지급까지 끝났으면 이미 환불됨
+  const accepted = candidate.existingRefunds.filter(
+    (refund) => refund.decisionStatus === RefundDecisionStatus.ACCEPTED,
+  );
+  if (
+    accepted.some((refund) => refund.payoutStatus === RefundPayoutStatus.PAID)
+  ) {
+    return { eligible: false, code: 'ALREADY_REFUNDED' };
+  }
   void now;
   return { eligible: true, amount: 0 };
 }

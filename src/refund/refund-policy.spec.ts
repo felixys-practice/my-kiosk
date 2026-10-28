@@ -63,6 +63,22 @@ describe('evaluateCustomerRefund', () => {
       code: 'PAYMENT_NOT_COMPLETED',
     });
   });
+  it('지급 완료(PAID) 환불이 있으면 ALREADY_REFUNDED로 판정된다', () => {
+    const decision = evaluateCustomerRefund(
+      candidate({
+        existingRefunds: [
+          {
+            decisionStatus: RefundDecisionStatus.ACCEPTED,
+            payoutStatus: RefundPayoutStatus.PAID,
+          },
+        ],
+      }),
+      customerId,
+      now,
+    );
+
+    expect(decision).toEqual({ eligible: false, code: 'ALREADY_REFUNDED' });
+  });
 });
 
 void RefundDecisionStatus;
