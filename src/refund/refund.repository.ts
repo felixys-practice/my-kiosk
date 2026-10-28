@@ -48,6 +48,7 @@ export type AttemptForResult = {
     orderItemId: string | null; // 환불 대상 주문 상품(PAYMENT 대상이면 null)
     source: RefundSource; // 고객·매장·시스템 경로(알림 수신 범위를 정한다)
     customerId: string; // 원래 주문한 고객
+    approvalTransactionId: string | null; // 원결제 승인 거래 ID(PG 취소 거래 ID와 달라야 한다)
     orderId: string;
     shopId: string;
   };
@@ -308,6 +309,7 @@ export class RefundRepository {
             source: true,
             payment: {
               select: {
+                pgTransactionId: true,
                 order: { select: { id: true, shopId: true, userId: true } },
               },
             },
@@ -331,6 +333,7 @@ export class RefundRepository {
         orderItemId: attempt.refund.orderItemId,
         source: attempt.refund.source,
         customerId: attempt.refund.payment.order.userId,
+        approvalTransactionId: attempt.refund.payment.pgTransactionId,
         orderId: attempt.refund.payment.order.id,
         shopId: attempt.refund.payment.order.shopId,
       },

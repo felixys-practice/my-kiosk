@@ -121,6 +121,13 @@ export class RefundResultService {
       ) {
         throw new PgCallbackTargetMismatchError();
       }
+      // PG 취소 거래 ID가 원승인 거래 ID와 같으면 다른 거래의 결과다(API 계약 §7)
+      if (
+        command.outcome.kind === 'SUCCEEDED' &&
+        command.outcome.pgTransactionId === attempt.refund.approvalTransactionId
+      ) {
+        throw new PgCallbackTargetMismatchError();
+      }
       const stored: ApplyPgResultOutcome = {
         applied: false,
         attemptStatus: attempt.status,

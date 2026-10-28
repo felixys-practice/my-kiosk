@@ -796,4 +796,31 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       }),
     ).rejects.toBeInstanceOf(PgCallbackTargetMismatchError);
   });
+
+  it('콜백의 PG 취소 거래 ID가 원승인 거래 ID와 같으면 PG_CALLBACK_TARGET_MISMATCH로 거절되고 반영하지 않는다', async () => {
+    const pending = await createPendingRefund();
+    const approvalTransactionId = `pg-approve-${randomUUID()}`;
+    const attempt = await prisma.paymentCancel.findUniqueOrThrow({
+      where: { id: pending.paymentCancelId },
+    });
+    await prisma.payment.update({
+      where: { id: attempt.paymentId },
+      data: { pgTransactionId: approvalTransactionId },
+    });
+
+    await expect(
+      service.applyCallback({
+        success: true,
+        paymentCancelId: pending.paymentCancelId,
+        pgTransactionId: approvalTransactionId,
+        orderItemId: pending.orderItemId,
+        amount: refundAmount,
+        reason: null,
+      }),
+    ).rejects.toBeInstanceOf(PgCallbackTargetMismatchError);
+    const after = await prisma.paymentCancel.findUniqueOrThrow({
+      where: { id: pending.paymentCancelId },
+    });
+    expect(after.status).toBe(PaymentCancelStatus.REQUESTED);
+  });
 });
