@@ -1403,4 +1403,33 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
 
     expect(pgGateway.inquireCancel.mock.calls.length).toBe(0);
   });
+
+  it('커밋 뒤 전송 전에 중단된 PG 취소 요청은 담당 기한이 지나면 다시 보내지 않고 조회부터 한다', async () => {
+    const committedAt = isolatedSweepBase();
+    const pending = await createPendingRefund();
+    // 확정 트랜잭션이 전송 기록·담당을 저장하고 커밋했지만 PG에 보내기 전에 서버가 멈춘 상태
+    await prisma.paymentCancel.update({
+      where: { id: pending.paymentCancelId },
+      data: {
+        sendAttemptCount: 1,
+        lastSendAttemptAt: committedAt,
+        claimToken: 'crashed-worker',
+        claimUntil: new Date(committedAt.getTime() + 30_000),
+        nextInquiryAt: null,
+      },
+    });
+    pgGateway.inquireCancel.mockResolvedValue({ result: 'IN_PROGRESS' });
+
+    await app
+      .get(RefundRecoveryService)
+      .sweep(new Date(committedAt.getTime() + 31_000));
+
+    expect({
+      inquiries: pgGateway.inquireCancel.mock.calls,
+      sends: pgGateway.sendCancel.mock.calls.length,
+    }).toEqual({
+      inquiries: [[{ paymentCancelId: pending.paymentCancelId }]],
+      sends: 0,
+    });
+  });
 });

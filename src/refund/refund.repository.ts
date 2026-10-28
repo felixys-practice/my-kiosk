@@ -429,7 +429,17 @@ export class RefundRepository {
     const due = await this.prisma.paymentCancel.findMany({
       where: {
         status: PaymentCancelStatus.REQUESTED,
-        nextInquiryAt: { lte: now },
+        OR: [
+          // 조회 예정 시각이 지난 시도
+          { nextInquiryAt: { lte: now } },
+          // 커밋 뒤 전송 전후에 중단돼 예정 시각 없이 남은 시도: 담당 기한이 지나면 조회부터 한다(API 계약 §8)
+          {
+            nextInquiryAt: null,
+            sendAttemptCount: { gt: 0 },
+            lastSendAttemptAt: { lte: now },
+            OR: [{ claimUntil: null }, { claimUntil: { lte: now } }],
+          },
+        ],
         // 별도 환불금 지급 예약이 있는 환불은 PG 자동 처리에서 빼고 담당자가 확인한다(API 계약 §8)
         refund: {
           manualPayouts: {
@@ -437,7 +447,7 @@ export class RefundRepository {
           },
         },
       },
-      orderBy: { nextInquiryAt: 'asc' },
+      orderBy: [{ nextInquiryAt: 'asc' }, { lastSendAttemptAt: 'asc' }],
       take: limit,
       select: { id: true },
     });
