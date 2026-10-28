@@ -308,7 +308,8 @@ export class RefundResultService {
       : { kind: 'FAILED', reason: callback.reason ?? '' };
     const result = await this.applyPgResult({
       paymentCancelId: callback.paymentCancelId,
-      expectedOrderItemId: callback.orderItemId,
+      // 생략된 대상도 결제 전체(null)로 보고 저장된 대상과 대조한다(대상 검증을 건너뛰지 않는다)
+      expectedOrderItemId: callback.orderItemId ?? null,
       outcome,
     });
     if (!result) throw new PgCallbackTargetNotFoundError();

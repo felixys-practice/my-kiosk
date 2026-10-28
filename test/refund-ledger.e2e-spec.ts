@@ -156,4 +156,23 @@ describe('실제 지급별 원장 (E2E)', () => {
       ledgers: refund.ledgers.length,
     }).toEqual({ payoutStatus: RefundPayoutStatus.PENDING, ledgers: 0 });
   });
+  it('orderItemId를 생략한 콜백도 상품 대상 환불이면 409 PG_CALLBACK_TARGET_MISMATCH로 거절되고 반영하지 않는다', async () => {
+    const accepted = await acceptedRefund();
+    // 콜백 본문에서 orderItemId 필드 자체를 뺀다
+    const withoutTarget: Partial<ReturnType<typeof successCallback>> =
+      successCallback(accepted);
+    delete withoutTarget.orderItemId;
+
+    const { body } = await sendRefundCallback(withoutTarget).expect(409);
+
+    expect(body.error.code).toBe('PG_CALLBACK_TARGET_MISMATCH');
+    const refund = await ctx.prisma.refund.findUniqueOrThrow({
+      where: { id: accepted.refundId },
+      include: { ledgers: true },
+    });
+    expect({
+      payoutStatus: refund.payoutStatus,
+      ledgers: refund.ledgers.length,
+    }).toEqual({ payoutStatus: RefundPayoutStatus.PENDING, ledgers: 0 });
+  });
 });
