@@ -950,4 +950,50 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       ledgers: refund.ledgers.length,
     }).toEqual({ attemptStatus: PaymentCancelStatus.REQUESTED, ledgers: 0 });
   });
+
+  it('모순 결과의 거래 로그에는 기존 결과와 새 통보의 종류·실제액·거래 ID가 함께 남는다', async () => {
+    const pending = await createPendingRefund();
+    const storedTransactionId = `pg-cancel-${randomUUID()}`;
+    const receivedTransactionId = `pg-cancel-${randomUUID()}`;
+    await service.applyPgResult({
+      paymentCancelId: pending.paymentCancelId,
+      outcome: {
+        kind: 'SUCCEEDED',
+        pgTransactionId: storedTransactionId,
+        actualAmount: refundAmount,
+      },
+    });
+    const txLog = jest.spyOn(
+      app.get(TransactionLoggerService),
+      'logTransaction',
+    );
+
+    await service.applyPgResult({
+      paymentCancelId: pending.paymentCancelId,
+      outcome: {
+        kind: 'SUCCEEDED',
+        pgTransactionId: receivedTransactionId,
+        actualAmount: refundAmount - 500,
+      },
+    });
+
+    const conflictLog = txLog.mock.calls
+      .map(([log]) => log)
+      .find((log) => log.status === 'PG_RESULT_CONFLICT');
+    txLog.mockRestore();
+    expect(conflictLog?.metadata).toEqual({
+      refundId: pending.refundId,
+      paymentCancelId: pending.paymentCancelId,
+      stored: {
+        kind: PaymentCancelStatus.SUCCEEDED,
+        actualAmount: refundAmount,
+        pgTransactionId: storedTransactionId,
+      },
+      received: {
+        kind: 'SUCCEEDED',
+        actualAmount: refundAmount - 500,
+        pgTransactionId: receivedTransactionId,
+      },
+    });
+  });
 });

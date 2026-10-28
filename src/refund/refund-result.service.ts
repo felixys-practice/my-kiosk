@@ -193,7 +193,7 @@ export class RefundResultService {
         if (!unresolvedAttemptStatuses.includes(attempt.status)) {
           // 확정된 결과와 모순되는 늦은 통보는 덮어쓰지 않고 검토 필요·운영자 알림으로 남긴다(API 계약 §7)
           if (contradicts(attempt, outcome)) {
-            await this.recordResultConflict(tx, attempt, actionLogs);
+            await this.recordResultConflict(tx, attempt, outcome, actionLogs);
             // 모순 기록으로 환불은 조치 필요가 됐다. 반환 상태도 저장된 상태와 맞춘다
             return {
               ...stored,
@@ -366,12 +366,14 @@ export class RefundResultService {
    * @param attempt 사건이 생긴 PG 취소 요청과 그 환불
    * @param kind 알림 종류(조치 사유 코드)
    * @param actionLogs 커밋 뒤 기록할 거래 로그
+   * @param logDetail 거래 로그에 더 남길 대사 근거(선택)
    */
   private async notifyOperator(
     tx: TransactionClient,
     attempt: AttemptForResult,
     kind: string,
     actionLogs: TransactionLog[],
+    logDetail: Record<string, unknown> = {},
   ): Promise<void> {
     await this.eventRepository.recordNotification(tx, {
       ...this.notificationBase(attempt, kind),
@@ -384,7 +386,11 @@ export class RefundResultService {
       orderId: attempt.refund.orderId,
       orderItemId: attempt.refund.orderItemId ?? undefined,
       status: kind,
-      metadata: { refundId: attempt.refund.id, paymentCancelId: attempt.id },
+      metadata: {
+        refundId: attempt.refund.id,
+        paymentCancelId: attempt.id,
+        ...logDetail,
+      },
     });
   }
 
@@ -422,11 +428,13 @@ export class RefundResultService {
    * - 지급 합계·원장·시도 상태는 바꾸지 않는다
    * @param tx 지급 결과 반영 트랜잭션
    * @param attempt 이미 확정된 PG 취소 요청과 그 환불
+   * @param outcome 새로 온 모순 결과
    * @param actionLogs 커밋 뒤 기록할 거래 로그
    */
   private async recordResultConflict(
     tx: TransactionClient,
     attempt: AttemptForResult,
+    outcome: PgCancelOutcome,
     actionLogs: TransactionLog[],
   ): Promise<void> {
     await this.refundRepository.updateRefundPayout(tx, attempt.refund.id, {
@@ -435,6 +443,14 @@ export class RefundResultService {
       reviewRequired: true,
       actionCode: 'PG_RESULT_CONFLICT',
     });
-    await this.notifyOperator(tx, attempt, 'PG_RESULT_CONFLICT', actionLogs);
+    // 운영자가 PG와 대사할 수 있도록 기존 확정 결과와 새 통보를 함께 남긴다
+    await this.notifyOperator(tx, attempt, 'PG_RESULT_CONFLICT', actionLogs, {
+      stored: {
+        kind: attempt.status,
+        actualAmount: attempt.actualAmount,
+        pgTransactionId: attempt.pgTransactionId,
+      },
+      received: outcome,
+    });
   }
 }
