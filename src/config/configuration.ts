@@ -104,6 +104,9 @@ export default () => {
       resendLimit: refundEnv.REFUND_RESEND_LIMIT,
       // 별도 환불금 지급 예약 후 미확인 최초 알림 기준(초)
       manualConfirmAlertSeconds: refundEnv.REFUND_MANUAL_CONFIRM_ALERT_SECONDS,
+      // 자동 조회·재전송·장애 복구 작업자 실행 여부(운영 기본 true, 테스트 환경은 false)
+      recoveryWorkerEnabled:
+        refundEnv.REFUND_RECOVERY_WORKER_ENABLED as unknown as boolean,
     },
 
     // PG 콜백 서명 검증 설정

@@ -132,6 +132,15 @@ describe('configuration', () => {
       }).toEqual(refundEnvDefaults);
     });
 
+    it('REFUND_RECOVERY_WORKER_ENABLED를 생략하면 true, false이면 false로 읽힌다', () => {
+      delete process.env.REFUND_RECOVERY_WORKER_ENABLED;
+      const omitted = configuration().refund.recoveryWorkerEnabled;
+      process.env.REFUND_RECOVERY_WORKER_ENABLED = 'false';
+      const disabled = configuration().refund.recoveryWorkerEnabled;
+
+      expect({ omitted, disabled }).toEqual({ omitted: true, disabled: false });
+    });
+
     it('REFUND_WORK_LEASE_SECONDS=3e1이면 설정 검증과 같은 숫자 해석으로 30초로 읽힌다', () => {
       process.env.REFUND_WORK_LEASE_SECONDS = '3e1';
 

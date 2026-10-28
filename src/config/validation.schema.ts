@@ -101,6 +101,7 @@ export const validationSchema = Joi.object({
   REFUND_RECOVERY_PROBE_SECONDS: Joi.number().integer().min(1).default(900), // 장애 복구 확인용 1건 조회 간격(초)
   REFUND_RECOVERY_BATCH_SIZE: Joi.number().integer().min(1).default(20), // 일반·복구 조회 처리 단위(건)
   REFUND_RESEND_LIMIT: Joi.number().integer().min(0).default(3), // 백그라운드 자동 재전송 한도(회), 0 이상
+  REFUND_RECOVERY_WORKER_ENABLED: Joi.boolean().default(true), // 자동 조회·재전송·장애 복구 작업자 실행 여부(테스트 환경은 false)
   REFUND_MANUAL_CONFIRM_ALERT_SECONDS: Joi.number()
     .integer()
     .min(1)
