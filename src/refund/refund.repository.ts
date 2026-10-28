@@ -41,6 +41,7 @@ export type AttemptForResult = {
     id: string;
     amount: number; // 확정된 환불 금액(불변)
     paidAmount: number; // 지금까지 실제 지급 합계
+    payoutStatus: RefundPayoutStatus;
     orderId: string;
     shopId: string;
   };
@@ -293,6 +294,7 @@ export class RefundRepository {
             id: true,
             amount: true,
             paidAmount: true,
+            payoutStatus: true,
             payment: {
               select: { order: { select: { id: true, shopId: true } } },
             },
@@ -309,6 +311,7 @@ export class RefundRepository {
         id: attempt.refund.id,
         amount: attempt.refund.amount,
         paidAmount: attempt.refund.paidAmount,
+        payoutStatus: attempt.refund.payoutStatus,
         orderId: attempt.refund.payment.order.id,
         shopId: attempt.refund.payment.order.shopId,
       },

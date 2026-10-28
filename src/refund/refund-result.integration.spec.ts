@@ -383,4 +383,46 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       ],
     });
   });
+
+  it('담당 토큰이 바뀐 작업의 결과 저장은 지급액을 더하지 않고 저장된 상태를 반환한다', async () => {
+    const pending = await createPendingRefund();
+    // 앞 작업의 담당 기한이 지나 다른 작업이 담당을 이어받은 상태
+    await prisma.paymentCancel.update({
+      where: { id: pending.paymentCancelId },
+      data: {
+        claimToken: 'token-new-owner',
+        claimUntil: new Date(Date.now() + 60_000),
+      },
+    });
+
+    const result = await service.applyPgResult({
+      paymentCancelId: pending.paymentCancelId,
+      claimToken: 'token-old-owner',
+      outcome: {
+        kind: 'SUCCEEDED',
+        pgTransactionId: `pg-cancel-${randomUUID()}`,
+        actualAmount: refundAmount,
+      },
+    });
+
+    const refund = await prisma.refund.findUniqueOrThrow({
+      where: { id: pending.refundId },
+      include: { paymentCancels: true, ledgers: true },
+    });
+    expect({
+      result,
+      attemptStatus: refund.paymentCancels[0].status,
+      paidAmount: refund.paidAmount,
+      ledgers: refund.ledgers.length,
+    }).toEqual({
+      result: {
+        applied: false,
+        attemptStatus: PaymentCancelStatus.REQUESTED,
+        payoutStatus: RefundPayoutStatus.PENDING,
+      },
+      attemptStatus: PaymentCancelStatus.REQUESTED,
+      paidAmount: 0,
+      ledgers: 0,
+    });
+  });
 });

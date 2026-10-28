@@ -22,6 +22,13 @@ const unresolvedAttemptStatuses: readonly PaymentCancelStatus[] = [
   PaymentCancelStatus.QUERY_FAILED,
 ];
 
+/** 결과 반영 결과 */
+export type ApplyPgResultOutcome = {
+  applied: boolean; // 이번 요청으로 결과를 저장했는지
+  attemptStatus: PaymentCancelStatus;
+  payoutStatus: RefundPayoutStatus;
+};
+
 /** 결과 반영 요청 */
 export type ApplyPgResultCommand = {
   paymentCancelId: string; // 결과가 온 PG 취소 요청
@@ -46,15 +53,18 @@ export class RefundResultService {
   /**
    * PG가 확정한 결과를 반영한다
    * @param command PG 취소 요청과 결과
+   * @returns 반영 여부와 반영 후(반영하지 않았으면 저장된) 상태, PG 취소 요청이 없으면 null
    */
-  async applyPgResult(command: ApplyPgResultCommand): Promise<void> {
-    await this.refundRepository.runInTransaction(async (tx) => {
+  async applyPgResult(
+    command: ApplyPgResultCommand,
+  ): Promise<ApplyPgResultOutcome | null> {
+    return this.refundRepository.runInTransaction(async (tx) => {
       // 결과가 온 PG 취소 요청과 환불을 찾고 Refund → PaymentCancel 순서로 잠근 뒤 다시 읽는다
       const found = await this.refundRepository.findAttemptForResult(
         command.paymentCancelId,
         tx,
       );
-      if (!found) return;
+      if (!found) return null;
       await this.lockingRepository.lockForPayout(tx, {
         refundId: found.refund.id,
         paymentCancelIds: [found.id],
@@ -64,6 +74,18 @@ export class RefundResultService {
         command.paymentCancelId,
         tx,
       ))!;
+      const stored: ApplyPgResultOutcome = {
+        applied: false,
+        attemptStatus: attempt.status,
+        payoutStatus: attempt.refund.payoutStatus,
+      };
+      // 담당이 다른 작업으로 넘어갔으면 이 작업의 결과는 저장하지 않는다(API 계약 §6 담당 토큰 재확인)
+      if (
+        command.claimToken !== undefined &&
+        attempt.claimToken !== command.claimToken
+      ) {
+        return stored;
+      }
       const now = new Date();
       const { outcome } = command;
       // 결과는 미확정 시도에만 한 번 반영한다(이미 확정된 시도는 저장된 결과를 유지)
@@ -72,7 +94,7 @@ export class RefundResultService {
         if (attempt.status !== outcome.kind) {
           await this.recordResultConflict(tx, attempt);
         }
-        return;
+        return stored;
       }
       // PG 거절: 그 시도만 실패로 끝내고 환불은 미지급 조치 필요로 둔다(원장 없음, 이용 종료 유지)
       if (outcome.kind === 'FAILED') {
@@ -85,7 +107,11 @@ export class RefundResultService {
           payoutStatus: RefundPayoutStatus.ACTION_REQUIRED,
           actionCode: 'PG_REJECTED',
         });
-        return;
+        return {
+          applied: true,
+          attemptStatus: PaymentCancelStatus.FAILED,
+          payoutStatus: RefundPayoutStatus.ACTION_REQUIRED,
+        };
       }
 
       // PG 취소 성공: 실제액을 기록하고 지급 합계에 더한다
@@ -104,6 +130,9 @@ export class RefundResultService {
       const paidAmount = attempt.refund.paidAmount + outcome.actualAmount;
       // 확정된 환불 금액과 같으면 지급 완료, 다르면 금액은 그대로 두고 조치·검토 필요(API 계약 §6)
       const settled = paidAmount === attempt.refund.amount;
+      const payoutStatus = settled
+        ? RefundPayoutStatus.PAID
+        : RefundPayoutStatus.ACTION_REQUIRED;
       await this.refundRepository.updateRefundPayout(
         tx,
         attempt.refund.id,
@@ -116,6 +145,11 @@ export class RefundResultService {
               actionCode: 'AMOUNT_MISMATCH',
             },
       );
+      return {
+        applied: true,
+        attemptStatus: PaymentCancelStatus.SUCCEEDED,
+        payoutStatus,
+      };
     });
   }
 
