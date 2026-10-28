@@ -4,6 +4,7 @@ import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import {
   LedgerStatus,
+  PaymentCancelFailureCode,
   PaymentCancelStatus,
   PaymentStatus,
   PaymentType,
@@ -280,6 +281,41 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       reviewRequired: true,
       amount: refundAmount,
       paidAmount: refundAmount + 2000,
+    });
+  });
+
+  it('PG 거절이면 그 PG 취소 요청은 실패(PG_REJECTED), 환불은 조치 필요가 되고 원장은 생기지 않는다', async () => {
+    const pending = await createPendingRefund();
+
+    await service.applyPgResult({
+      paymentCancelId: pending.paymentCancelId,
+      outcome: { kind: 'FAILED', reason: '취소 가능 기간 경과' },
+    });
+
+    const refund = await prisma.refund.findUniqueOrThrow({
+      where: { id: pending.refundId },
+      include: { paymentCancels: true, ledgers: true },
+    });
+    expect({
+      payoutStatus: refund.payoutStatus,
+      actionCode: refund.actionCode,
+      attempt: {
+        status: refund.paymentCancels[0].status,
+        failureCode: refund.paymentCancels[0].failureCode,
+        failureReason: refund.paymentCancels[0].failureReason,
+        failedAt: refund.paymentCancels[0].failedAt instanceof Date,
+      },
+      ledgers: refund.ledgers.length,
+    }).toEqual({
+      payoutStatus: RefundPayoutStatus.ACTION_REQUIRED,
+      actionCode: 'PG_REJECTED',
+      attempt: {
+        status: PaymentCancelStatus.FAILED,
+        failureCode: PaymentCancelFailureCode.PG_REJECTED,
+        failureReason: '취소 가능 기간 경과',
+        failedAt: true,
+      },
+      ledgers: 0,
     });
   });
 });

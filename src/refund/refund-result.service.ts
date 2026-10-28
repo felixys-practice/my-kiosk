@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { RefundPayoutStatus } from '@prisma/client';
+import { PaymentCancelFailureCode, RefundPayoutStatus } from '@prisma/client';
 import { RefundLedgerRepository } from 'src/ledger/refund-ledger.repository';
 import { RefundRepository } from './refund.repository';
 import { RefundLockingRepository } from './refund-locking.repository';
@@ -52,7 +52,19 @@ export class RefundResultService {
       ))!;
       const now = new Date();
       const { outcome } = command;
-      if (outcome.kind !== 'SUCCEEDED') return;
+      // PG 거절: 그 시도만 실패로 끝내고 환불은 미지급 조치 필요로 둔다(원장 없음, 이용 종료 유지)
+      if (outcome.kind === 'FAILED') {
+        await this.refundRepository.markAttemptFailed(tx, attempt.id, {
+          failureCode: PaymentCancelFailureCode.PG_REJECTED,
+          failureReason: outcome.reason,
+          now,
+        });
+        await this.refundRepository.updateRefundPayout(tx, attempt.refund.id, {
+          payoutStatus: RefundPayoutStatus.ACTION_REQUIRED,
+          actionCode: 'PG_REJECTED',
+        });
+        return;
+      }
 
       // PG 취소 성공: 실제액을 기록하고 지급 합계에 더한다
       await this.refundRepository.markAttemptSucceeded(tx, attempt.id, {

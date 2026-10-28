@@ -341,6 +341,36 @@ export class RefundRepository {
   }
 
   /**
+   * PG 취소 요청을 실패로 확정한다(시도 실패이며 환불 실패·철회가 아니다)
+   * - 자동 조회·재전송 대상에서 빠지도록 예정 시각과 담당을 지운다
+   * @param tx 지급 결과 반영 트랜잭션
+   * @param id PG 취소 요청 ID
+   * @param failure 실패 사유 코드·설명·확정 시각
+   */
+  async markAttemptFailed(
+    tx: TransactionClient,
+    id: string,
+    failure: {
+      failureCode: PaymentCancelFailureCode;
+      failureReason: string;
+      now: Date;
+    },
+  ): Promise<void> {
+    await tx.paymentCancel.update({
+      where: { id },
+      data: {
+        status: PaymentCancelStatus.FAILED,
+        failureCode: failure.failureCode,
+        failureReason: failure.failureReason,
+        failedAt: failure.now,
+        nextInquiryAt: null,
+        claimToken: null,
+        claimUntil: null,
+      },
+    });
+  }
+
+  /**
    * 환불의 지급 합계와 지급 상태를 갱신한다
    * @param tx 지급 결과 반영 트랜잭션
    * @param refundId 환불 ID
