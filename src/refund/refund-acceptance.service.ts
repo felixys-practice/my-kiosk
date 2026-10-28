@@ -103,6 +103,12 @@ export class RefundAcceptanceService {
 
         // 이용권을 종료한다
         await this.refundRepository.terminateTicket(command.ticketId, now, tx);
+        // 진행 중이던 정지 기록을 재개 없이 닫는다
+        await this.refundRepository.closeOpenPausesForRefund(
+          command.ticketId,
+          now,
+          tx,
+        );
 
         // 고정석 배정을 해제한다(자유석이면 할 일 없음)
         await this.seatAssignmentService.releaseByTicket(

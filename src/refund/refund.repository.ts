@@ -8,6 +8,7 @@ import {
   RefundSource,
   RefundTargetKind,
   SeatAssignmentStatus,
+  TicketPauseCloseReason,
   TicketStatus,
   UsageSessionStatus,
 } from '@prisma/client';
@@ -159,10 +160,14 @@ export class RefundRepository {
     now: Date,
     tx: TransactionClient,
   ): Promise<void> {
-    void ticketId;
-    void now;
-    void tx;
-    return Promise.resolve();
+    // 재개 없이 닫는다(resumedAt은 그대로 null, 이용 시간을 되돌리지 않는다)
+    await tx.ticketPause.updateMany({
+      where: { ticketId, resumedAt: null, closedAt: null },
+      data: {
+        closedAt: now,
+        closeReason: TicketPauseCloseReason.REFUND_TERMINATED,
+      },
+    });
   }
 
   /**

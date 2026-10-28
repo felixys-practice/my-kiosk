@@ -12,6 +12,7 @@ import {
   SeatAssignmentStatus,
   SeatReleaseReason,
   SeatType,
+  TicketPauseCloseReason,
   TicketStatus,
   TicketType,
   UserRole,
@@ -238,5 +239,27 @@ describe('환불 확정 저장 (실제 DB)', () => {
       status: SeatAssignmentStatus.RELEASED,
       releaseReason: SeatReleaseReason.TICKET_REVOKED,
     });
+  });
+
+  it('환불 확정 뒤 진행 중이던 정지 기록이 REFUND_TERMINATED로 닫히고 재개되지 않는다', async () => {
+    const issued = await createUnusedPeriodTicket();
+    const pause = await prisma.ticketPause.create({
+      data: {
+        ticketId: issued.ticketId,
+        pausedAt: new Date(Date.now() - 60_000),
+        pausedBy: customerId,
+      },
+    });
+
+    await accept(issued.ticketId);
+
+    const closed = await prisma.ticketPause.findUniqueOrThrow({
+      where: { id: pause.id },
+    });
+    expect(closed).toMatchObject({
+      closeReason: TicketPauseCloseReason.REFUND_TERMINATED,
+      resumedAt: null,
+    });
+    expect(closed.closedAt).toBeInstanceOf(Date);
   });
 });
