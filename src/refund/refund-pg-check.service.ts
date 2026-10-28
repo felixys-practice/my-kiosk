@@ -45,6 +45,10 @@ export class RefundPgCheckService {
     if (!pending) {
       return Promise.reject(new Error('구현 전'));
     }
+    // 같은 환불의 전송·조회 담당이 유효하면 PG를 다시 부르지 않는다
+    if (pending.claimUntil && pending.claimUntil > now) {
+      return this.storedResult('ALREADY_RUNNING', pending);
+    }
     // 최근 조회 간격 안의 반복 실행은 PG를 다시 부르지 않고 저장된 결과를 안내한다
     const intervalMs =
       this.configService.get<number>('refund.queryIntervalSeconds')! * 1000;
@@ -58,6 +62,10 @@ export class RefundPgCheckService {
       pending.id,
       now,
     );
+    // 확인과 조회 담당 지정 사이에 다른 작업이 먼저 맡았으면 진행 중으로 안내한다
+    if (inquiryResult === null) {
+      return this.storedResult('ALREADY_RUNNING', pending);
+    }
     const after =
       await this.refundRepository.findPendingAttemptOfRefund(refundId);
     return {

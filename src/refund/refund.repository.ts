@@ -429,6 +429,7 @@ export class RefundRepository {
     id: string;
     lastInquiryAt: Date | null;
     lastInquiryError: string | null;
+    claimUntil: Date | null;
   } | null> {
     return this.prisma.paymentCancel.findFirst({
       where: {
@@ -438,7 +439,12 @@ export class RefundRepository {
         },
       },
       orderBy: { attemptNumber: 'desc' },
-      select: { id: true, lastInquiryAt: true, lastInquiryError: true },
+      select: {
+        id: true,
+        lastInquiryAt: true,
+        lastInquiryError: true,
+        claimUntil: true,
+      },
     });
   }
 

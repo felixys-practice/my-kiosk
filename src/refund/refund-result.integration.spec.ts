@@ -1768,4 +1768,25 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       inquired: 0,
     });
   });
+
+  it('같은 환불의 전송·조회 담당이 유효하면 ALREADY_RUNNING을 받고 PG는 호출되지 않는다', async () => {
+    const target = await createInquiredBefore(60);
+    await prisma.paymentCancel.update({
+      where: { id: target.paymentCancelId },
+      data: {
+        claimToken: 'auto-worker',
+        claimUntil: new Date(target.now.getTime() + 20_000),
+      },
+    });
+    pgGateway.inquireCancel.mockResolvedValue({ result: 'IN_PROGRESS' });
+
+    const result = await app
+      .get(RefundPgCheckService)
+      .check(operator, target.refundId, target.now);
+
+    expect({
+      checkStatus: result.checkStatus,
+      inquired: pgGateway.inquireCancel.mock.calls.length,
+    }).toEqual({ checkStatus: 'ALREADY_RUNNING', inquired: 0 });
+  });
 });
