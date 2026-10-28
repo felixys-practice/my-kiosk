@@ -53,15 +53,14 @@ export class TicketSeatService {
         // 이용권이 없으면 404
         if (!ticket) throw new TicketNotFoundError();
 
-        // 종료된 이용권(만료·소진·환불 소멸)은 좌석을 바꿀 수 없다
         // 환불로 이용이 종료된 이용권은 입실·재개와 같은 오류로 거절한다(API 계약 §10)
         if (ticket.status === TicketStatus.REVOKED) {
           throw new TicketTerminatedError();
         }
+        // 만료·소진된 이용권은 좌석을 바꿀 수 없다
         const closedStatuses: TicketStatus[] = [
           TicketStatus.EXPIRED,
           TicketStatus.EXHAUSTED,
-          TicketStatus.REVOKED,
         ];
         if (closedStatuses.includes(ticket.status)) {
           throw new TicketClosedError();
