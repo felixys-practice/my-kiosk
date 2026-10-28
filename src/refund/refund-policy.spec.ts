@@ -245,6 +245,20 @@ describe('evaluateCustomerRefund', () => {
       });
     });
   });
+  it('사용 이력과 기한 초과가 함께 있으면 USED_TICKET이 먼저 판정된다', () => {
+    const activationDeadline = new Date('2026-10-01T00:00:00Z');
+
+    const decision = evaluateCustomerRefund(
+      candidate(
+        {},
+        { activatedAt: new Date('2026-09-20T09:00:00Z'), activationDeadline },
+      ),
+      customerId,
+      now,
+    );
+
+    expect(decision).toMatchObject({ eligible: false, code: 'USED_TICKET' });
+  });
 });
 
 void RefundDecisionStatus;
