@@ -8,6 +8,7 @@ import { AttemptForResult, RefundRepository } from './refund.repository';
 import { RefundLockingRepository } from './refund-locking.repository';
 import { RefundDispatchService } from './refund-dispatch.service';
 import { RefundResultService } from './refund-result.service';
+import { inquiryBackoffSeconds } from './refund-recovery.policy';
 
 /** 자동 조회 대상인 미확정 시도 상태 */
 const inquirableStatuses: readonly PaymentCancelStatus[] = [
@@ -92,27 +93,37 @@ export class RefundRecoveryService {
     // 5. 조회 오류이면 결과를 단정하지 않고 지수 백오프 간격 뒤 다시 조회한다
     if (result.result === 'QUERY_ERROR') {
       const failures = attempt.inquiryFailureCount + 1;
+      // 연속 오류가 한도에 도달하면 결과 확인 실패로 바꾸고 이후는 장애 복구 확인이 맡는다
+      if (failures >= this.config('queryFailureThreshold')) {
+        await this.resultService.recordQueryFailed(
+          paymentCancelId,
+          claimToken,
+          {
+            inquiryFailureCount: failures,
+            reason: result.reason,
+            now,
+          },
+        );
+        return;
+      }
       await this.refundRepository.scheduleNextInquiry(
         paymentCancelId,
         claimToken,
         {
-          nextInquiryAt: new Date(now.getTime() + this.backoffMs(failures)),
+          nextInquiryAt: new Date(
+            now.getTime() +
+              inquiryBackoffSeconds(
+                failures,
+                this.config('queryBackoffSeconds'),
+                this.config('queryBackoffMaxSeconds'),
+              ) *
+                1000,
+          ),
           inquiryFailureCount: failures,
           lastInquiryError: result.reason,
         },
       );
     }
-  }
-
-  /**
-   * 연속 조회 오류 횟수에 따른 다음 조회 간격(min(base × 2^(n-1), cap))
-   * @param failures 연속 조회 오류 횟수(1부터)
-   * @returns 밀리초
-   */
-  private backoffMs(failures: number): number {
-    const base = this.config('queryBackoffSeconds');
-    const cap = this.config('queryBackoffMaxSeconds');
-    return Math.min(base * 2 ** (failures - 1), cap) * 1000;
   }
 
   /**
@@ -166,7 +177,8 @@ export class RefundRecoveryService {
       | 'workLeaseSeconds'
       | 'queryIntervalSeconds'
       | 'queryBackoffSeconds'
-      | 'queryBackoffMaxSeconds',
+      | 'queryBackoffMaxSeconds'
+      | 'queryFailureThreshold',
   ): number {
     return this.configService.get<number>(`refund.${key}`)!;
   }

@@ -1291,13 +1291,6 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
     expect(attempt.nextInquiryAt?.getTime()).toBe(dueAt.getTime() + 15_000);
   });
 
-  it('계산한 간격이 상한(300초)을 넘으면 상한 간격으로 다시 조회한다', async () => {
-    // 연속 오류 6회째: 15 × 2^5 = 480초 > 300초
-    const { attempt, dueAt } = await inquireAfterFailures(5, queryError);
-
-    expect(attempt.nextInquiryAt?.getTime()).toBe(dueAt.getTime() + 300_000);
-  });
-
   it('연속 조회 오류 4회에서는 결과 확인 중(REQUESTED)이 유지된다', async () => {
     const { attempt } = await inquireAfterFailures(3, queryError);
 
@@ -1316,5 +1309,28 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       failures: attempt.inquiryFailureCount,
       lastInquiryError: attempt.lastInquiryError,
     }).toEqual({ failures: 0, lastInquiryError: null });
+  });
+
+  it('연속 조회 오류 5회에서 결과 확인 실패(QUERY_FAILED)와 운영자 알림이 기록된다', async () => {
+    const { attempt, refundId } = await inquireAfterFailures(4, queryError);
+
+    const notifications = await prisma.refundNotification.findMany({
+      where: { refundId, kind: 'QUERY_FAILED' },
+    });
+    expect({
+      status: attempt.status,
+      queryFailedAt: attempt.queryFailedAt instanceof Date,
+      failures: attempt.inquiryFailureCount,
+      claimToken: attempt.claimToken,
+      operatorNotified: notifications.some(
+        (n) => n.audience === RefundNotificationAudience.OPERATOR,
+      ),
+    }).toEqual({
+      status: PaymentCancelStatus.QUERY_FAILED,
+      queryFailedAt: true,
+      failures: 5,
+      claimToken: null,
+      operatorNotified: true,
+    });
   });
 });

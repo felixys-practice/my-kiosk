@@ -488,6 +488,36 @@ export class RefundRepository {
   }
 
   /**
+   * 연속 조회 오류가 한도에 도달한 PG 취소 요청을 결과 확인 실패(QUERY_FAILED)로 바꾼다
+   * - 이후 조회는 장애 복구 확인(PROBE/BATCH)이 맡으므로 개별 예정 시각과 담당을 지운다
+   * @param tx 결과 반영 트랜잭션
+   * @param id PG 취소 요청 ID
+   * @param update 연속 오류 횟수·마지막 오류·전환 시각
+   */
+  async markQueryFailed(
+    tx: TransactionClient,
+    id: string,
+    update: {
+      inquiryFailureCount: number;
+      lastInquiryError: string;
+      now: Date;
+    },
+  ): Promise<void> {
+    await tx.paymentCancel.update({
+      where: { id },
+      data: {
+        status: PaymentCancelStatus.QUERY_FAILED,
+        inquiryFailureCount: update.inquiryFailureCount,
+        lastInquiryError: update.lastInquiryError,
+        queryFailedAt: update.now,
+        nextInquiryAt: null,
+        claimToken: null,
+        claimUntil: null,
+      },
+    });
+  }
+
+  /**
    * 응답이 확정되지 않은 전송 뒤 첫 조회를 예약하고 담당을 내려놓는다
    * - 담당 토큰이 그대로일 때만 바꾼다(그사이 콜백 등이 확정했으면 아무것도 하지 않는다)
    * @param id PG 취소 요청 ID

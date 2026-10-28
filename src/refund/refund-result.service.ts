@@ -292,6 +292,45 @@ export class RefundResultService {
   }
 
   /**
+   * 연속 조회 오류가 한도에 도달한 PG 취소 요청을 결과 확인 실패로 바꾸고 운영자에게 알린다 (FR-025)
+   * - 지급 결과를 단정하지 않는다(환불은 지급 처리 중 그대로, 이용 종료 유지)
+   * @param paymentCancelId PG 취소 요청
+   * @param claimToken 조회를 맡은 담당 토큰(바뀌었으면 아무것도 하지 않는다)
+   * @param failure 연속 오류 횟수·마지막 오류·시각
+   */
+  async recordQueryFailed(
+    paymentCancelId: string,
+    claimToken: string,
+    failure: { inquiryFailureCount: number; reason: string; now: Date },
+  ): Promise<void> {
+    const actionLogs: TransactionLog[] = [];
+    await this.refundRepository.runInTransaction(async (tx) => {
+      const found = await this.refundRepository.findAttemptForResult(
+        paymentCancelId,
+        tx,
+      );
+      if (!found) return;
+      await this.lockingRepository.lockForPayout(tx, {
+        refundId: found.refund.id,
+        paymentCancelIds: [found.id],
+        manualRefundPayoutIds: [],
+      });
+      const attempt = (await this.refundRepository.findAttemptForResult(
+        paymentCancelId,
+        tx,
+      ))!;
+      if (attempt.claimToken !== claimToken) return;
+      await this.refundRepository.markQueryFailed(tx, attempt.id, {
+        inquiryFailureCount: failure.inquiryFailureCount,
+        lastInquiryError: failure.reason,
+        now: failure.now,
+      });
+      await this.notifyOperator(tx, attempt, 'QUERY_FAILED', actionLogs);
+    });
+    for (const log of actionLogs) this.txLogger.logTransaction(log);
+  }
+
+  /**
    * PG 취소 결과 콜백을 받아 대상에 맞는 처리로 보낸다 (API 계약 §7 POST /refund/callback)
    * - 환불 기록에 연결된 PG 취소 요청은 환불금 지급 결과 공통 처리로 반영한다
    * - 기존 경로가 만든 PG 취소 요청(refundId 없음)은 US6·Phase 13 전환 전까지 기존 처리를 유지한다
