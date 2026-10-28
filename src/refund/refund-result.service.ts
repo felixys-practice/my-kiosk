@@ -60,6 +60,13 @@ export class RefundResultService {
         actualAmount: outcome.actualAmount,
         now,
       });
+      await this.ledgerRepository.recordPayout(tx, {
+        shopId: attempt.refund.shopId,
+        orderId: attempt.refund.orderId,
+        refundId: attempt.refund.id,
+        paidAmount: outcome.actualAmount,
+        paymentCancelId: attempt.id,
+      });
       const paidAmount = attempt.refund.paidAmount + outcome.actualAmount;
       await this.refundRepository.updateRefundPayout(tx, attempt.refund.id, {
         paidAmount,

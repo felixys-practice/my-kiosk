@@ -3,6 +3,7 @@ import 'dotenv/config';
 import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import {
+  LedgerStatus,
   PaymentCancelStatus,
   PaymentStatus,
   PaymentType,
@@ -198,5 +199,41 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       paidAmount: refundAmount,
       paidAt: true,
     });
+  });
+
+  /**
+   * PG 취소 성공 결과를 반영한다
+   * @param paymentCancelId PG 취소 요청
+   * @param actualAmount PG가 확인한 실제 취소액
+   */
+  function succeed(paymentCancelId: string, actualAmount: number) {
+    return service.applyPgResult({
+      paymentCancelId,
+      outcome: {
+        kind: 'SUCCEEDED',
+        pgTransactionId: `pg-cancel-${randomUUID()}`,
+        actualAmount,
+      },
+    });
+  }
+
+  it('PG 성공 시 실제액의 음수 원장 1건이 원래 매장·주문·RELEASABLE로 저장된다', async () => {
+    const pending = await createPendingRefund();
+
+    await succeed(pending.paymentCancelId, refundAmount);
+
+    const ledgers = await prisma.ledger.findMany({
+      where: { refundId: pending.refundId },
+    });
+    expect(ledgers).toEqual([
+      expect.objectContaining({
+        shopId,
+        orderId: pending.orderId,
+        amount: -refundAmount,
+        status: LedgerStatus.RELEASABLE,
+        paymentCancelId: pending.paymentCancelId,
+        manualRefundPayoutId: null,
+      }),
+    ]);
   });
 });

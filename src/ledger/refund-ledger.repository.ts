@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { LedgerStatus } from '@prisma/client';
 import { TransactionClient } from 'src/prisma/prisma.service';
 
 /** 실제 환불금 지급 원장 기록 내용 */
@@ -26,8 +27,16 @@ export class RefundLedgerRepository {
     tx: TransactionClient,
     input: RefundPayoutLedgerInput,
   ): Promise<void> {
-    void tx;
-    void input;
-    await Promise.resolve();
+    await tx.ledger.create({
+      data: {
+        shopId: input.shopId,
+        orderId: input.orderId,
+        refundId: input.refundId,
+        amount: -input.paidAmount,
+        status: LedgerStatus.RELEASABLE,
+        paymentCancelId: input.paymentCancelId,
+        manualRefundPayoutId: input.manualRefundPayoutId,
+      },
+    });
   }
 }
