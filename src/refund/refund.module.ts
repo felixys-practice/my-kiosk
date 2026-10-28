@@ -16,6 +16,11 @@ import { RefundStoreService } from './refund-store.service';
 import { RefundDispatchService } from './refund-dispatch.service';
 import { RefundRecoveryService } from './refund-recovery.service';
 import { RefundWorkRepository } from './refund-work.repository';
+import {
+  RefundRecoveryScheduler,
+  refundRecoveryQueueName,
+} from './refund-recovery.scheduler';
+import { BullModule } from '@nestjs/bullmq';
 import { RefundEventRepository } from './refund-event.repository';
 import { RefundLedgerRepository } from 'src/ledger/refund-ledger.repository';
 
@@ -25,6 +30,7 @@ import { RefundLedgerRepository } from 'src/ledger/refund-ledger.repository';
     PgModule,
     SeatAssignmentModule,
     SessionLifecycleModule,
+    BullModule.registerQueue({ name: refundRecoveryQueueName }),
   ],
   providers: [
     RefundService,
@@ -46,6 +52,7 @@ import { RefundLedgerRepository } from 'src/ledger/refund-ledger.repository';
     RefundDispatchService,
     RefundRecoveryService,
     RefundWorkRepository,
+    RefundRecoveryScheduler,
   ],
   controllers: [RefundController],
   exports: [RefundService],
