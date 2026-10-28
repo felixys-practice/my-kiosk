@@ -549,4 +549,23 @@ describe('환불 확정 저장 (실제 DB)', () => {
       body: first.body,
     });
   });
+
+  it('최초 전송은 자동 재전송 횟수에 더해지지 않고 전송 시도 횟수에만 기록된다', async () => {
+    const issued = await createUnusedPeriodTicket();
+    pgGateway.sendCancel.mockResolvedValueOnce({
+      result: 'UNKNOWN',
+      reason: '응답 시간 초과',
+    });
+
+    const { body } = await accept(issued.ticketId);
+
+    const attempt = await prisma.paymentCancel.findUniqueOrThrow({
+      where: { id: body.paymentCancelId! },
+    });
+    expect({
+      sendAttemptCount: attempt.sendAttemptCount,
+      resendCount: attempt.resendCount,
+      manualResendCount: attempt.manualResendCount,
+    }).toEqual({ sendAttemptCount: 1, resendCount: 0, manualResendCount: 0 });
+  });
 });
