@@ -3,6 +3,7 @@ import 'dotenv/config';
 import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import {
+  LedgerStatus,
   PaymentCancelStatus,
   PaymentStatus,
   PaymentType,
@@ -49,9 +50,10 @@ describe('환불 확정 저장 (실제 DB)', () => {
 
   /**
    * 결제를 마친 미사용 정기권을 만든다
+   * @param amount 결제 금액(기본 10000원)
    * @returns 이용권과 주문 항목·결제 ID
    */
-  async function createUnusedPeriodTicket(): Promise<{
+  async function createUnusedPeriodTicket(amount = paidAmount): Promise<{
     ticketId: string;
     orderItemId: string;
     paymentId: string;
@@ -60,9 +62,9 @@ describe('환불 확정 저장 (실제 DB)', () => {
       data: {
         shopId,
         userId: customerId,
-        originalAmount: paidAmount,
+        originalAmount: amount,
         discountAmount: 0,
-        totalAmount: paidAmount,
+        totalAmount: amount,
       },
     });
     orderIds.push(order.id);
@@ -71,9 +73,9 @@ describe('환불 확정 저장 (실제 DB)', () => {
         orderId: order.id,
         productId,
         ticketType: TicketType.PERIOD,
-        originalAmount: paidAmount,
+        originalAmount: amount,
         discountAmount: 0,
-        amount: paidAmount,
+        amount: amount,
         purchasedDurationDays: 30,
         usableDays: 30,
       },
@@ -82,7 +84,7 @@ describe('환불 확정 저장 (실제 DB)', () => {
       data: {
         orderId: order.id,
         type: PaymentType.CARD,
-        amount: paidAmount,
+        amount: amount,
         status: PaymentStatus.SUCCESS,
       },
     });
@@ -156,6 +158,7 @@ describe('환불 확정 저장 (실제 DB)', () => {
     await prisma.refundIdempotencyRecord.deleteMany({
       where: { requesterId: customerId },
     });
+    await prisma.ledger.deleteMany({ where: { orderId: { in: orderIds } } });
     await prisma.paymentCancel.deleteMany({ where: { payment: byOrder } });
     await prisma.refund.deleteMany({ where: { payment: byOrder } });
     await prisma.seatAssignment.deleteMany({
@@ -372,5 +375,50 @@ describe('환불 확정 저장 (실제 DB)', () => {
       where: { id: issued.ticketId },
     });
     expect(ticket.status).toBe(TicketStatus.REVOKED);
+  });
+
+  it('실결제액 0원 고객 환불은 PG 취소 요청 없이 이용 종료·지급 완료·0원 원장을 함께 저장하고 PG를 호출하지 않는다', async () => {
+    const issued = await createUnusedPeriodTicket(0);
+
+    const { body } = await accept(issued.ticketId);
+
+    const refund = await prisma.refund.findUniqueOrThrow({
+      where: { id: body.refundId },
+      include: { paymentCancels: true, ledgers: true },
+    });
+    expect({
+      payoutStatus: refund.payoutStatus,
+      amount: refund.amount,
+      paidAmount: refund.paidAmount,
+      paidAt: refund.paidAt instanceof Date,
+      attempts: refund.paymentCancels.length,
+      ledgers: refund.ledgers.map((ledger) => ({
+        amount: ledger.amount,
+        shopId: ledger.shopId,
+        status: ledger.status,
+        paymentCancelId: ledger.paymentCancelId,
+        manualRefundPayoutId: ledger.manualRefundPayoutId,
+      })),
+    }).toEqual({
+      payoutStatus: RefundPayoutStatus.PAID,
+      amount: 0,
+      paidAmount: 0,
+      paidAt: true,
+      attempts: 0,
+      ledgers: [
+        {
+          amount: 0,
+          shopId,
+          status: LedgerStatus.RELEASABLE,
+          paymentCancelId: null,
+          manualRefundPayoutId: null,
+        },
+      ],
+    });
+    const ticket = await prisma.ticket.findUniqueOrThrow({
+      where: { id: issued.ticketId },
+    });
+    expect(ticket.status).toBe(TicketStatus.REVOKED);
+    expect(pgGateway.sendCancel).not.toHaveBeenCalled();
   });
 });

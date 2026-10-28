@@ -42,7 +42,7 @@ export type RefundAcceptance = {
   ticketId: string;
   amount: number;
   payoutStatus: string;
-  paymentCancelId: string;
+  paymentCancelId: string | null; // 현재 PG 취소 요청, 0원 환불이면 null
   acceptedAt: string;
   terminatedAt: string;
 };
@@ -128,6 +128,8 @@ export class RefundAcceptanceService {
           {
             paymentId: target!.paymentId,
             orderItemId: target!.orderItemId,
+            orderId: target!.orderId,
+            shopId: target!.shopId,
             source: RefundSource.CUSTOMER,
             amount: decision.amount,
             requestedById: actor.userId,
@@ -135,10 +137,13 @@ export class RefundAcceptanceService {
           },
           tx,
         );
-        accepted = {
-          paymentCancelId: created.paymentCancelId,
-          amount: decision.amount,
-        };
+        // 0원은 PG 취소 요청이 없으므로 보내지 않는다
+        if (created.paymentCancelId !== null) {
+          accepted = {
+            paymentCancelId: created.paymentCancelId,
+            amount: decision.amount,
+          };
+        }
         return {
           status: 202,
           refundId: created.refundId,

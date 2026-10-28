@@ -51,6 +51,8 @@ describe('RefundAcceptanceService', () => {
     return {
       paymentId: 'payment-1',
       orderItemId: 'order-item-1',
+      orderId: 'order-1',
+      shopId: 'shop-1',
       lockTargets: {
         paymentId: 'payment-1',
         ticketId,

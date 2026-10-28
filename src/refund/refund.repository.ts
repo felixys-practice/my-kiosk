@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import {
+  LedgerStatus,
   PaymentCancelFailureCode,
   PaymentCancelStatus,
   PaymentStatus,
@@ -26,12 +27,16 @@ export type CustomerRefundTarget = {
   lockTargets: AcceptanceLockTargets;
   paymentId: string;
   orderItemId: string;
+  orderId: string; // 원래 주문(원장 기록용)
+  shopId: string; // 원래 주문의 매장(원장 기록용)
 };
 
 /** 확정할 환불 내용 */
 export type AcceptedRefundInput = {
   paymentId: string;
   orderItemId: string;
+  orderId: string;
+  shopId: string;
   source: RefundSource;
   amount: number;
   requestedById: string;
@@ -85,6 +90,8 @@ export class RefundRepository {
             refunds: { select: { decisionStatus: true, payoutStatus: true } },
             order: {
               select: {
+                id: true,
+                shopId: true,
                 payments: {
                   select: { id: true, status: true },
                   orderBy: { createdAt: 'desc' },
@@ -106,6 +113,8 @@ export class RefundRepository {
     return {
       paymentId: payment.id,
       orderItemId: ticket.orderItem.id,
+      orderId: ticket.orderItem.order.id,
+      shopId: ticket.orderItem.order.shopId,
       lockTargets: {
         paymentId: payment.id,
         ticketId: ticket.id,
@@ -172,15 +181,17 @@ export class RefundRepository {
 
   /**
    * 확정된 환불과 최초 PG 취소 요청(시도 1, REQUESTED)을 저장한다
+   * - 0원이면 PG 취소 요청 없이 지급 완료(PAID)와 0원 원장을 저장한다
    * @param input 환불 내용
    * @param tx 트랜잭션 클라이언트
-   * @returns 환불·PG 취소 요청 ID
+   * @returns 환불 ID와 PG 취소 요청 ID(0원이면 null)
    */
   async createAcceptedRefund(
     input: AcceptedRefundInput,
     tx: TransactionClient,
-  ): Promise<{ refundId: string; paymentCancelId: string }> {
-    // 업무 확정(Refund)과 최초 PG 취소 요청(시도 1)을 함께 만든다
+  ): Promise<{ refundId: string; paymentCancelId: string | null }> {
+    const isZero = input.amount === 0;
+    // 업무 확정(Refund). 양수는 최초 PG 취소 요청(시도 1)을 함께, 0원은 PG 요청 없이 지급 완료로 만든다
     const refund = await tx.refund.create({
       data: {
         paymentId: input.paymentId,
@@ -190,7 +201,10 @@ export class RefundRepository {
         decisionStatus: RefundDecisionStatus.ACCEPTED,
         policyVersion: refundPolicyVersion,
         amount: input.amount,
-        payoutStatus: RefundPayoutStatus.PENDING,
+        payoutStatus: isZero
+          ? RefundPayoutStatus.PAID
+          : RefundPayoutStatus.PENDING,
+        paidAt: isZero ? input.now : null,
         requestedAt: input.now,
         acceptedAt: input.now,
         terminatedAt: input.now,
@@ -199,22 +213,37 @@ export class RefundRepository {
         exitConsentedAt: input.exitConsentedAt,
         reason: input.reason,
         endedSessionId: input.endedSessionId,
-        paymentCancels: {
-          create: {
-            paymentId: input.paymentId,
-            orderItemId: input.orderItemId,
-            attemptNumber: 1,
-            amount: input.amount,
-            status: PaymentCancelStatus.REQUESTED,
-            requestedAt: input.now,
-          },
-        },
+        paymentCancels: isZero
+          ? undefined
+          : {
+              create: {
+                paymentId: input.paymentId,
+                orderItemId: input.orderItemId,
+                attemptNumber: 1,
+                amount: input.amount,
+                status: PaymentCancelStatus.REQUESTED,
+                requestedAt: input.now,
+              },
+            },
       },
       select: { id: true, paymentCancels: { select: { id: true } } },
     });
+
+    // 0원은 지급 연결 없는 0원 원장 1건을 같은 트랜잭션에 남긴다(data-model §8)
+    if (isZero) {
+      await tx.ledger.create({
+        data: {
+          shopId: input.shopId,
+          orderId: input.orderId,
+          refundId: refund.id,
+          amount: 0,
+          status: LedgerStatus.RELEASABLE,
+        },
+      });
+    }
     return {
       refundId: refund.id,
-      paymentCancelId: refund.paymentCancels[0].id,
+      paymentCancelId: refund.paymentCancels[0]?.id ?? null,
     };
   }
 
