@@ -110,11 +110,11 @@ suite_baseline: green
 | A74 | Given 알림이 있을 때, When 고객이 자기 알림을 조회하면, Then 자기 환불의 알림만 보인다. | QS-9-4a | example | PENDING | |
 | A75 | Given 안 읽은 알림이 있을 때, When 받은 사람이 그 알림을 읽음 처리하면, | QS-9-4b | example | PENDING | |
 | A76 | Given PG 취소 결과 확인 실패·환불 금액 불일치·시스템 자동 취소 실패가 생겼을 때, When 운영자가 알림을 조회하면, Then 그 알림이 보인다. | QS-9-5 | example | PENDING | |
-| A77 | Given PG 취소 요청의 실패가 확정됐고 실제 환불금 지급액이 0원이며 다른 환불금 지급이 없을 때, When 운영자가 원인을 해결하고 재시도를 요청하면, Then 서버가 확정된 환불 금액의 취소 요청을 새 PG 취소 요청 식별자로 기록하고 PG에 보낸다. 실행자·사유를 기록하고 이용권·좌석은 복구하지 않는다. | QS-10-1 | example | PENDING | |
+| A77 | Given PG 취소 요청의 실패가 확정됐고 실제 환불금 지급액이 0원이며 다른 환불금 지급이 없을 때, When 운영자가 원인을 해결하고 재시도를 요청하면, Then 서버가 확정된 환불 금액의 취소 요청을 새 PG 취소 요청 식별자로 기록하고 PG에 보낸다. 실행자·사유를 기록하고 이용권·좌석은 복구하지 않는다. | QS-10-1 | example | DONE | `test/refund-operations.e2e-spec.ts` › … (QS-10-1) |
 | A78 | Given 자기 매장 환불의 최근 PG 취소 요청이 한도 소진·전송 전 실패·PG 거절로 이미 실패했고 실제 환불금 지급액이 0원이고 다른 미확정 지급이 없으며 지급 방식이 PG이고 활성 별도 지급 예약이 없을 때, When 점주가 PG 처리 결과를 개별 확인해 미접수 또는 거절 확정이 확인되면, Then 서버가 별도 버튼이나 사유 입력 없이 확정된 환불 금액의 취소 요청을 새 PG 취소 요청 식별자로 기록해 즉시 보낸다. 이전 실패 기록과 이용 종료는 유지하고 점주·시각·개별 확인에 따른 재시도임을 기록한다. 조회 오류이면 보내지 않고 기존 실패를 보존한다. 처리 중·취소 성공처럼 기존 실패와 모순되면 운영자에게 알리고 추가 지급을 차단한다. | QS-10-1a | example | PENDING | |
 | A79 | Given 점주 또는 운영자의 개별 확인으로 1a번처럼 PG에 취소 요청을 새 PG 취소 요청 식별자로 보냈을 때, When 그 요청의 응답이 없고 이후 자동 조회에서 PG 미접수가 확인되면, Then 자동 작업은 새 PG 취소 요청 식별자로 보낸 취소 요청을 정해진 횟수까지만 다시 보낸다. 이전에 실패한 요청의 상태·재전송 횟수는 바꾸지 않는다. 재전송 한도를 소진한 뒤에도 PG 미접수가 확인되면 자동 처리를 멈춘다. 점주 또는 운영자는 개별 확인을 다시 실행할 수 있다. | QS-10-1b | example | PENDING | |
-| A80 | Given 운영자가 요청 키 K1로 환불 R에 대해 직접 재시도를 실행해 PG 취소 요청 A를 생성했고 최초 202 응답이 저장됐으며 A의 결과가 미확정일 때, When 그 운영자가 환불 R에 대해 K1 또는 다른 키 K2로 다시 요청하면, Then K1은 환불 대상과 입력 사유를 첫 요청과 비교해 내용이 같으면 최초 응답과 PG 취소 요청 식별자 A를 반환하고, 내용이 바뀌었으면 IDEMPOTENCY_KEY_REUSED로 거절한다. K2는 환불 R을 잠근 뒤 A가 미확정임을 확인해 REFUND_PAYOUT_UNRESOLVED로 거절한다. 반복·동시 요청으로 취소 요청 기록을 추가하거나 PG에 취소를 추가 요청하지 않는다. | QS-10-1c | example | PENDING | |
-| A81 | Given PG 취소 직접 재시도 요청이 들어올 때, When 고객이나 점주가 실행하면, Then 역할 제한으로 REFUND_FORBIDDEN(403)을 반환한다. 운영자의 같은 키·같은 내용 반복은 현재 상태와 관계없이 최초 응답을 반환한다. 새 실행 요청의 지급 완료 등 재처리 불가 상태는 REFUND_PAYOUT_NOT_ACTIONABLE(409), 결과 미확정·활성 별도 지급 예약은 REFUND_PAYOUT_UNRESOLVED(409), 미지급액이 남은 일부 지급은 REFUND_PARTIAL_PAYOUT_REQUIRES_MANUAL(409)로 거절한다. 거절하거나 최초 응답을 반환한 요청은 PG 취소 요청 기록과 호출을 추가하지 않는다. | QS-10-1d | example | PENDING | |
+| A80 | Given 운영자가 요청 키 K1로 환불 R에 대해 직접 재시도를 실행해 PG 취소 요청 A를 생성했고 최초 202 응답이 저장됐으며 A의 결과가 미확정일 때, When 그 운영자가 환불 R에 대해 K1 또는 다른 키 K2로 다시 요청하면, Then K1은 환불 대상과 입력 사유를 첫 요청과 비교해 내용이 같으면 최초 응답과 PG 취소 요청 식별자 A를 반환하고, 내용이 바뀌었으면 IDEMPOTENCY_KEY_REUSED로 거절한다. K2는 환불 R을 잠근 뒤 A가 미확정임을 확인해 REFUND_PAYOUT_UNRESOLVED로 거절한다. 반복·동시 요청으로 취소 요청 기록을 추가하거나 PG에 취소를 추가 요청하지 않는다. | QS-10-1c | example | DONE | `test/refund-operations.e2e-spec.ts` › … (QS-10-1c) |
+| A81 | Given PG 취소 직접 재시도 요청이 들어올 때, When 고객이나 점주가 실행하면, Then 역할 제한으로 REFUND_FORBIDDEN(403)을 반환한다. 운영자의 같은 키·같은 내용 반복은 현재 상태와 관계없이 최초 응답을 반환한다. 새 실행 요청의 지급 완료 등 재처리 불가 상태는 REFUND_PAYOUT_NOT_ACTIONABLE(409), 결과 미확정·활성 별도 지급 예약은 REFUND_PAYOUT_UNRESOLVED(409), 미지급액이 남은 일부 지급은 REFUND_PARTIAL_PAYOUT_REQUIRES_MANUAL(409)로 거절한다. 거절하거나 최초 응답을 반환한 요청은 PG 취소 요청 기록과 호출을 추가하지 않는다. | QS-10-1d | example | DONE | `test/refund-operations.e2e-spec.ts` › … (QS-10-1d) |
 | A82 | Given PG 취소 요청이 처리 중이거나 조회 결과를 확인하지 못했을 때, When 새 식별자를 발급한 PG 취소 요청 또는 별도 환불금 지급을 요청하면, Then 환불금 지급 결과 미확정 오류로 거부한다. | QS-10-2 | example | PENDING | |
 | A83 | Given 모든 PG 취소 요청의 결과가 확정됐고 환불금 지급 조치 필요·미지급액이 남아 있을 때, When 운영자가 별도 환불금 지급을 예약하면, Then 미지급액과 같은 금액을 예약하고 다른 PG 취소 요청·별도 환불금 지급을 차단한다. 예약은 환불금 지급 완료가 아니다. | QS-10-3 | example | PENDING | |
 | A84 | Given 운영자가 예약한 별도 환불금 지급이 있을 때, When 실제 지급 뒤 거래 식별자·환불금 지급 시각·예약과 같은 금액·증빙을 제출하면, Then 별도 환불금 지급과 실제 금액의 원장을 함께 한 번만 기록한다. 합계가 확정된 환불 금액에 이르고 검토 사항이 없으면 환불금 지급 완료가 된다. | QS-10-4 | example | PENDING | |
@@ -492,19 +492,19 @@ suite_baseline: green
 
 | id | behavior | traces | kind | state | test |
 |---|---|---|---|---|---|
-| U182 | MANAGER 재시도는 확정 실패·실제 지급액 0원·다른 지급 없음이면 같은 금액의 새 PG 취소 요청을 만들고 이전 FAILED 기록을 그대로 둔다 | FR-044 | example | PENDING | |
-| U183 | 재시도로 만든 새 PG 취소 요청의 자동 재전송 횟수는 0이다 | FR-044, FR-057 | example | PENDING | |
-| U184 | 미확정 PG 취소 요청이 있으면 재시도는 REFUND_PAYOUT_UNRESOLVED로 거절된다 | FR-043 | example | PENDING | |
-| U185 | 활성 별도 지급 예약이 있으면 재시도는 REFUND_PAYOUT_UNRESOLVED로 거절된다 | FR-043 | example | PENDING | |
-| U186 | 유효한 개별 조회 담당이 있으면 재시도는 REFUND_PAYOUT_UNRESOLVED로 거절된다 | FR-055 | example | PENDING | |
-| U187 | PG_RESULT_CONFLICT가 있으면 재시도는 REFUND_PAYOUT_UNRESOLVED로 거절된다 | FR-057 | example | PENDING | |
-| U188 | 실제 지급액이 있고 미지급액이 남으면 재시도는 REFUND_PARTIAL_PAYOUT_REQUIRES_MANUAL로 거절된다 | FR-048 | example | PENDING | |
-| U189 | 지급 완료 환불의 재시도는 REFUND_PAYOUT_NOT_ACTIONABLE로 거절된다 | FR-044 | example | PENDING | |
-| U190 | 재시도 사유가 trim 후 0자이면 400을 받는다 | FR-044 | example | PENDING | |
-| U191 | 재시도 사유가 trim 후 500자이면 허용된다 | FR-044 | example | PENDING | |
-| U192 | 재시도 사유가 trim 후 501자이면 400을 받는다 | FR-044 | example | PENDING | |
-| U193 | 재시도에 Idempotency-Key가 없으면 IDEMPOTENCY_KEY_REQUIRED로 거절된다 | FR-044 | example | PENDING | |
-| U194 | OWNER의 재시도는 403 REFUND_FORBIDDEN으로 거절된다 | FR-050 | example | PENDING | |
+| U182 | MANAGER 재시도는 확정 실패·실제 지급액 0원·다른 지급 없음이면 같은 금액의 새 PG 취소 요청을 만들고 이전 FAILED 기록을 그대로 둔다 | FR-044 | example | DONE | `src/refund/refund-result.integration.spec.ts` › MANAGER의 PG 직접 재시도 › 확정 실패·지급액 0원이면 같은 금액의 새 PG 취소 요청을 만들어 보내고… |
+| U183 | 재시도로 만든 새 PG 취소 요청의 자동 재전송 횟수는 0이다 | FR-044, FR-057 | example | DONE | `src/refund/refund-result.integration.spec.ts` › MANAGER의 PG 직접 재시도 › 한도를 소진해 실패한 요청을 재시도한 새 요청의 자동 재전송 횟수는 0이고… |
+| U184 | 미확정 PG 취소 요청이 있으면 재시도는 REFUND_PAYOUT_UNRESOLVED로 거절된다 | FR-043 | example | DONE | `src/refund/refund-retry.policy.spec.ts` › 미확정 PG 취소 요청이 있으면 REFUND_PAYOUT_UNRESOLVED로 거절한다 |
+| U185 | 활성 별도 지급 예약이 있으면 재시도는 REFUND_PAYOUT_UNRESOLVED로 거절된다 | FR-043 | example | DONE | `src/refund/refund-retry.policy.spec.ts` › 활성 별도 환불금 지급 예약이 있으면 REFUND_PAYOUT_UNRESOLVED로 거절한다 |
+| U186 | 유효한 개별 조회 담당이 있으면 재시도는 REFUND_PAYOUT_UNRESOLVED로 거절된다 | FR-055 | example | DONE | `src/refund/refund-retry.policy.spec.ts` › 실패한 요청에 유효한 개별 조회 담당이 있으면… |
+| U187 | PG_RESULT_CONFLICT가 있으면 재시도는 REFUND_PAYOUT_UNRESOLVED로 거절된다 | FR-057 | example | DONE | `src/refund/refund-retry.policy.spec.ts` › PG 결과 모순(PG_RESULT_CONFLICT)이 기록돼 있으면… |
+| U188 | 실제 지급액이 있고 미지급액이 남으면 재시도는 REFUND_PARTIAL_PAYOUT_REQUIRES_MANUAL로 거절된다 | FR-048 | example | DONE | `src/refund/refund-retry.policy.spec.ts` › 실제 지급액이 있고 미지급액이 남으면… |
+| U189 | 지급 완료 환불의 재시도는 REFUND_PAYOUT_NOT_ACTIONABLE로 거절된다 | FR-044 | example | DONE | `src/refund/refund-retry.policy.spec.ts` › 지급 완료 환불은 REFUND_PAYOUT_NOT_ACTIONABLE로 거절한다 외 1 |
+| U190 | 재시도 사유가 trim 후 0자이면 400을 받는다 | FR-044 | example | DONE | `src/refund/dto/retry-refund.dto.spec.ts` › 앞뒤 공백을 지운 재시도 사유가 0자이면 형식 오류(400)다 |
+| U191 | 재시도 사유가 trim 후 500자이면 허용된다 | FR-044 | example | DONE | `src/refund/dto/retry-refund.dto.spec.ts` › 앞뒤 공백을 지운 재시도 사유가 500자이면 허용된다 |
+| U192 | 재시도 사유가 trim 후 501자이면 400을 받는다 | FR-044 | example | DONE | `src/refund/dto/retry-refund.dto.spec.ts` › 앞뒤 공백을 지운 재시도 사유가 501자이면 형식 오류(400)다 |
+| U193 | 재시도에 Idempotency-Key가 없으면 IDEMPOTENCY_KEY_REQUIRED로 거절된다 | FR-044 | example | DONE | `test/refund-operations.e2e-spec.ts` › 운영자의 PG 직접 재시도에 Idempotency-Key가 없으면 400… |
+| U194 | OWNER의 재시도는 403 REFUND_FORBIDDEN으로 거절된다 | FR-050 | example | DONE | `test/refund-operations.e2e-spec.ts` › 점주의 PG 직접 재시도는 403 REFUND_FORBIDDEN으로… |
 | U195 | RETRY_EXHAUSTED로 FAILED인 요청을 개별 확인해 NOT_FOUND이면 새 PG 취소 요청을 즉시 보낸다 | FR-057 | example | PENDING | |
 | U196 | SEND_FAILED로 FAILED인 요청을 개별 확인해 NOT_FOUND이면 새 PG 취소 요청을 즉시 보낸다 | FR-057 | example | PENDING | |
 | U197 | PG_REJECTED로 FAILED인 요청을 개별 확인해 거절 확정이면 새 PG 취소 요청을 즉시 보낸다 | FR-057 | example | PENDING | |

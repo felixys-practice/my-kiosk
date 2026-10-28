@@ -1002,3 +1002,36 @@ U10~U15를 마친 뒤, 관계 검증의 비교 대상 설정을 생략하면 정
 
 - 범위 `c09ccd7..fa9607a`. 판정 **통과**. 2차 지적 3건 해결, 추가 지적 없음.
 - Phase 7a 완료. 다음 순서는 US10 공통 PG 재요청 → 7b(A53·A54 실패 시도 경로, T102, T183) → US6(A38·A47) → US7 → US8/US9 → 최종.
+
+## US10 공통 PG 재요청 (MANAGER 직접 재시도) 사이클 (2026-10-29)
+
+- 범위: 권장 순서의 "US10 공통 PG 재요청". T129·T131, U182~U194, A77·A80·A81.
+  - 개별 확인의 실패 시도 경로(T130·T102, U195~U204, A78·A79, A53·A54)는 다음 단계 "US5 개별 확인 완료"에서 다룬다.
+  - A82(QS-10-2)는 별도 지급 예약 경로와 함께 검증해야 하므로 US10 외부 지급 단계로 미뤘다.
+- 해석 메모(다음 단계용): 계약 §8은 PG 조회 결과를 `FAILED{reason}`(PG가 실패를 확정)과 `QUERY_ERROR{reason}`(판단 불가)로 나눈다. 그래서 U202의 "오류 문자열만 있어 실행 여부가 불명확한 거절"은 PG 연동이 QUERY_ERROR로 넘기는 경우로 보고, 서비스 쪽에서는 U199와 같은 경로로 검증한다.
+
+| 동작 | red(실행 명령 → 결정적 줄) | green | 커밋 |
+|---|---|---|---|
+| U184 | `npx jest src/refund/refund-retry.policy.spec.ts` → `+ "allowed": true` | REQUESTED·QUERY_FAILED 시도가 있으면 UNRESOLVED | `15b5d51` |
+| U185 | 같은 파일 → `+ "allowed": true` | 활성 예약이 있으면 UNRESOLVED | `15b5d51` |
+| U186 | 같은 파일 → `+ "allowed": true`(유효 담당) | `claimUntil > now`인 시도가 있으면 UNRESOLVED. 기한이 지난 담당은 허용 | `15b5d51` |
+| U187 | 같은 파일 → `+ "allowed": true` | actionCode PG_RESULT_CONFLICT면 UNRESOLVED | `15b5d51` |
+| U188 | 같은 파일 → `+ "allowed": true` | `0 < paidAmount < amount`면 PARTIAL_PAYOUT_REQUIRES_MANUAL | `15b5d51` |
+| U189 | 같은 파일 → `+ "allowed": true`(PAID). 삼각측량(초과 지급·LEGACY) → `+ "allowed": true` | PAID·비확정은 NOT_ACTIONABLE. `paidAmount ≥ amount`도 NOT_ACTIONABLE | `15b5d51` |
+| U182 | `npx jest src/refund/refund-result.integration.spec.ts -t '같은 금액의 새 PG 취소 요청을 만들어'` → `+ "payoutStatus": "ACTION_REQUIRED"`, 새 요청 없음(응답 스텁) | `RefundRetryService.retryByManager`: 역할 → 키 필수 → 없는 환불 404 → 멱등 실행(PAYOUT_RETRY, {refundId, reason}) 안에서 Refund 잠금·재판정 → `createRetryAttempt`(시도 번호+1·같은 금액·실행자·사유·전송 담당, 환불 PENDING/PG) → 커밋 뒤 `dispatch.sendPrepared`. 단위 504, E2E 124 | `e6e29c8` |
+| U183 | 첫 통과 → 뮤턴트(새 요청 resendCount 5) `+ "resendCount": 5` | U182 구현 그대로 | `eab1ec9` |
+| U190 | `npx jest src/refund/dto/retry-refund.dto.spec.ts` → `+ undefined`(사유 오류 없음) | trim·IsString·MinLength(1) | `707238e` |
+| U192 | 같은 파일 → `- "reason"`(501자 허용) | MaxLength(500) | `707238e` |
+| U191 | 첫 통과(경계 짝) → 뮤턴트 MaxLength(499)에서 실패 | — | `707238e` |
+| U194 | `npx jest --config test/jest-e2e.json test/refund-operations.e2e-spec.ts` → `+ "status": 404`(경로 없음) | `RefundOperationsController` POST `:refundId/payout-retries`와 `RefundOperatorGuard`(본문 검증보다 먼저 MANAGER 확인, 아니면 REFUND_FORBIDDEN) | `707238e` |
+| U193 | 첫 통과 → 뮤턴트(키 검사 제거) `+ "status": 202`, `+ "attempts": 2` | U182 서비스의 키 검사 | `707238e` |
+| A77·A80·A81 | 첫 통과 → 뮤턴트: 전송 생략(`+ "sent": []`), 미확정 판정 제거, 일부 지급 판정 제거 → 각각 1 failed | — | `55d522e` |
+
+- 리팩터: 접수 서비스 `sendAccepted`의 PG 호출·결과 반영을 `sendPrepared`로 합치려 했지만 되돌렸다. Phase 3 단위 spec(`refund-acceptance.service.spec.ts`)의 PG·전송 대역 단언을 바꿔야 해서다. 중복은 남아 있다.
+- 이탈·메모:
+  - 정책 함수의 U184~U189는 동작마다 red→green을 확인했지만 한 커밋으로 묶었다.
+  - 테스트 준비 변경: `refund-result.integration.spec.ts` 공통 준비에 MANAGER 사용자와 멱등 기록 정리를 추가했다. 단언 변경은 없다.
+  - 기존 `RoleGuard`는 역할 불일치에 401을 낸다. 계약의 403 REFUND_FORBIDDEN과 "사유 입력 여부와 관계없이" 조건을 위해 경로 전용 가드를 두었다. 기존 가드는 범위 밖이라 고치지 않았다.
+  - 결제 전체 환불(PAYMENT 대상, orderItemId null)은 마지막 요청의 대상 상품으로 새 요청을 만든다. 요청이 하나도 없으면 NOT_ACTIONABLE이다. US6 전에 정할 미결 사항(PAYMENT 대상 orderItemId)과 연결된다.
+- 결과: 단위 508 passed, E2E 129 passed(`55d522e`).
+
