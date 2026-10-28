@@ -142,3 +142,43 @@ export class RefundNotFoundError extends DomainNotFoundError {
     this.name = 'RefundNotFoundError';
   }
 }
+
+/** 운영 변경 요청에 Idempotency-Key가 없음 (400) */
+export class IdempotencyKeyRequiredError extends DomainBadRequestError {
+  readonly code = 'IDEMPOTENCY_KEY_REQUIRED';
+
+  constructor() {
+    super('이 요청에는 Idempotency-Key가 필요합니다');
+    this.name = 'IdempotencyKeyRequiredError';
+  }
+}
+
+/** PG 결과 미확정·활성 별도 지급 예약·유효한 조회 담당·PG 결과 모순 (409) */
+export class RefundPayoutUnresolvedError extends DomainConflictError {
+  readonly code = 'REFUND_PAYOUT_UNRESOLVED';
+
+  constructor() {
+    super('확인되지 않은 환불금 지급이 있어 새로 요청할 수 없습니다');
+    this.name = 'RefundPayoutUnresolvedError';
+  }
+}
+
+/** 지급 완료 등 운영 재처리 불가 상태 (409) */
+export class RefundPayoutNotActionableError extends DomainConflictError {
+  readonly code = 'REFUND_PAYOUT_NOT_ACTIONABLE';
+
+  constructor() {
+    super('다시 처리할 수 없는 환불금 지급 상태입니다');
+    this.name = 'RefundPayoutNotActionableError';
+  }
+}
+
+/** 일부 지급 뒤 PG 전액 재시도 (409) */
+export class RefundPartialPayoutRequiresManualError extends DomainConflictError {
+  readonly code = 'REFUND_PARTIAL_PAYOUT_REQUIRES_MANUAL';
+
+  constructor() {
+    super('일부 지급된 환불은 미지급액을 별도로 지급해야 합니다');
+    this.name = 'RefundPartialPayoutRequiresManualError';
+  }
+}

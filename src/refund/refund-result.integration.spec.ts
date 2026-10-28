@@ -39,6 +39,7 @@ import { RefundDispatchService } from './refund-dispatch.service';
 import { RefundRecoveryService } from './refund-recovery.service';
 import { RefundWorkRepository } from './refund-work.repository';
 import { RefundPgCheckService } from './refund-pg-check.service';
+import { RefundRetryService } from './refund-retry.service';
 
 /**
  * 환불금 지급 결과 공통 처리를 실제 PostgreSQL에서 확인한다 (US4, tasks T068~T071)
@@ -51,6 +52,8 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
   /** 환불 PG 포트 대역(전송·조회 응답을 테스트마다 정한다) */
   const pgGateway = { sendCancel: jest.fn(), inquireCancel: jest.fn() };
   let customerId: string;
+  /** PG 재시도 실행자(MANAGER, PaymentCancel.requestedById 외래 키 대상) */
+  let managerId: string;
   let shopId: string;
   let productId: string;
   const orderIds: string[] = [];
@@ -167,6 +170,14 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       },
     });
     customerId = customer.id;
+    const manager = await prisma.user.create({
+      data: {
+        email: `refund-result-manager-${suffix}@test.com`,
+        role: UserRole.MANAGER,
+        password: 'hashed',
+      },
+    });
+    managerId = manager.id;
     const shop = await prisma.shop.create({
       data: { name: `환불결과검증매장-${suffix}` },
     });
@@ -197,6 +208,9 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
     await prisma.manualRefundPayout.deleteMany({ where: byRefund });
     await prisma.ledger.deleteMany({ where: { orderId: { in: orderIds } } });
     await prisma.paymentCancel.deleteMany({ where: { payment: byOrder } });
+    await prisma.refundIdempotencyRecord.deleteMany({
+      where: { requesterId: { in: [customerId, managerId] } },
+    });
     await prisma.refund.deleteMany({ where: { payment: byOrder } });
     await prisma.ticket.deleteMany({ where: { userId: customerId } });
     await prisma.payment.deleteMany({ where: byOrder });
@@ -204,7 +218,9 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
     await prisma.order.deleteMany({ where: { id: { in: orderIds } } });
     await prisma.product.deleteMany({ where: { id: productId } });
     await prisma.shop.deleteMany({ where: { id: shopId } });
-    await prisma.user.deleteMany({ where: { id: customerId } });
+    await prisma.user.deleteMany({
+      where: { id: { in: [customerId, managerId] } },
+    });
     await app.close();
   });
 
@@ -2179,5 +2195,115 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
     expect(attempt.lastInquiryAt!.getTime()).toBeGreaterThanOrEqual(
       later.dueAt.getTime() + 1_000,
     );
+  });
+
+  describe('MANAGER의 PG 직접 재시도', () => {
+    /**
+     * 최초 PG 취소 요청이 확정 실패해 조치 필요가 된 환불을 만든다
+     * @param failureCode 실패 사유
+     * @param resendCount 실패한 요청의 자동 재전송 횟수
+     * @returns 환불·실패한 요청·주문 ID
+     */
+    async function createFailedRefund(
+      failureCode: PaymentCancelFailureCode = PaymentCancelFailureCode.SEND_FAILED,
+      resendCount = 0,
+    ) {
+      const pending = await createPendingRefund();
+      await prisma.paymentCancel.update({
+        where: { id: pending.paymentCancelId },
+        data: {
+          status: PaymentCancelStatus.FAILED,
+          failureCode,
+          failedAt: new Date(),
+          resendCount,
+        },
+      });
+      await prisma.refund.update({
+        where: { id: pending.refundId },
+        data: {
+          payoutStatus: RefundPayoutStatus.ACTION_REQUIRED,
+          actionCode: failureCode,
+        },
+      });
+      return pending;
+    }
+
+    const manager = () => ({ userId: managerId, role: UserRole.MANAGER });
+    const retryReason = 'PG 연결 설정을 복구해 다시 요청';
+
+    it('확정 실패·지급액 0원이면 같은 금액의 새 PG 취소 요청을 만들어 보내고 이전 실패 기록·이용 종료는 그대로 둔다', async () => {
+      const failed = await createFailedRefund();
+      pgGateway.sendCancel.mockResolvedValueOnce({ result: 'ACCEPTED' });
+
+      const response = await app
+        .get(RefundRetryService)
+        .retryByManager(manager(), failed.refundId, {
+          reason: retryReason,
+          idempotencyKey: `retry-${randomUUID()}`,
+        });
+
+      const attempts = await prisma.paymentCancel.findMany({
+        where: { refundId: failed.refundId },
+        orderBy: { attemptNumber: 'asc' },
+      });
+      const refund = await prisma.refund.findUniqueOrThrow({
+        where: { id: failed.refundId },
+      });
+      const ticket = await prisma.ticket.findFirstOrThrow({
+        where: { orderItemId: failed.orderItemId },
+      });
+      expect({
+        response: { status: response.status, body: response.body },
+        attempts: attempts.map((attempt) => ({
+          attemptNumber: attempt.attemptNumber,
+          status: attempt.status,
+          failureCode: attempt.failureCode,
+          amount: attempt.amount,
+          requestedById: attempt.requestedById,
+          retryReason: attempt.retryReason,
+        })),
+        sent: pgGateway.sendCancel.mock.calls,
+        refund: {
+          payoutStatus: refund.payoutStatus,
+          payoutMethod: refund.payoutMethod,
+          actionCode: refund.actionCode,
+        },
+        ticket: ticket.status,
+      }).toEqual({
+        response: {
+          status: 202,
+          body: {
+            refundId: failed.refundId,
+            paymentCancelId: attempts[1]?.id,
+            payoutStatus: RefundPayoutStatus.PENDING,
+          },
+        },
+        attempts: [
+          {
+            attemptNumber: 1,
+            status: PaymentCancelStatus.FAILED,
+            failureCode: PaymentCancelFailureCode.SEND_FAILED,
+            amount: refundAmount,
+            requestedById: null,
+            retryReason: null,
+          },
+          {
+            attemptNumber: 2,
+            status: PaymentCancelStatus.REQUESTED,
+            failureCode: null,
+            amount: refundAmount,
+            requestedById: managerId,
+            retryReason,
+          },
+        ],
+        sent: [[{ paymentCancelId: attempts[1]?.id, amount: refundAmount }]],
+        refund: {
+          payoutStatus: RefundPayoutStatus.PENDING,
+          payoutMethod: RefundPayoutMethod.PG,
+          actionCode: null,
+        },
+        ticket: TicketStatus.REVOKED,
+      });
+    });
   });
 });

@@ -18,6 +18,7 @@ import {
 } from '@prisma/client';
 import { CustomerRefundCandidate } from './refund-policy';
 import { AcceptanceLockTargets } from './refund-locking.repository';
+import { PayoutRetryState } from './refund-retry.policy';
 import { PrismaService, TransactionClient } from 'src/prisma/prisma.service';
 import { DomainConflictError } from 'src/common/errors';
 
@@ -87,6 +88,16 @@ export type AcceptedRefundInput = {
   endedSessionId?: string;
   // 커밋 뒤 바로 보낼 최초 PG 취소 요청의 담당(전송 직전 기록을 확정과 함께 저장, API 계약 §8)
   sendClaim?: { claimToken: string; claimUntil: Date };
+};
+
+/** PG 재시도 판정·저장 대상 */
+export type PayoutRetryTarget = {
+  state: PayoutRetryState;
+  paymentId: string;
+  orderItemId: string | null; // 새 요청의 대상 상품
+  nextAttemptNumber: number;
+  paymentCancelIds: string[]; // 잠글 PG 취소 요청
+  manualRefundPayoutIds: string[]; // 잠글 별도 환불금 지급
 };
 
 @Injectable()
@@ -765,6 +776,118 @@ export class RefundRepository {
       select: { payment: { select: { order: { select: { shopId: true } } } } },
     });
     return refund?.payment.order.shopId ?? null;
+  }
+
+  /**
+   * PG 재시도 판정과 새 요청 저장에 쓸 환불의 지급 상태를 읽는다
+   * @param refundId 환불 ID
+   * @param tx 트랜잭션(잠금 뒤 다시 읽을 때)
+   * @returns 판정 상태·잠글 행·새 요청에 쓸 값, 없으면 null
+   */
+  async findPayoutRetryTarget(
+    refundId: string,
+    tx: TransactionClient | PrismaService = this.prisma,
+  ): Promise<PayoutRetryTarget | null> {
+    const refund = await tx.refund.findUnique({
+      where: { id: refundId },
+      select: {
+        id: true,
+        paymentId: true,
+        orderItemId: true,
+        decisionStatus: true,
+        payoutStatus: true,
+        amount: true,
+        paidAmount: true,
+        actionCode: true,
+        paymentCancels: {
+          orderBy: { attemptNumber: 'asc' },
+          select: {
+            id: true,
+            status: true,
+            claimUntil: true,
+            attemptNumber: true,
+            orderItemId: true,
+          },
+        },
+        manualPayouts: { select: { id: true, status: true } },
+      },
+    });
+    if (!refund) return null;
+    const latest = refund.paymentCancels.at(-1);
+    return {
+      state: {
+        decisionStatus: refund.decisionStatus,
+        payoutStatus: refund.payoutStatus,
+        amount: refund.amount,
+        paidAmount: refund.paidAmount,
+        actionCode: refund.actionCode,
+        attempts: refund.paymentCancels.map((attempt) => ({
+          status: attempt.status,
+          claimUntil: attempt.claimUntil,
+        })),
+        activeManualPayout: refund.manualPayouts.some(
+          (payout) => payout.status === ManualRefundPayoutStatus.RESERVED,
+        ),
+      },
+      paymentId: refund.paymentId,
+      // 이용권 상품 환불은 그 상품, 결제 전체 환불은 마지막 요청의 대상 상품
+      orderItemId: refund.orderItemId ?? latest?.orderItemId ?? null,
+      nextAttemptNumber: (latest?.attemptNumber ?? 0) + 1,
+      paymentCancelIds: refund.paymentCancels.map((attempt) => attempt.id),
+      manualRefundPayoutIds: refund.manualPayouts.map((payout) => payout.id),
+    };
+  }
+
+  /**
+   * 확정된 환불 아래 새 PG 취소 요청을 저장하고 환불을 지급 처리 중(PENDING/PG)으로 되돌린다
+   * - 이전 요청의 상태·실패 사유·횟수는 바꾸지 않는다. 자동 재전송 횟수는 0부터 시작한다
+   * - 커밋 뒤 바로 보낼 전송 기록(시도 1회·시각·담당)을 함께 저장한다
+   * @param tx 재시도 트랜잭션
+   * @param input 환불·대상·시도 번호·금액·실행자·사유·시각·전송 담당
+   * @returns 새 PG 취소 요청 ID
+   */
+  async createRetryAttempt(
+    tx: TransactionClient,
+    input: {
+      refundId: string;
+      paymentId: string;
+      orderItemId: string;
+      attemptNumber: number;
+      amount: number;
+      requestedById: string;
+      retryReason: string;
+      now: Date;
+      sendClaim: { claimToken: string; claimUntil: Date };
+    },
+  ): Promise<string> {
+    const attempt = await tx.paymentCancel.create({
+      data: {
+        refundId: input.refundId,
+        paymentId: input.paymentId,
+        orderItemId: input.orderItemId,
+        attemptNumber: input.attemptNumber,
+        amount: input.amount,
+        status: PaymentCancelStatus.REQUESTED,
+        requestedAt: input.now,
+        requestedById: input.requestedById,
+        retryReason: input.retryReason,
+        sendAttemptCount: 1,
+        lastSendAttemptAt: input.now,
+        claimToken: input.sendClaim.claimToken,
+        claimUntil: input.sendClaim.claimUntil,
+      },
+      select: { id: true },
+    });
+    await tx.refund.update({
+      where: { id: input.refundId },
+      data: {
+        payoutStatus: RefundPayoutStatus.PENDING,
+        payoutMethod: RefundPayoutMethod.PG,
+        actionCode: null,
+        actionReason: null,
+      },
+    });
+    return attempt.id;
   }
 
   /**

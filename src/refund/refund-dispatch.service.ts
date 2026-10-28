@@ -40,6 +40,30 @@ export class RefundDispatchService {
   ) {}
 
   /**
+   * 트랜잭션에서 전송 기록·담당을 함께 저장해 둔 PG 취소 요청을 커밋 뒤 보낸다(최초 전송·새 요청 공통)
+   * @param prepared 저장한 PG 취소 요청·금액·담당 토큰·전송 시각
+   * @returns 전송 결과를 반영한 환불의 지급 상태·조치 사유
+   */
+  async sendPrepared(prepared: {
+    paymentCancelId: string;
+    amount: number;
+    claimToken: string;
+    sentAt: Date;
+  }): Promise<{ payoutStatus: RefundPayoutStatus; actionCode: string | null }> {
+    // PG 호출은 트랜잭션 밖에서 하고 PG 취소 요청 ID를 멱등 키로 쓴다
+    const result = await this.pgGateway.sendCancel({
+      paymentCancelId: prepared.paymentCancelId,
+      amount: prepared.amount,
+    });
+    return this.recordSendResult(
+      prepared.paymentCancelId,
+      prepared.claimToken,
+      prepared.sentAt,
+      result,
+    );
+  }
+
+  /**
    * PG 취소 요청을 보낸다
    * @param paymentCancelId 보낼 PG 취소 요청
    * @returns 전송 결과 요약

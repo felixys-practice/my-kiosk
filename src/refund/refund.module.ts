@@ -24,6 +24,7 @@ import { BullModule } from '@nestjs/bullmq';
 import { RefundRecoveryProcessor } from './refund-recovery.processor';
 import { RefundRecoveryController } from './refund-recovery.controller';
 import { RefundPgCheckService } from './refund-pg-check.service';
+import { RefundRetryService } from './refund-retry.service';
 import { RefundEventRepository } from './refund-event.repository';
 import { RefundLedgerRepository } from 'src/ledger/refund-ledger.repository';
 
@@ -58,6 +59,7 @@ import { RefundLedgerRepository } from 'src/ledger/refund-ledger.repository';
     RefundRecoveryScheduler,
     RefundRecoveryProcessor,
     RefundPgCheckService,
+    RefundRetryService,
   ],
   controllers: [RefundController, RefundRecoveryController],
   exports: [RefundService],
