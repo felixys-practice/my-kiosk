@@ -903,3 +903,39 @@ U10~U15를 마친 뒤, 관계 검증의 비교 대상 설정을 생략하면 정
 ## Phase 5 완료
 
 - T057~T063·T181 완료, Codex 재검수 통과. 권장 구현 순서상 다음은 Phase 7(US5 PG 결과 조회·재전송·장애 복구)이다.
+
+## Phase 7a (US5 PG 결과 조회·재전송·장애 복구 — 독립 부분) 사이클 (2026-10-28~29)
+
+- 사용자 결정(범위): "독립 부분 먼저 검수, 나머지는 뒤에". 7a는 아래만 다룬다.
+  - 전송 결과 저장, 자동 조회·재전송·백오프·결과 확인 실패, PROBE/BATCH 장애 복구
+  - 운영자 재확인·현황, 미확정 시도의 개별 확인
+  - 7b로 미룬 것: A38·A47(US6 의존), A53·A54의 실패 확정 시도 새 요청 경로와 T102의 해당 부분(US10 공통 재요청 의존), T183
+- 사용자 결정(전송 연결): "A: 확정 때 전송 기록". 확정 트랜잭션이 최초 시도에 전송 시도 1회·시각·담당을 함께 저장하고, 커밋 뒤 PG를 호출한 다음 결과 반영은 전송 서비스가 맡는다. 기존 `refund-acceptance.service.spec.ts`는 생성자 인자만 추가했다.
+- 사용자 결정(작업자): "설정으로 끄기, 테스트에서만 false". `REFUND_RECOVERY_WORKER_ENABLED`(기본 true)를 추가하고, jest `setupFiles`(`test/setup-env.ts`)에서 false로 둔다. `.env.example`은 사용자 미커밋 변경이 있어 이 항목을 넣지 않았다.
+- 사용자 결정(U150): 기본 설정에서는 상한 도달 전에 결과 확인 실패로 넘어가므로, 간격 계산을 순수 함수(`refund-recovery.policy.ts`)로 빼서 단위 테스트한다.
+
+| 묶음 | 동작 | 핵심 구현 | 커밋(대표) |
+|---|---|---|---|
+| 전송 결과 | U140, U342~U345 | `RefundDispatchService`: 전송 전 시도·담당 저장 → 트랜잭션 밖 전송 → NOT_SENT·REJECTED는 시도 실패·조치 필요, SUCCEEDED는 공통 결과 처리, ACCEPTED·UNKNOWN은 60초 뒤 조회. 응답과 멱등 재응답에 전송 결과(payoutStatus·actionCode) 반영 | `ccf1779`~`a6045ee` |
+| 자동 조회 | U142~U145, U149, U151~U153, U169 | `RefundRecoveryService`: 조회 담당 → 트랜잭션 밖 조회 → 미접수는 한도 안 재전송·소진 시 RETRY_EXHAUSTED, 처리 중은 정상 간격, 오류는 백오프·5회째 QUERY_FAILED, 성공·거절은 공통 결과 처리 | `11161cb`~`9976b71` |
+| 정기 탐색 | U141, U146~U148, U158, U346 | `findDueInquiries`: 예정 시각이 지났거나 전송 전 중단(예정 없음·담당 기한 경과)인 REQUESTED, 확정·지급 처리 중·PG 방식·예약 없음 | `bdfde83`~`e932778` |
+| 장애 복구 | U154~U156, U347, U351 | `RefundWorkRepository` 단일 제어 행: PROBE 900초마다 가장 오래된 1건 → 정상이면 BATCH(20건씩) → 오류 재발 시 PROBE. 실행 중 제어 담당. 결과 확인 실패 건의 재조회 오류는 진입 시각 유지, 처리 중 응답이면 일반 일정으로 복귀 | `582ed0f`~`8da37a0` |
+| 기동·작업자 | U157, U348~U350 | `RefundRecoveryScheduler`(upsertJobScheduler 5초), `RefundRecoveryProcessor`(탐색+복구, 꺼짐이면 생략) | `605a5b9`~`8097824` |
+| 운영자 API | U159~U161, U352, A44, A45 | `POST /refund/recovery/resume`(SCHEDULED 202·ALREADY_RUNNING·NO_WORK), `GET /refund/recovery/status`, MANAGER만 | `80a39ad`~`80a698f` |
+| 개별 확인 | U162~U168, U170~U172, A52 | `RefundPgCheckService`·`POST /refund/:refundId/pg-check`: 범위 권한(USER 403, 범위 밖 404 REFUND_NOT_FOUND), 진행 중 202·최근 결과·대상 아님·확인, 미접수는 한도와 관계없이 즉시 재전송(manualResendCount), 빈 본문만 허용 | `dbc14b8`~`1508b4d` |
+| 인수 | A34~A37, A39~A46, A48~A52, A55 | 사후 작성 17개는 뮤턴트 12종으로 확인(A43은 단언 보강) | `0a57560` |
+
+- 진행 중 추가한 동작: U342~U352. 명세·계약에 있지만 단위 목록에 없던 것들이다.
+  - 전송 결과 처리, 응답 일치
+  - 탐색 대상 환불 조건
+  - 결과 확인 실패 복귀
+  - 작업자 설정·등록·처리기
+  - 복구 담당
+  - 현황 API
+- 찾아서 고친 실제 결함: U169의 red에서, 조회가 성공·거절을 확정해도 반영하지 않던 문제가 드러났다. 자동·개별 확인 모두 해당하며 `9976b71`에서 고쳤다.
+- 이탈:
+  - 같은 파일의 테스트 전용 동작을 여러 개 한 커밋으로 묶었다(U149·U150·U151·U153, U167~U170).
+  - 무효 red를 같은 사이클에서 정정한 경우: U148·U163(PG 대역 미설정 TypeError), U345(JSONB 키 순서 비교), U147(정기 탐색이 다른 테스트 데이터를 고름).
+  - 기존 테스트 변경: acceptance spec 생성자 인자(사용자 결정 A), store spec PG 인자 제거, seat-type afterAll에 알림 삭제(QS-21이 PG 미연동으로 SEND_FAILED 알림을 만듦). 단언은 바꾸지 않았다.
+- 발견(범위 밖, 고치지 않음): 기존 `usage-session.service`의 `mockExternalApi`(무작위 10% 실패, 'TODO: 테스트 용 함수') 때문에 E2E QS-15에서 500이 한 번 났다.
+- 결과: 단위 484 passed, E2E 124 passed(`0a57560`).

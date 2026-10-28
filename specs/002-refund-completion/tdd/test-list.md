@@ -67,28 +67,28 @@ suite_baseline: green
 | A31 | Given 1번으로 실제 지급과 원장 기록이 반영됐을 때, When 같은 지급 확정 통보가 다시 오거나 거래조회로 다시 반영을 시도하면, | QS-4-2 | example | DONE | `test/refund-ledger.e2e-spec.ts` |
 | A32 | Given 환불금 지급 처리 중인 환불이 있을 때, When PG가 PG 취소 요청 실패를 확정하면, Then 원장에는 아무 기록도 생기지 않는다. | QS-4-3 | example | DONE | `test/refund-ledger.e2e-spec.ts` |
 | A33 | Given 환불금 지급 처리 중이거나 PG 취소 결과 확인 실패인 환불이 있을 때, When 아직 확정되지 않았으면, Then 원장에는 아무 기록도 없다. | QS-4-4 | example | DONE | `test/refund-ledger.e2e-spec.ts` |
-| A34 | Given 이용 종료·환불 금액이 확정됐을 때, When PG 취소 요청이 보내기 전에 실패하면, Then PG 취소 요청 실패·환불금 지급 조치 필요를 기록하고 운영자에게 알린다. 접수된 환불과 이용 종료는 유지하며 응답에서도 이용 종료 완료와 미지급 상태를 구분한다. | QS-5-1 | example | PENDING | |
-| A35 | Given 응답 없음으로 환불금 지급 처리 중일 때, When 정해진 시간이 지나고 거래조회 결과가 확정된 환불 금액의 취소 완료이면, Then 환불금 지급 완료와 실제 금액의 원장 기록을 함께 반영한다. 이용 종료·좌석 해제는 반복하지 않는다. | QS-5-2 | example | PENDING | |
-| A36 | Given 2번과 같을 때, When 거래조회 결과가 PG 거절이면, Then PG 취소 요청 실패와 환불금 지급 조치 필요를 기록하고 알린다. 확정된 환불 금액과 이용 종료는 유지한다. | QS-5-3 | example | PENDING | |
-| A37 | Given 고객 환불이나 매장 환불의 PG 응답이 없을 때, When 거래조회로 PG 미접수가 확인되고 재전송 한도가 남아 있으면, Then 같은 환불 건에서 같은 금액으로 다시 보내고 환불금 지급 처리 중으로 둔다. | QS-5-4 | example | PENDING | |
-| A38 | Given 시스템 자동 취소의 PG 응답이 없을 때, When 거래조회로 PG 미접수가 확인되고 재전송 한도가 남아 있으면, Then 4번과 같은 규칙으로 같은 금액을 다시 보낸다. | QS-5-5 | example | PENDING | |
-| A39 | Given 어느 경로든 자동 재전송 한도를 모두 소진했을 때, When 한도 횟수까지 보낸 취소 요청이 PG에 접수되지 않았음을 거래조회로 확인하면, Then 해당 PG 취소 요청을 실패로 종료해 자동 조회·재전송 대상에서 제외하고, 운영자의 지급 재처리가 필요한 환불로 남겨 알린다. 환불 금액과 이용 종료는 유지한다. 조회가 실패하거나 PG가 처리 중이면 시도 실패로 종료하지 않는다. | QS-5-6 | example | PENDING | |
-| A40 | Given PG 결제 취소 결과가 미확정일 때, When 거래조회 자체가 실패하면, Then 환불금 지급 성공·실패로 단정하지 않고 정해진 간격으로 다시 조회한다. 다른 PG 취소 요청과 별도 환불금 지급은 허용하지 않는다. | QS-5-7 | example | PENDING | |
-| A41 | Given 거래조회가 연속 실패했을 때, When 정해진 횟수에 도달하면, Then PG 취소 결과 확인 실패로 표시하고 운영자에게 알린다. 환불금은 미지급·결과 확인 중으로 남고 이용 종료는 유지된다. | QS-5-8 | example | PENDING | |
-| A42 | Given PG 취소 결과 확인 실패 건이 여러 건 쌓였을 때, When 자동 재확인 시점이 되면, Then 가장 오래된 1건만 PG 거래조회한다. 쌓인 건수와 관계없이 해당 시점의 자동 조회는 1번이다. | QS-5-9 | example | PENDING | |
-| A43 | Given 9번의 1건 조회가 진행 중일 때, When PG에서 정상 응답을 받으면, Then 그 결과를 반영하고 나머지를 정해진 건수씩 나눠 조회한다. 완료·거절·미접수는 각 규칙을 따르고, PG 처리 중·조회 장애는 지급을 확정하지 않고 재확인한다. | QS-5-10 | example | PENDING | |
-| A44 | Given PG 취소 결과 확인 실패 건이 쌓였을 때, When 운영자가 전체 재확인을 실행하면, Then 자동 재확인 예정 시각을 기다리지 않고 PG 취소 결과 확인 실패 건을 정해진 건수씩 묶어 조회한다. 재조회 실행은 환불 확정이나 환불금 지급 완료를 뜻하지 않는다. | QS-5-10a | example | PENDING | |
-| A45 | Given PG 취소 결과 확인 실패 건이 있을 때, When 고객지원 계정이 아닌 사용자가 전체 재확인을 실행하면, Then 권한 오류로 거부된다. | QS-5-10b | example | PENDING | |
-| A46 | Given 확정된 환불 금액의 PG 취소 요청이 있을 때, When PG가 다른 금액의 취소 완료를 알리면, Then 실제 환불금 지급액과 원장을 함께 기록하고 확정된 환불 금액은 바꾸지 않는다. 부족액·초과액을 구분해 환불금 지급 조치 필요로 두고 운영자에게 알린다. | QS-5-11 | example | PENDING | |
-| A47 | Given 시스템 자동 취소 건일 때, When 환불금 지급 결과를 받지 못하면, Then 2~11번의 같은 조회·재전송·미지급 관리 규칙을 적용한다. 승인 금액 불일치 건은 이용권을 만들지 않는다. | QS-5-12 | example | PENDING | |
-| A48 | Given 해당 매장 점주 또는 운영자가 조회할 수 있는 환불에 미확정 PG 취소 요청이 있고 최근 조회나 진행 중 작업이 없을 때, When 그 환불의 PG 처리 결과 확인을 실행하고 PG가 확정된 환불 금액의 취소 완료를 응답하면, Then 자동 조회 예정 시각 전이라도 해당 시도 한 건만 즉시 조회하고, 환불금 지급 완료·실제액·원장을 한 번 반영해 결과를 보여준다. | QS-5-13 | example | PENDING | |
-| A49 | Given 결과가 미확정인 PG 취소 요청의 개별 확인을 실행했을 때, When PG가 아직 처리 중이라고 응답하거나 거래조회가 실패하면, Then 각각 처리 중 또는 결과 확인 불가로 안내하고 지급을 확정하지 않는다. 기존 조회 일정·오류 처리 규칙으로 다시 확인하며 다른 환불금 지급 차단을 유지한다. | QS-5-14 | example | PENDING | |
-| A50 | Given 그 PG 취소 요청을 전송·조회하는 자동 작업이나 다른 개별 확인이 진행 중일 때, When 점주 또는 운영자가 같은 환불의 PG 확인을 실행하면, Then 진행 중인 작업과 현재 저장 상태를 안내하고 PG를 중복 호출하지 않는다. 이후 환불 상세에서 반영 결과를 확인할 수 있다. | QS-5-15 | example | PENDING | |
-| A51 | Given PG 취소 결과 확인 실패 환불이 여러 건 쌓여 있을 때, When 점주 또는 운영자가 그중 한 건만 개별 확인하면, Then 지정한 환불만 확인한다. 정상 응답을 받아도 나머지 건의 일괄 조회를 시작하거나 전체 장애 복구 모드·예정 시각을 바꾸지 않는다. | QS-5-16 | example | PENDING | |
-| A52 | Given 다른 매장 점주·일반 고객·미로그인 사용자가 있을 때, When 개별 PG 확인을 실행하면, Then 다른 매장 점주는 찾을 수 없음, 일반 고객은 권한 오류, 미로그인은 인증 오류로 거부한다. 거부한 요청은 PG를 호출하거나 환불 상태를 바꾸지 않는다. | QS-5-17 | example | PENDING | |
-| A53 | Given 환불금 지급 완료·0원 환불·별도 환불금 지급 예약·금액 불일치 검토 등으로 개별 PG 조회 대상이 아닌 환불이 있을 때, When 점주 또는 운영자가 개별 PG 확인을 실행하면, Then PG를 호출하지 않고 저장된 상태를 보여준다. 별도 환불금 지급 예약과 기존 실패 이력은 바꾸지 않는다. 최근 시도가 한도 소진·전송 전 실패·PG 거절로 실패한 환불은 개별 조회 대상이므로 19번·스토리 10의 1a번으로 처리한다. | QS-5-18 | example | PENDING | |
-| A54 | Given 점주 또는 운영자가 권한 범위 안 환불을 개별 확인할 때, When 미확정 시도의 PG 미접수 또는 이미 실패가 확정된 시도의 미접수·거절 확정이 확인되면, Then 자동 재전송 횟수와 관계없이 확정된 환불 금액으로 즉시 다시 보낸다. 미확정 시도는 기존 PG 취소 요청 식별자로 보내고, 최근 시도가 한도 소진·전송 전 실패·PG 거절로 이미 실패한 경우는 FR-057의 조건을 확인한 뒤 실패 이력을 보존한 채 같은 환불 아래 새 식별자를 발급한 PG 취소 요청을 기록해 보낸다. 별도 버튼·추가 대기·반복 조회를 요구하지 않는다. 실제 지급액·다른 미확정 지급·지급 방식·활성 예약·작업 담당을 확인해 중복 지급을 막고 결과와 실행자를 기록한다. 조회 오류이면 보내지 않으며, 실패 확정 건에서 처리 중·취소 성공 등 모순 결과가 오면 운영자 확인 대상으로 남기고 추가 지급을 차단한다. 미확정 요청의 조회에서 거절이 새로 확인되면 실패·조치 필요만 기록하고 같은 실행에서 새 요청을 만들지 않는다. | QS-5-19 | example | PENDING | |
-| A55 | Given 같은 시도의 직전 조회가 끝났고 그 조회 시작 시각부터 정해진 간격이 아직 지나지 않았을 때, When 점주 또는 운영자가 개별 PG 확인을 반복 실행하면, Then 최근 조회 시각과 저장된 상태를 보여주고 PG를 추가 호출하지 않는다. 점주·운영자·자동 작업의 조회 시각을 같은 시도 기준으로 공유한다. | QS-5-20 | example | PENDING | |
+| A34 | Given 이용 종료·환불 금액이 확정됐을 때, When PG 취소 요청이 보내기 전에 실패하면, Then PG 취소 요청 실패·환불금 지급 조치 필요를 기록하고 운영자에게 알린다. 접수된 환불과 이용 종료는 유지하며 응답에서도 이용 종료 완료와 미지급 상태를 구분한다. | QS-5-1 | example | DONE | `test/refund-recovery.e2e-spec.ts` |
+| A35 | Given 응답 없음으로 환불금 지급 처리 중일 때, When 정해진 시간이 지나고 거래조회 결과가 확정된 환불 금액의 취소 완료이면, Then 환불금 지급 완료와 실제 금액의 원장 기록을 함께 반영한다. 이용 종료·좌석 해제는 반복하지 않는다. | QS-5-2 | example | DONE | `test/refund-recovery.e2e-spec.ts` |
+| A36 | Given 2번과 같을 때, When 거래조회 결과가 PG 거절이면, Then PG 취소 요청 실패와 환불금 지급 조치 필요를 기록하고 알린다. 확정된 환불 금액과 이용 종료는 유지한다. | QS-5-3 | example | DONE | `test/refund-recovery.e2e-spec.ts` |
+| A37 | Given 고객 환불이나 매장 환불의 PG 응답이 없을 때, When 거래조회로 PG 미접수가 확인되고 재전송 한도가 남아 있으면, Then 같은 환불 건에서 같은 금액으로 다시 보내고 환불금 지급 처리 중으로 둔다. | QS-5-4 | example | DONE | `test/refund-recovery.e2e-spec.ts` |
+| A38 | Given 시스템 자동 취소의 PG 응답이 없을 때, When 거래조회로 PG 미접수가 확인되고 재전송 한도가 남아 있으면, Then 4번과 같은 규칙으로 같은 금액을 다시 보낸다. | QS-5-5 | example | PENDING | 7b: US6 시스템 자동 취소 뒤 |
+| A39 | Given 어느 경로든 자동 재전송 한도를 모두 소진했을 때, When 한도 횟수까지 보낸 취소 요청이 PG에 접수되지 않았음을 거래조회로 확인하면, Then 해당 PG 취소 요청을 실패로 종료해 자동 조회·재전송 대상에서 제외하고, 운영자의 지급 재처리가 필요한 환불로 남겨 알린다. 환불 금액과 이용 종료는 유지한다. 조회가 실패하거나 PG가 처리 중이면 시도 실패로 종료하지 않는다. | QS-5-6 | example | DONE | `test/refund-recovery.e2e-spec.ts` |
+| A40 | Given PG 결제 취소 결과가 미확정일 때, When 거래조회 자체가 실패하면, Then 환불금 지급 성공·실패로 단정하지 않고 정해진 간격으로 다시 조회한다. 다른 PG 취소 요청과 별도 환불금 지급은 허용하지 않는다. | QS-5-7 | example | DONE | `test/refund-recovery.e2e-spec.ts` |
+| A41 | Given 거래조회가 연속 실패했을 때, When 정해진 횟수에 도달하면, Then PG 취소 결과 확인 실패로 표시하고 운영자에게 알린다. 환불금은 미지급·결과 확인 중으로 남고 이용 종료는 유지된다. | QS-5-8 | example | DONE | `test/refund-recovery.e2e-spec.ts` |
+| A42 | Given PG 취소 결과 확인 실패 건이 여러 건 쌓였을 때, When 자동 재확인 시점이 되면, Then 가장 오래된 1건만 PG 거래조회한다. 쌓인 건수와 관계없이 해당 시점의 자동 조회는 1번이다. | QS-5-9 | example | DONE | `test/refund-recovery.e2e-spec.ts` |
+| A43 | Given 9번의 1건 조회가 진행 중일 때, When PG에서 정상 응답을 받으면, Then 그 결과를 반영하고 나머지를 정해진 건수씩 나눠 조회한다. 완료·거절·미접수는 각 규칙을 따르고, PG 처리 중·조회 장애는 지급을 확정하지 않고 재확인한다. | QS-5-10 | example | DONE | `test/refund-recovery.e2e-spec.ts` |
+| A44 | Given PG 취소 결과 확인 실패 건이 쌓였을 때, When 운영자가 전체 재확인을 실행하면, Then 자동 재확인 예정 시각을 기다리지 않고 PG 취소 결과 확인 실패 건을 정해진 건수씩 묶어 조회한다. 재조회 실행은 환불 확정이나 환불금 지급 완료를 뜻하지 않는다. | QS-5-10a | example | DONE | `test/refund-recovery.e2e-spec.ts` |
+| A45 | Given PG 취소 결과 확인 실패 건이 있을 때, When 고객지원 계정이 아닌 사용자가 전체 재확인을 실행하면, Then 권한 오류로 거부된다. | QS-5-10b | example | DONE | `test/refund-recovery.e2e-spec.ts` |
+| A46 | Given 확정된 환불 금액의 PG 취소 요청이 있을 때, When PG가 다른 금액의 취소 완료를 알리면, Then 실제 환불금 지급액과 원장을 함께 기록하고 확정된 환불 금액은 바꾸지 않는다. 부족액·초과액을 구분해 환불금 지급 조치 필요로 두고 운영자에게 알린다. | QS-5-11 | example | DONE | `test/refund-recovery.e2e-spec.ts` |
+| A47 | Given 시스템 자동 취소 건일 때, When 환불금 지급 결과를 받지 못하면, Then 2~11번의 같은 조회·재전송·미지급 관리 규칙을 적용한다. 승인 금액 불일치 건은 이용권을 만들지 않는다. | QS-5-12 | example | PENDING | 7b: US6 승인 금액 불일치 뒤 |
+| A48 | Given 해당 매장 점주 또는 운영자가 조회할 수 있는 환불에 미확정 PG 취소 요청이 있고 최근 조회나 진행 중 작업이 없을 때, When 그 환불의 PG 처리 결과 확인을 실행하고 PG가 확정된 환불 금액의 취소 완료를 응답하면, Then 자동 조회 예정 시각 전이라도 해당 시도 한 건만 즉시 조회하고, 환불금 지급 완료·실제액·원장을 한 번 반영해 결과를 보여준다. | QS-5-13 | example | DONE | `test/refund-recovery.e2e-spec.ts` |
+| A49 | Given 결과가 미확정인 PG 취소 요청의 개별 확인을 실행했을 때, When PG가 아직 처리 중이라고 응답하거나 거래조회가 실패하면, Then 각각 처리 중 또는 결과 확인 불가로 안내하고 지급을 확정하지 않는다. 기존 조회 일정·오류 처리 규칙으로 다시 확인하며 다른 환불금 지급 차단을 유지한다. | QS-5-14 | example | DONE | `test/refund-recovery.e2e-spec.ts` |
+| A50 | Given 그 PG 취소 요청을 전송·조회하는 자동 작업이나 다른 개별 확인이 진행 중일 때, When 점주 또는 운영자가 같은 환불의 PG 확인을 실행하면, Then 진행 중인 작업과 현재 저장 상태를 안내하고 PG를 중복 호출하지 않는다. 이후 환불 상세에서 반영 결과를 확인할 수 있다. | QS-5-15 | example | DONE | `test/refund-recovery.e2e-spec.ts` |
+| A51 | Given PG 취소 결과 확인 실패 환불이 여러 건 쌓여 있을 때, When 점주 또는 운영자가 그중 한 건만 개별 확인하면, Then 지정한 환불만 확인한다. 정상 응답을 받아도 나머지 건의 일괄 조회를 시작하거나 전체 장애 복구 모드·예정 시각을 바꾸지 않는다. | QS-5-16 | example | DONE | `test/refund-recovery.e2e-spec.ts` |
+| A52 | Given 다른 매장 점주·일반 고객·미로그인 사용자가 있을 때, When 개별 PG 확인을 실행하면, Then 다른 매장 점주는 찾을 수 없음, 일반 고객은 권한 오류, 미로그인은 인증 오류로 거부한다. 거부한 요청은 PG를 호출하거나 환불 상태를 바꾸지 않는다. | QS-5-17 | example | DONE | `test/refund-recovery.e2e-spec.ts` |
+| A53 | Given 환불금 지급 완료·0원 환불·별도 환불금 지급 예약·금액 불일치 검토 등으로 개별 PG 조회 대상이 아닌 환불이 있을 때, When 점주 또는 운영자가 개별 PG 확인을 실행하면, Then PG를 호출하지 않고 저장된 상태를 보여준다. 별도 환불금 지급 예약과 기존 실패 이력은 바꾸지 않는다. 최근 시도가 한도 소진·전송 전 실패·PG 거절로 실패한 환불은 개별 조회 대상이므로 19번·스토리 10의 1a번으로 처리한다. | QS-5-18 | example | PENDING | 7a 부분(대상 아님·저장 상태) 통과, 실패 확정 시도 경로는 7b(US10 뒤) |
+| A54 | Given 점주 또는 운영자가 권한 범위 안 환불을 개별 확인할 때, When 미확정 시도의 PG 미접수 또는 이미 실패가 확정된 시도의 미접수·거절 확정이 확인되면, Then 자동 재전송 횟수와 관계없이 확정된 환불 금액으로 즉시 다시 보낸다. 미확정 시도는 기존 PG 취소 요청 식별자로 보내고, 최근 시도가 한도 소진·전송 전 실패·PG 거절로 이미 실패한 경우는 FR-057의 조건을 확인한 뒤 실패 이력을 보존한 채 같은 환불 아래 새 식별자를 발급한 PG 취소 요청을 기록해 보낸다. 별도 버튼·추가 대기·반복 조회를 요구하지 않는다. 실제 지급액·다른 미확정 지급·지급 방식·활성 예약·작업 담당을 확인해 중복 지급을 막고 결과와 실행자를 기록한다. 조회 오류이면 보내지 않으며, 실패 확정 건에서 처리 중·취소 성공 등 모순 결과가 오면 운영자 확인 대상으로 남기고 추가 지급을 차단한다. 미확정 요청의 조회에서 거절이 새로 확인되면 실패·조치 필요만 기록하고 같은 실행에서 새 요청을 만들지 않는다. | QS-5-19 | example | PENDING | 7a 부분(미확정 시도 즉시 재전송·조회 오류) 통과, 실패 확정 시도 새 요청은 7b(US10 뒤) |
+| A55 | Given 같은 시도의 직전 조회가 끝났고 그 조회 시작 시각부터 정해진 간격이 아직 지나지 않았을 때, When 점주 또는 운영자가 개별 PG 확인을 반복 실행하면, Then 최근 조회 시각과 저장된 상태를 보여주고 PG를 추가 호출하지 않는다. 점주·운영자·자동 작업의 조회 시각을 같은 시도 기준으로 공유한다. | QS-5-20 | example | DONE | `test/refund-recovery.e2e-spec.ts` |
 | A56 | Given 결제를 요청한 주문이 있을 때, When PG가 결제 금액과 다른 금액으로 승인했다고 알리면, | QS-6-1 | example | PENDING | |
 | A57 | Given 1번의 자동 취소 환불이 확정됐을 때, When PG가 확정된 환불 금액의 취소를 확정하면, Then 환불금 지급 완료로 바뀌고 실패 결제는 성공으로 복구하지 않는다. | QS-6-2 | example | PENDING | |
 | A58 | Given 1번의 자동 취소가 응답 없음일 때, When 정해진 시간이 지나면, Then 사용자 스토리 5와 같이 처리된다. | QS-6-3 | example | PENDING | |
@@ -249,17 +249,17 @@ suite_baseline: green
 | U339 | (실제 DB) 환불이 이용권을 먼저 잠근 상태에서 일반 퇴실(endSession)이 같은 세션을 종료해도 교착 없이 둘 다 끝난다: 퇴실도 Ticket → UsageSession 순서로 잠근다 (Phase 4 검수 1 P2) | 계약 §6 | example | DONE | `src/session-lifecycle/session-lifecycle.integration.spec.ts`(실제 DB) |
 | U340 | 매장 환불 요청에 공백만 있는 사유를 보내면 형식 오류(400)다: 제공한 사유는 trim 후 1~500자 (Phase 4 검수 1 P2) | 계약 §4 | example | DONE | `src/refund/dto/store-refund.dto.spec.ts` |
 | U341 | (실제 DB) 입실 후속 실패 처리(failSession)는 이미 종료된(환불 퇴실) 세션을 덮어쓰지 않는다 (Phase 5 검수 1 P2) | FR-042 | example | DONE | `src/refund/refund-store.integration.spec.ts`(실제 DB) |
-| U342 | PG 전송 결과가 NOT_SENT이면 그 시도는 FAILED/SEND_FAILED, 환불은 ACTION_REQUIRED가 되고 알림이 저장된다 (US5 진행 중 추가, A34 단위) | FR-021 | example | PENDING | |
-| U343 | PG 전송 결과가 즉시 REJECTED이면 그 시도는 FAILED/PG_REJECTED, 환불은 ACTION_REQUIRED다 (US5 진행 중 추가, 계약 §8) | FR-020 | example | PENDING | |
-| U344 | PG 전송 결과가 즉시 SUCCEEDED이면 공통 결과 처리로 실제액·원장을 반영한다 (US5 진행 중 추가, 계약 §8) | FR-018 | example | PENDING | |
-| U345 | 환불 접수 응답과 같은 키 재응답은 PG 전송 결과(예: ACTION_REQUIRED)를 반영한 같은 응답이다 (US5 진행 중 추가, 계약 §4) | FR-035 | example | PENDING | |
-| U346 | 지급 처리 중(PENDING)·PG 방식이 아닌 환불(예: 조치 필요)의 미확정 시도는 정기 탐색에서 조회하지 않는다 (US5 진행 중 추가, 계약 §8 자동 대상) | FR-022 | example | PENDING | |
-| U347 | 결과 확인 실패(QUERY_FAILED) 건이 PG 처리 중 응답을 받으면 일반 조회 일정(REQUESTED)으로 돌아간다 (US5 진행 중 추가, 계약 §8 정상 응답) | FR-026 | example | PENDING | |
-| U348 | REFUND_RECOVERY_WORKER_ENABLED를 생략하면 true, 'false'면 false로 읽힌다 (US5 진행 중 추가, 사용자 결정: 테스트 환경에서 자동 작업자 끄기) | 계약 §8 운영 설정 | example | PENDING | |
-| U349 | 자동 작업자 설정이 꺼져 있으면 기동 시 정기 탐색 스케줄을 등록하지 않는다 (US5 진행 중 추가) | FR-022 | example | PENDING | |
-| U350 | 정기 탐색 작업은 일반 탐색과 장애 복구 확인을 실행하고, 작업자 설정이 꺼져 있으면 아무것도 하지 않는다 (US5 진행 중 추가) | FR-022 | example | PENDING | |
-| U351 | 장애 복구 확인은 실행 동안 복구 제어 담당을 잡고, 다른 작업자가 처리 기한 안에서 맡고 있으면 건너뛰며, 끝나면 담당을 내려놓는다 (US5 진행 중 추가, T100 중복 실행 방지) | FR-026a | example | PENDING | |
-| U352 | (E2E) GET /refund/recovery/status는 MANAGER에게 {mode,running,requestedCount,queryFailedCount,actionRequiredCount,reservedManualCount,oldestQueryFailedAt,nextProbeAt}를 주고 다른 역할은 403이다 (US5 진행 중 추가, 계약 §8) | FR-026a | example | PENDING | |
+| U342 | PG 전송 결과가 NOT_SENT이면 그 시도는 FAILED/SEND_FAILED, 환불은 ACTION_REQUIRED가 되고 알림이 저장된다 (US5 진행 중 추가, A34 단위) | FR-021 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
+| U343 | PG 전송 결과가 즉시 REJECTED이면 그 시도는 FAILED/PG_REJECTED, 환불은 ACTION_REQUIRED다 (US5 진행 중 추가, 계약 §8) | FR-020 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
+| U344 | PG 전송 결과가 즉시 SUCCEEDED이면 공통 결과 처리로 실제액·원장을 반영한다 (US5 진행 중 추가, 계약 §8) | FR-018 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
+| U345 | 환불 접수 응답과 같은 키 재응답은 PG 전송 결과(예: ACTION_REQUIRED)를 반영한 같은 응답이다 (US5 진행 중 추가, 계약 §4) | FR-035 | example | DONE | `src/refund/refund-acceptance.integration.spec.ts`(실제 DB) |
+| U346 | 지급 처리 중(PENDING)·PG 방식이 아닌 환불(예: 조치 필요)의 미확정 시도는 정기 탐색에서 조회하지 않는다 (US5 진행 중 추가, 계약 §8 자동 대상) | FR-022 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
+| U347 | 결과 확인 실패(QUERY_FAILED) 건이 PG 처리 중 응답을 받으면 일반 조회 일정(REQUESTED)으로 돌아간다 (US5 진행 중 추가, 계약 §8 정상 응답) | FR-026 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
+| U348 | REFUND_RECOVERY_WORKER_ENABLED를 생략하면 true, 'false'면 false로 읽힌다 (US5 진행 중 추가, 사용자 결정: 테스트 환경에서 자동 작업자 끄기) | 계약 §8 운영 설정 | example | DONE | `src/config/configuration.spec.ts` |
+| U349 | 자동 작업자 설정이 꺼져 있으면 기동 시 정기 탐색 스케줄을 등록하지 않는다 (US5 진행 중 추가) | FR-022 | example | DONE | `src/refund/refund-recovery.scheduler.spec.ts` |
+| U350 | 정기 탐색 작업은 일반 탐색과 장애 복구 확인을 실행하고, 작업자 설정이 꺼져 있으면 아무것도 하지 않는다 (US5 진행 중 추가) | FR-022 | example | DONE | `src/refund/refund-recovery.processor.spec.ts` |
+| U351 | 장애 복구 확인은 실행 동안 복구 제어 담당을 잡고, 다른 작업자가 처리 기한 안에서 맡고 있으면 건너뛰며, 끝나면 담당을 내려놓는다 (US5 진행 중 추가, T100 중복 실행 방지) | FR-026a | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
+| U352 | (E2E) GET /refund/recovery/status는 MANAGER에게 {mode,running,requestedCount,queryFailedCount,actionRequiredCount,reservedManualCount,oldestQueryFailedAt,nextProbeAt}를 주고 다른 역할은 403이다 (US5 진행 중 추가, 계약 §8) | FR-026a | example | DONE | `test/refund-recovery.e2e-spec.ts` |
 
 ### `src/refund/refund-idempotency.service.ts`
 
@@ -425,44 +425,44 @@ suite_baseline: green
 
 | id | behavior | traces | kind | state | test |
 |---|---|---|---|---|---|
-| U140 | 응답 없는 PG 취소 요청은 전송 60초 뒤 첫 조회가 예정된다 | FR-022 | example | PENDING | |
-| U141 | 전송 59초 시점에는 조회하지 않는다 | FR-022 | example | PENDING | |
-| U142 | authoritative NOT_FOUND이고 자동 재전송 횟수가 한도보다 1 적으면 같은 ID·금액으로 재전송하고 횟수가 1 늘어난다 | FR-024 | example | PENDING | |
-| U143 | 자동 재전송 횟수가 한도와 같고 NOT_FOUND이면 FAILED/RETRY_EXHAUSTED·ACTION_REQUIRED·운영자 알림이 함께 기록된다 | FR-024 | example | PENDING | |
-| U144 | 한도 소진 뒤 IN_PROGRESS이면 실패로 끝내지 않고 다시 조회가 예정된다 | FR-024 | example | PENDING | |
-| U145 | 한도 소진 뒤 QUERY_ERROR이면 실패로 끝내지 않고 다시 조회가 예정된다 | FR-024 | example | PENDING | |
-| U146 | 최초 전송과 개별 확인 재전송은 자동 재전송 횟수에 더해지지 않는다 | FR-024 | example | PENDING | |
-| U147 | FAILED PG 취소 요청은 자동 조회·재전송 대상에서 빠지고 예정 시각과 담당이 지워진다 | FR-024 | example | PENDING | |
-| U148 | 활성 별도 지급 예약이 있는 환불은 자동 조회·재전송 대상에서 빠진다 | FR-043 | example | PENDING | |
-| U149 | 첫 조회 오류 뒤 다음 조회 간격은 15초다 | FR-025 | example | PENDING | |
-| U150 | 계산 간격이 상한을 넘으면 상한 간격으로 조회가 예정된다 | FR-025 | example | PENDING | |
-| U151 | 연속 조회 오류 4회에서는 REQUESTED가 유지된다 | FR-025 | example | PENDING | |
-| U152 | 연속 조회 오류 5회에서 QUERY_FAILED와 운영자 알림이 기록된다 | FR-025 | example | PENDING | |
-| U153 | IN_PROGRESS 응답은 연속 조회 오류 횟수를 0으로 되돌린다 | FR-025 | example | PENDING | |
-| U154 | PROBE 모드는 900초마다 가장 오래된 QUERY_FAILED 1건만 조회한다 | FR-026 | example | PENDING | |
-| U155 | PROBE 조회가 정상 응답이면 BATCH 모드로 바뀌어 20건씩 조회한다 | FR-026 | example | PENDING | |
-| U156 | BATCH 조회 중 오류가 다시 나면 PROBE 모드로 돌아간다 | FR-026 | example | PENDING | |
-| U157 | 서버 기동 시 DB의 다음 조회 예정 시각으로 조회 일정이 복원된다 | FR-022 | example | PENDING | |
-| U158 | 커밋 뒤 전송 전 중단된 PG 취소 요청은 재기동 후 전송이 아니라 조회부터 처리된다 | FR-022 | example | PENDING | |
-| U159 | 전체 재확인 요청은 실행 중이면 ALREADY_RUNNING을 받는다 | FR-026a | example | PENDING | |
-| U160 | 전체 재확인 요청은 대상이 없으면 NO_WORK를 받는다 | FR-026a | example | PENDING | |
-| U161 | 전체 재확인 요청은 대상이 있으면 202 SCHEDULED를 받는다 | FR-026a | example | PENDING | |
+| U140 | 응답 없는 PG 취소 요청은 전송 60초 뒤 첫 조회가 예정된다 | FR-022 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
+| U141 | 전송 59초 시점에는 조회하지 않는다 | FR-022 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
+| U142 | authoritative NOT_FOUND이고 자동 재전송 횟수가 한도보다 1 적으면 같은 ID·금액으로 재전송하고 횟수가 1 늘어난다 | FR-024 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
+| U143 | 자동 재전송 횟수가 한도와 같고 NOT_FOUND이면 FAILED/RETRY_EXHAUSTED·ACTION_REQUIRED·운영자 알림이 함께 기록된다 | FR-024 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
+| U144 | 한도 소진 뒤 IN_PROGRESS이면 실패로 끝내지 않고 다시 조회가 예정된다 | FR-024 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
+| U145 | 한도 소진 뒤 QUERY_ERROR이면 실패로 끝내지 않고 다시 조회가 예정된다 | FR-024 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
+| U146 | 최초 전송과 개별 확인 재전송은 자동 재전송 횟수에 더해지지 않는다 | FR-024 | example | DONE | `src/refund/refund-acceptance.integration.spec.ts`(실제 DB) |
+| U147 | FAILED PG 취소 요청은 자동 조회·재전송 대상에서 빠지고 예정 시각과 담당이 지워진다 | FR-024 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
+| U148 | 활성 별도 지급 예약이 있는 환불은 자동 조회·재전송 대상에서 빠진다 | FR-043 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
+| U149 | 첫 조회 오류 뒤 다음 조회 간격은 15초다 | FR-025 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
+| U150 | 계산 간격이 상한을 넘으면 상한 간격으로 조회가 예정된다 | FR-025 | example | DONE | `src/refund/refund-recovery.policy.spec.ts` |
+| U151 | 연속 조회 오류 4회에서는 REQUESTED가 유지된다 | FR-025 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
+| U152 | 연속 조회 오류 5회에서 QUERY_FAILED와 운영자 알림이 기록된다 | FR-025 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
+| U153 | IN_PROGRESS 응답은 연속 조회 오류 횟수를 0으로 되돌린다 | FR-025 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
+| U154 | PROBE 모드는 900초마다 가장 오래된 QUERY_FAILED 1건만 조회한다 | FR-026 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
+| U155 | PROBE 조회가 정상 응답이면 BATCH 모드로 바뀌어 20건씩 조회한다 | FR-026 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
+| U156 | BATCH 조회 중 오류가 다시 나면 PROBE 모드로 돌아간다 | FR-026 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
+| U157 | 서버 기동 시 DB의 다음 조회 예정 시각으로 조회 일정이 복원된다 | FR-022 | example | DONE | `src/refund/refund-recovery.scheduler.spec.ts` |
+| U158 | 커밋 뒤 전송 전 중단된 PG 취소 요청은 재기동 후 전송이 아니라 조회부터 처리된다 | FR-022 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
+| U159 | 전체 재확인 요청은 실행 중이면 ALREADY_RUNNING을 받는다 | FR-026a | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
+| U160 | 전체 재확인 요청은 대상이 없으면 NO_WORK를 받는다 | FR-026a | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
+| U161 | 전체 재확인 요청은 대상이 있으면 202 SCHEDULED를 받는다 | FR-026a | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
 
 ### `src/refund/refund-pg-check.service.ts`
 
 | id | behavior | traces | kind | state | test |
 |---|---|---|---|---|---|
-| U162 | 같은 환불의 유효한 담당이 있으면 ALREADY_RUNNING을 받고 PG는 호출되지 않는다 | FR-055 | example | PENDING | |
-| U163 | 최근 조회 후 14초에 요청하면 RECENT_RESULT를 받고 PG는 호출되지 않는다 | FR-055 | example | PENDING | |
-| U164 | 최근 조회 후 15초에 요청하면 PG 조회가 실행된다 | FR-055 | example | PENDING | |
-| U165 | 지급 완료·0원·활성 예약·금액 검토·MANUAL 환불은 NO_PENDING_ATTEMPT를 받고 PG는 호출되지 않는다 | FR-056 | example | PENDING | |
-| U166 | 자동 재전송 한도를 소진한 미확정 요청도 NOT_FOUND이면 기존 ID·금액으로 즉시 재전송된다 | FR-054 | example | PENDING | |
-| U167 | 개별 확인 재전송은 manualResendCount만 늘리고 resendCount는 그대로 둔다 | FR-054 | example | PENDING | |
-| U168 | 미확정 요청 조회가 IN_PROGRESS 또는 QUERY_ERROR이면 재전송하지 않는다 | FR-054 | example | PENDING | |
-| U169 | 미확정 요청 조회에서 새로 확인한 거절은 실패·조치 필요만 기록하고 새 PG 취소 요청을 만들지 않는다 | FR-054 | example | PENDING | |
-| U170 | 개별 확인은 다른 환불의 상태와 RefundRecoveryControl을 바꾸지 않는다 | FR-054 | example | PENDING | |
-| U171 | PG_RESULT_CONFLICT가 기록된 환불은 재전송 없이 저장 상태를 받는다 | FR-057 | example | PENDING | |
-| U172 | pg-check 본문에 금액 필드가 있으면 400을 받는다 | FR-052 | example | PENDING | |
+| U162 | 같은 환불의 유효한 담당이 있으면 ALREADY_RUNNING을 받고 PG는 호출되지 않는다 | FR-055 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
+| U163 | 최근 조회 후 14초에 요청하면 RECENT_RESULT를 받고 PG는 호출되지 않는다 | FR-055 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
+| U164 | 최근 조회 후 15초에 요청하면 PG 조회가 실행된다 | FR-055 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
+| U165 | 지급 완료·0원·활성 예약·금액 검토·MANUAL 환불은 NO_PENDING_ATTEMPT를 받고 PG는 호출되지 않는다 | FR-056 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
+| U166 | 자동 재전송 한도를 소진한 미확정 요청도 NOT_FOUND이면 기존 ID·금액으로 즉시 재전송된다 | FR-054 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
+| U167 | 개별 확인 재전송은 manualResendCount만 늘리고 resendCount는 그대로 둔다 | FR-054 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
+| U168 | 미확정 요청 조회가 IN_PROGRESS 또는 QUERY_ERROR이면 재전송하지 않는다 | FR-054 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
+| U169 | 미확정 요청 조회에서 새로 확인한 거절은 실패·조치 필요만 기록하고 새 PG 취소 요청을 만들지 않는다 | FR-054 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
+| U170 | 개별 확인은 다른 환불의 상태와 RefundRecoveryControl을 바꾸지 않는다 | FR-054 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
+| U171 | PG_RESULT_CONFLICT가 기록된 환불은 재전송 없이 저장 상태를 받는다 | FR-057 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
+| U172 | pg-check 본문에 금액 필드가 있으면 400을 받는다 | FR-052 | example | DONE | `test/refund-recovery.e2e-spec.ts` |
 
 ### `src/payment/payment.service.ts`
 
