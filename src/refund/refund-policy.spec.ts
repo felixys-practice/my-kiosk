@@ -429,4 +429,23 @@ describe('evaluateStoreRefund', () => {
       code: 'REFUND_REASON_REQUIRED',
     });
   });
+  it('기한이 지난 미사용 이용권은 실결제액보다 적은 입력 금액으로 확정된다', () => {
+    const decision = evaluateStoreRefund(
+      usedCandidate(
+        {},
+        {
+          activatedAt: null,
+          activationDeadline: new Date('2026-10-27T12:00:00Z'),
+        },
+      ),
+      { amount: paidAmount - 3000, reason: '기한 경과 일부 환불' },
+      now,
+    );
+
+    expect(decision).toEqual({
+      eligible: true,
+      amount: paidAmount - 3000,
+      reason: '기한 경과 일부 환불',
+    });
+  });
 });
