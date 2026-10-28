@@ -169,8 +169,9 @@ export class UsageSessionRepository {
     status: UsageSessionStatus,
     failureReason?: string,
   ): Promise<void> {
-    await this.prisma.usageSession.update({
-      where: { id: sessionId },
+    // 아직 진행 중인 세션만 실패로 바꾼다. 그사이 환불 퇴실 등으로 종료된 세션은 그대로 둔다
+    await this.prisma.usageSession.updateMany({
+      where: { id: sessionId, status: UsageSessionStatus.ACTIVE },
       data: { status, failureReason },
     });
   }

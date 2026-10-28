@@ -21,6 +21,7 @@ import { RefundStoreService } from './refund-store.service';
 import { SessionLifecycleService } from 'src/session-lifecycle/session-lifecycle.service';
 import { SessionEndJobQueue } from 'src/session-lifecycle/session-end-job.queue';
 import { UsageSessionService } from 'src/usage-session/usage-session.service';
+import { UsageSessionRepository } from 'src/usage-session/usage-session.repository';
 import { ShopNotFoundError, TicketNotFoundError } from './errors';
 
 /**
@@ -672,6 +673,32 @@ describe('매장 환불 확정 저장 (실제 DB)', () => {
     }).toEqual({
       status: TicketStatus.REVOKED,
       remainingMinutes: refunded.remainingMinutes,
+    });
+  });
+
+  it('입실 후속 실패 처리는 환불로 이미 종료된 세션을 실패 상태로 덮어쓰지 않는다', async () => {
+    const refunded = await refundedInUseTimeTicket();
+
+    // 작업 ID 등록 전에 환불이 퇴실을 확정한 뒤, 입실 서비스의 실패 처리가 늦게 실행된 상황
+    await app
+      .get(UsageSessionRepository)
+      .failSession(
+        refunded.sessionId,
+        UsageSessionStatus.JOB_REGISTER_FAILED,
+        '작업 ID 등록 실패',
+      );
+
+    const session = await prisma.usageSession.findUniqueOrThrow({
+      where: { id: refunded.sessionId },
+    });
+    expect({
+      status: session.status,
+      endedAt: session.endedAt,
+      failureReason: session.failureReason,
+    }).toEqual({
+      status: UsageSessionStatus.ENDED,
+      endedAt: refunded.endedAt,
+      failureReason: null,
     });
   });
 });
