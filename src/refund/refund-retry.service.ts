@@ -15,6 +15,8 @@ import {
 import { RefundLockingRepository } from './refund-locking.repository';
 import { RefundRepository } from './refund.repository';
 import { RefundDispatchService } from './refund-dispatch.service';
+import { RefundResultService } from './refund-result.service';
+import type { TransactionLog } from 'src/logger/transaction-logger.service';
 import { PendingSend } from './refund-acceptance.service';
 import {
   evaluatePayoutRetry,
@@ -55,6 +57,7 @@ export class RefundRetryService {
     private readonly refundRepository: RefundRepository,
     private readonly dispatchService: RefundDispatchService,
     private readonly configService: ConfigService,
+    private readonly resultService: RefundResultService,
     @Inject(REFUND_PG_GATEWAY) private readonly pgGateway: RefundPgGateway,
   ) {}
 
@@ -210,6 +213,7 @@ export class RefundRetryService {
 
     // 3. 결과 반영: 담당을 내려놓고 조건을 다시 확인한 뒤 미접수면 새 요청을 저장한다
     let pending: PendingSend | undefined;
+    let conflictLogs: TransactionLog[] = [];
     await this.refundRepository.runInTransaction(async (tx) => {
       await this.lockRetryTarget(tx, refundId);
       if (
@@ -221,6 +225,15 @@ export class RefundRetryService {
           inquiry.result === 'QUERY_ERROR' ? inquiry.reason : null,
         ))
       ) {
+        return;
+      }
+      // 취소 성공·처리 중은 기존 확정 실패와 모순된다. 새 요청 없이 모순·운영자 확인으로 남겨 추가 지급을 막는다
+      if (inquiry.result === 'SUCCEEDED' || inquiry.result === 'IN_PROGRESS') {
+        conflictLogs = await this.resultService.recordFailedAttemptConflict(
+          tx,
+          candidate.id,
+          inquiry,
+        );
         return;
       }
       // 미접수 또는 거절 확정(취소가 실행되지 않았고 앞으로도 진행되지 않음)일 때만 새 요청을 만든다
@@ -269,6 +282,8 @@ export class RefundRetryService {
       };
     });
 
+    // 모순 기록의 거래 로그는 커밋 뒤에 남긴다
+    this.resultService.writeActionLogs(conflictLogs);
     // 4. 새 요청은 커밋 뒤 바로 보낸다
     const sent = pending
       ? await this.dispatchService.sendPrepared(pending)

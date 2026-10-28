@@ -8,6 +8,7 @@ import {
   RefundSource,
 } from '@prisma/client';
 import { TransactionClient } from 'src/prisma/prisma.service';
+import type { PgCancelQueryResult } from 'src/pg/pg.types';
 import {
   TransactionLog,
   TransactionLoggerService,
@@ -292,6 +293,36 @@ export class RefundResultService {
   }
 
   /**
+   * 이미 실패가 확정된 PG 취소 요청의 재조회 결과가 그 실패와 모순될 때 기록한다(개별 확인, API 계약 §8)
+   * - 확정 결과를 덮어쓰지 않고 PG_RESULT_CONFLICT·검토 필요·운영자 알림으로 남겨 추가 지급을 막는다
+   * @param tx 호출자의 결과 반영 트랜잭션(Refund 잠금 뒤)
+   * @param paymentCancelId 실패가 확정된 PG 취소 요청
+   * @param received 모순되는 재조회 결과(취소 성공·처리 중 등)
+   * @returns 커밋 뒤 기록할 거래 로그
+   */
+  async recordFailedAttemptConflict(
+    tx: TransactionClient,
+    paymentCancelId: string,
+    received: PgCancelQueryResult,
+  ): Promise<TransactionLog[]> {
+    const attempt = (await this.refundRepository.findAttemptForResult(
+      paymentCancelId,
+      tx,
+    ))!;
+    const actionLogs: TransactionLog[] = [];
+    await this.recordResultConflict(tx, attempt, received, actionLogs);
+    return actionLogs;
+  }
+
+  /**
+   * 커밋된 사건의 거래 로그를 남긴다
+   * @param logs 거래 로그
+   */
+  writeActionLogs(logs: TransactionLog[]): void {
+    for (const log of logs) this.txLogger.logTransaction(log);
+  }
+
+  /**
    * 연속 조회 오류가 한도에 도달한 PG 취소 요청을 결과 확인 실패로 바꾸고 운영자에게 알린다 (FR-025)
    * - 지급 결과를 단정하지 않는다(환불은 지급 처리 중 그대로, 이용 종료 유지)
    * @param paymentCancelId PG 취소 요청
@@ -480,7 +511,7 @@ export class RefundResultService {
   private async recordResultConflict(
     tx: TransactionClient,
     attempt: AttemptForResult,
-    outcome: PgCancelOutcome,
+    outcome: PgCancelOutcome | PgCancelQueryResult,
     actionLogs: TransactionLog[],
   ): Promise<void> {
     await this.refundRepository.updateRefundPayout(tx, attempt.refund.id, {

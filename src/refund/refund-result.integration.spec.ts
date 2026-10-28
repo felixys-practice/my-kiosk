@@ -2525,5 +2525,66 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
         sends: 0,
       });
     });
+
+    /**
+     * 실패한 요청의 재조회가 기존 실패와 모순될 때 저장 상태를 모은다
+     * @param inquiry 모순되는 재조회 결과
+     * @returns 모순 기록·알림·요청 수 요약
+     */
+    async function checkContradiction(inquiry: unknown) {
+      const failed = await createFailedRefund(
+        PaymentCancelFailureCode.RETRY_EXHAUSTED,
+      );
+      pgGateway.inquireCancel.mockResolvedValueOnce(inquiry);
+
+      const result = await app
+        .get(RefundPgCheckService)
+        .check(manager(), failed.refundId, new Date());
+
+      const refund = await prisma.refund.findUniqueOrThrow({
+        where: { id: failed.refundId },
+        include: { notifications: true, paymentCancels: true },
+      });
+      return {
+        checkStatus: result.checkStatus,
+        actionCode: refund.actionCode,
+        reviewRequired: refund.reviewRequired,
+        paidAmount: refund.paidAmount,
+        operatorConflicts: refund.notifications.filter(
+          (notification) =>
+            notification.audience === RefundNotificationAudience.OPERATOR &&
+            notification.kind === 'PG_RESULT_CONFLICT',
+        ).length,
+        attempts: refund.paymentCancels.map((attempt) => attempt.status),
+        sends: pgGateway.sendCancel.mock.calls.length,
+      };
+    }
+
+    /** 모순 결과가 남기는 저장 상태 */
+    const contradictionRecorded = {
+      checkStatus: 'CHECKED',
+      actionCode: 'PG_RESULT_CONFLICT',
+      reviewRequired: true,
+      paidAmount: 0,
+      operatorConflicts: 1,
+      attempts: [PaymentCancelStatus.FAILED],
+      sends: 0,
+    };
+
+    it('실패한 요청의 재조회가 취소 성공이면 PG_RESULT_CONFLICT와 운영자 알림을 기록하고 새 요청을 만들지 않는다', async () => {
+      expect(
+        await checkContradiction({
+          result: 'SUCCEEDED',
+          pgTransactionId: `pg-cancel-${randomUUID()}`,
+          cancelledAmount: refundAmount,
+        }),
+      ).toEqual(contradictionRecorded);
+    });
+
+    it('실패한 요청의 재조회가 처리 중이면 PG_RESULT_CONFLICT와 운영자 알림을 기록하고 새 요청을 만들지 않는다', async () => {
+      expect(await checkContradiction({ result: 'IN_PROGRESS' })).toEqual(
+        contradictionRecorded,
+      );
+    });
   });
 });
