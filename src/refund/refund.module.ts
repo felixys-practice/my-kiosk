@@ -21,6 +21,7 @@ import {
   refundRecoveryQueueName,
 } from './refund-recovery.scheduler';
 import { BullModule } from '@nestjs/bullmq';
+import { RefundRecoveryProcessor } from './refund-recovery.processor';
 import { RefundEventRepository } from './refund-event.repository';
 import { RefundLedgerRepository } from 'src/ledger/refund-ledger.repository';
 
@@ -53,6 +54,7 @@ import { RefundLedgerRepository } from 'src/ledger/refund-ledger.repository';
     RefundRecoveryService,
     RefundWorkRepository,
     RefundRecoveryScheduler,
+    RefundRecoveryProcessor,
   ],
   controllers: [RefundController],
   exports: [RefundService],
