@@ -322,6 +322,19 @@ export class RefundRepository {
   }
 
   /**
+   * 기존 경로가 만든(환불 기록에 연결되지 않은) PG 취소 요청인지 확인한다
+   * @param paymentCancelId PG 취소 요청 ID
+   * @returns 존재하고 refundId가 없으면 true
+   */
+  async isLegacyAttempt(paymentCancelId: string): Promise<boolean> {
+    const attempt = await this.prisma.paymentCancel.findUnique({
+      where: { id: paymentCancelId },
+      select: { refundId: true },
+    });
+    return attempt !== null && attempt.refundId === null;
+  }
+
+  /**
    * PG 취소 요청을 성공으로 확정하고 실제 취소액을 기록한다
    * @param tx 지급 결과 반영 트랜잭션
    * @param id PG 취소 요청 ID

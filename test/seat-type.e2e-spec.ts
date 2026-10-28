@@ -787,7 +787,7 @@ describe('좌석 타입 (E2E)', () => {
           paymentCancelId: cancel!.id,
           amount: cancel!.amount,
         })
-        .expect(201);
+        .expect(200);
       const revoked = await prisma.ticket.findUniqueOrThrow({
         where: { id: firstTicketId },
       });

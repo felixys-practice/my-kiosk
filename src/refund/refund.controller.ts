@@ -3,6 +3,8 @@ import {
   Controller,
   Get,
   Headers,
+  HttpCode,
+  HttpStatus,
   Param,
   Post,
   Query,
@@ -14,12 +16,16 @@ import type { JwtValidationResult } from 'src/auth/interfaces/jwt-payload.interf
 import { RefundService } from './refund.service';
 import { GetRefundQueryDto, RefundDto, PgRefundCallbackDto } from './dto';
 import { RefundAcceptanceService } from './refund-acceptance.service';
+import { RefundResultService } from './refund-result.service';
+import { RefundRepository } from './refund.repository';
 
 @Controller('refund')
 export class RefundController {
   constructor(
     private readonly refundService: RefundService,
     private readonly refundAcceptanceService: RefundAcceptanceService,
+    private readonly refundResultService: RefundResultService,
+    private readonly refundRepository: RefundRepository,
   ) {}
 
   /**
@@ -50,15 +56,33 @@ export class RefundController {
     return result.body;
   }
 
+  /**
+   * PG 취소 결과 콜백을 받는다 (API 계약 §7 POST /refund/callback, 200 수신 확인)
+   * - 환불 기록에 연결된 PG 취소 요청은 환불금 지급 결과 공통 처리로 반영한다
+   * - 기존 경로가 만든 PG 취소 요청(refundId 없음)은 US6·Phase 13 전환 전까지 기존 처리를 유지한다
+   * @param dto 콜백 본문
+   */
   @Post('callback')
+  @HttpCode(HttpStatus.OK)
   async callbackRefund(@Body() dto: PgRefundCallbackDto) {
-    await this.refundService.callback(
-      dto.success,
-      dto.paymentCancelId,
-      dto.orderItemId,
-      dto.amount,
-      dto.reason,
-    );
+    if (await this.refundRepository.isLegacyAttempt(dto.paymentCancelId)) {
+      await this.refundService.callback(
+        dto.success,
+        dto.paymentCancelId,
+        dto.orderItemId,
+        dto.amount,
+        dto.reason,
+      );
+      return;
+    }
+    await this.refundResultService.applyCallback({
+      success: dto.success,
+      paymentCancelId: dto.paymentCancelId,
+      pgTransactionId: dto.pgTransactionId,
+      orderItemId: dto.orderItemId,
+      amount: dto.amount,
+      reason: dto.reason,
+    });
   }
 
   // 매장의 환불 내역 (status 미지정 시 전체 상태 조회)
