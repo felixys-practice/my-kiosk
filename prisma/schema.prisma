@@ -519,13 +519,15 @@ model PaymentCancel {
   refund        Refund?              @relation(fields: [refundId], references: [id], onDelete: Restrict)
   requestedBy   User?                @relation("PaymentCancelRequestedBy", fields: [requestedById], references: [id], onDelete: Restrict)
   payment       Payment              @relation(fields: [paymentId], references: [id])
-  orderItemId   String               @map("order_item_id") // 이 취소 요청의 대상 상품(1:1 — 한 번의 취소는 상품 1건만 대상)
-  orderItem     OrderItem            @relation(fields: [orderItemId], references: [id])
+  orderItemId   String?              @map("order_item_id") // 이 취소 요청의 대상 상품. 결제 전체 대상 환불(PAYMENT)이면 null, 환불에 연결된 행은 환불의 대상 상품과 같아야 한다
+  orderItem     OrderItem?           @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
   locks         RefundLock[] // 이 취소 요청이 보유 중인 상품별 락(확정되면 삭제됨)
   ledger        Ledger? // SUCCEEDED 확정 시 생성되는 원장 레코드(1:1 — 멱등키로 1건만 허용)
   notifications RefundNotification[] // 이 PG 취소 요청과 관련된 알림
   // NOTE: Partial Unique Index (raw migration으로 관리)
   // - payment_cancels_refund_id_active_key: (refund_id) WHERE status IN ('REQUESTED','QUERY_FAILED')
+  // NOTE: 트리거 (raw migration으로 관리)
+  // - payment_cancels_refund_target_check: refund_id가 있으면 order_item_id가 환불의 order_item_id와 같아야 한다
   // NOTE: CHECK 제약 (raw migration으로 관리)
   // - payment_cancels_actual_amount_check: actual_amount >= 0
   // - payment_cancels_counts_check: resend·manual_resend·inquiry·inquiry_failure·send_attempt 횟수 >= 0

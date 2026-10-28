@@ -490,6 +490,36 @@ describe('환불 저장 모델 DB 제약', () => {
       ).rejects.toMatchObject({ code: uniqueViolation });
     });
 
+    it('결제 전체 대상 환불 아래 PG 취소 요청은 주문 항목 없이 저장된다', async () => {
+      const target = await createPaidItem();
+      const refund = await prisma.refund.create({
+        data: acceptedRefund(
+          { paymentId: target.paymentId, orderItemId: null },
+          {
+            targetKind: RefundTargetKind.PAYMENT,
+            source: RefundSource.SYSTEM,
+            requestedById: null,
+            terminatedAt: null,
+            terminationConsentedAt: null,
+          },
+        ),
+      });
+
+      const attempt = await prisma.paymentCancel.create({
+        data: {
+          refundId: refund.id,
+          paymentId: target.paymentId,
+          orderItemId: null,
+          attemptNumber: 1,
+          amount: 10000,
+          status: PaymentCancelStatus.REQUESTED,
+          requestedAt: new Date(),
+        },
+      });
+
+      expect(attempt.orderItemId).toBeNull();
+    });
+
     it('PG가 확인한 실제 취소액이 -1이면 저장이 실패한다', async () => {
       const refund = await createAcceptedRefund();
 
