@@ -197,4 +197,15 @@ describe('환불 확정 저장 (실제 DB)', () => {
       }),
     ]);
   });
+
+  it('환불 확정 뒤 이용권 상태가 REVOKED로 저장된다', async () => {
+    const issued = await createUnusedPeriodTicket();
+
+    await accept(issued.ticketId);
+
+    const ticket = await prisma.ticket.findUniqueOrThrow({
+      where: { id: issued.ticketId },
+    });
+    expect(ticket.status).toBe(TicketStatus.REVOKED);
+  });
 });

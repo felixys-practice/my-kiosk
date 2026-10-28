@@ -141,10 +141,11 @@ export class RefundRepository {
     now: Date,
     tx: TransactionClient,
   ): Promise<void> {
-    void ticketId;
-    void now;
-    void tx;
-    return Promise.resolve();
+    // 상태와 종료 시각만 바꾼다(만료 시각·남은 시간을 되돌리거나 늘리지 않는다)
+    await tx.ticket.update({
+      where: { id: ticketId },
+      data: { status: TicketStatus.REVOKED, revokedAt: now },
+    });
   }
 
   /**

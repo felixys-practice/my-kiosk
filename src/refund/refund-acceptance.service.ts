@@ -100,6 +100,9 @@ export class RefundAcceptanceService {
           throw new RefundTerminationConsentRequiredError();
         }
 
+        // 이용권을 종료한다
+        await this.refundRepository.terminateTicket(command.ticketId, now, tx);
+
         // 확정된 환불과 최초 PG 취소 요청을 저장한다
         const created = await this.refundRepository.createAcceptedRefund(
           {
