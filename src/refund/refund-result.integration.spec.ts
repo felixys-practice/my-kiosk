@@ -1449,4 +1449,59 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
 
     expect(pgGateway.inquireCancel.mock.calls.length).toBe(0);
   });
+
+  /** 장애 복구 확인 테스트용 기준 연도(테스트마다 앞 테스트보다 이른 시각) */
+  let recoveryYear = 1990;
+
+  /**
+   * 결과 확인 실패(QUERY_FAILED) 상태의 PG 취소 요청을 만든다
+   * @param queryFailedAt 결과 확인 실패 진입 시각
+   * @returns 환불·PG 취소 요청
+   */
+  async function createQueryFailed(queryFailedAt: Date) {
+    const pending = await createPendingRefund();
+    await prisma.paymentCancel.update({
+      where: { id: pending.paymentCancelId },
+      data: {
+        status: PaymentCancelStatus.QUERY_FAILED,
+        sendAttemptCount: 1,
+        lastSendAttemptAt: queryFailedAt,
+        inquiryFailureCount: 5,
+        queryFailedAt,
+      },
+    });
+    return pending;
+  }
+
+  /**
+   * 단일 복구 제어 행을 PROBE·즉시 실행 가능 상태로 되돌린다
+   */
+  async function resetRecoveryControl() {
+    await prisma.refundRecoveryControl.deleteMany({});
+  }
+
+  it('PROBE 모드는 가장 오래된 결과 확인 실패 1건만 조회하고 900초가 지나기 전에는 다시 조회하지 않는다', async () => {
+    await resetRecoveryControl();
+    const year = recoveryYear--;
+    const oldest = await createQueryFailed(new Date(Date.UTC(year, 0, 1)));
+    await createQueryFailed(new Date(Date.UTC(year, 0, 2)));
+    pgGateway.inquireCancel.mockResolvedValue({
+      result: 'QUERY_ERROR',
+      reason: 'PG 장애 지속',
+    });
+    const recovery = app.get(RefundRecoveryService);
+    const now = new Date(Date.UTC(year, 1, 1));
+
+    await recovery.recoverQueryFailed(now);
+    const firstProbe: unknown[] = pgGateway.inquireCancel.mock.calls.slice();
+    await recovery.recoverQueryFailed(new Date(now.getTime() + 899_000));
+
+    expect({
+      firstProbe,
+      totalCalls: pgGateway.inquireCancel.mock.calls.length,
+    }).toEqual({
+      firstProbe: [[{ paymentCancelId: oldest.paymentCancelId }]],
+      totalCalls: 1,
+    });
+  });
 });

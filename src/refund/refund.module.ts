@@ -15,6 +15,7 @@ import { RefundResultService } from './refund-result.service';
 import { RefundStoreService } from './refund-store.service';
 import { RefundDispatchService } from './refund-dispatch.service';
 import { RefundRecoveryService } from './refund-recovery.service';
+import { RefundWorkRepository } from './refund-work.repository';
 import { RefundEventRepository } from './refund-event.repository';
 import { RefundLedgerRepository } from 'src/ledger/refund-ledger.repository';
 
@@ -44,6 +45,7 @@ import { RefundLedgerRepository } from 'src/ledger/refund-ledger.repository';
     // PG 취소 요청 전송·조회·복구(US5)
     RefundDispatchService,
     RefundRecoveryService,
+    RefundWorkRepository,
   ],
   controllers: [RefundController],
   exports: [RefundService],

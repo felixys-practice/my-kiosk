@@ -529,6 +529,24 @@ export class RefundRepository {
   }
 
   /**
+   * 이미 결과 확인 실패인 PG 취소 요청의 재조회 오류를 기록하고 담당을 내려놓는다
+   * - 진입 시각(queryFailedAt)과 상태는 그대로 두고, 다음 확인은 장애 복구 확인이 맡는다
+   * @param id PG 취소 요청 ID
+   * @param claimToken 조회를 맡은 담당 토큰
+   * @param update 연속 오류 횟수·마지막 오류
+   */
+  async recordRepeatedQueryError(
+    id: string,
+    claimToken: string,
+    update: { inquiryFailureCount: number; lastInquiryError: string },
+  ): Promise<void> {
+    await this.prisma.paymentCancel.updateMany({
+      where: { id, claimToken },
+      data: { ...update, claimToken: null, claimUntil: null },
+    });
+  }
+
+  /**
    * 연속 조회 오류가 한도에 도달한 PG 취소 요청을 결과 확인 실패(QUERY_FAILED)로 바꾼다
    * - 이후 조회는 장애 복구 확인(PROBE/BATCH)이 맡으므로 개별 예정 시각과 담당을 지운다
    * @param tx 결과 반영 트랜잭션

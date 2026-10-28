@@ -9,6 +9,8 @@ import { RefundLockingRepository } from './refund-locking.repository';
 import { RefundDispatchService } from './refund-dispatch.service';
 import { RefundResultService } from './refund-result.service';
 import { inquiryBackoffSeconds } from './refund-recovery.policy';
+import { RefundWorkRepository } from './refund-work.repository';
+import { PgCancelQueryResult } from 'src/pg/pg.types';
 
 /** 자동 조회 대상인 미확정 시도 상태 */
 const inquirableStatuses: readonly PaymentCancelStatus[] = [
@@ -28,6 +30,7 @@ export class RefundRecoveryService {
     private readonly dispatchService: RefundDispatchService,
     private readonly resultService: RefundResultService,
     private readonly configService: ConfigService,
+    private readonly workRepository: RefundWorkRepository,
     @Inject(REFUND_PG_GATEWAY) private readonly pgGateway: RefundPgGateway,
   ) {}
 
@@ -47,11 +50,35 @@ export class RefundRecoveryService {
   }
 
   /**
+   * 결과 확인 실패(QUERY_FAILED) 건의 장애 복구 확인을 한 번 실행한다(PROBE 1건 / BATCH 처리 단위)
+   * @param now 실행 시각
+   */
+  async recoverQueryFailed(now: Date): Promise<void> {
+    const control = await this.workRepository.getRecoveryControl();
+    // PROBE: 다음 확인 시각이 되면 가장 오래된 1건만 조회한다
+    if (control.nextProbeAt && control.nextProbeAt > now) return;
+    const [oldest] = await this.workRepository.findQueryFailed(now, 1);
+    if (!oldest) return;
+    const result = await this.inquireAttempt(oldest, now);
+    // 조회 장애가 이어지면 다음 확인 시각까지 기다린다
+    if (result === 'QUERY_ERROR') {
+      await this.workRepository.updateRecoveryControl({
+        nextProbeAt: new Date(
+          now.getTime() + this.config('recoveryProbeSeconds') * 1000,
+        ),
+      });
+    }
+  }
+
+  /**
    * PG 취소 요청 한 건을 조회하고 결과에 따라 반영·재전송·재조회 예약을 한다
    * @param paymentCancelId 조회할 PG 취소 요청
    * @param now 조회 시각(일정 계산 기준)
    */
-  async inquireAttempt(paymentCancelId: string, now: Date): Promise<void> {
+  async inquireAttempt(
+    paymentCancelId: string,
+    now: Date,
+  ): Promise<PgCancelQueryResult['result'] | null> {
     // 1. Refund → PaymentCancel을 잠그고 조회 담당을 정한 뒤 커밋한다
     const claimToken = randomUUID();
     const attempt = await this.claimForInquiry(
@@ -59,10 +86,28 @@ export class RefundRecoveryService {
       claimToken,
       now,
     );
-    if (!attempt) return;
+    if (!attempt) return null;
 
     // 2. PG 조회는 트랜잭션 밖에서 한다
     const result = await this.pgGateway.inquireCancel({ paymentCancelId });
+    await this.applyInquiryResult(attempt, claimToken, now, result);
+    return result.result;
+  }
+
+  /**
+   * 조회 결과에 따라 반영·재전송·재조회 예약을 한다
+   * @param attempt 조회를 맡은 PG 취소 요청
+   * @param claimToken 조회 담당 토큰
+   * @param now 조회 시각
+   * @param result PG 조회 결과
+   */
+  private async applyInquiryResult(
+    attempt: AttemptForResult,
+    claimToken: string,
+    now: Date,
+    result: PgCancelQueryResult,
+  ): Promise<void> {
+    const paymentCancelId = attempt.id;
 
     // 3. PG가 미접수를 확실히 확인했으면 자동 한도 안에서 같은 ID·금액으로 다시 보내고,
     //    한도를 모두 썼으면 그 시도를 실패(RETRY_EXHAUSTED)로 끝내 운영자 재처리로 넘긴다
@@ -108,6 +153,15 @@ export class RefundRecoveryService {
     // 5. 조회 오류이면 결과를 단정하지 않고 지수 백오프 간격 뒤 다시 조회한다
     if (result.result === 'QUERY_ERROR') {
       const failures = attempt.inquiryFailureCount + 1;
+      // 이미 결과 확인 실패인 건은 진입 시각·알림을 반복하지 않고 오류만 기록한다(다음 확인은 장애 복구 확인)
+      if (attempt.status === PaymentCancelStatus.QUERY_FAILED) {
+        await this.refundRepository.recordRepeatedQueryError(
+          paymentCancelId,
+          claimToken,
+          { inquiryFailureCount: failures, lastInquiryError: result.reason },
+        );
+        return;
+      }
       // 연속 오류가 한도에 도달하면 결과 확인 실패로 바꾸고 이후는 장애 복구 확인이 맡는다
       if (failures >= this.config('queryFailureThreshold')) {
         await this.resultService.recordQueryFailed(
@@ -194,7 +248,8 @@ export class RefundRecoveryService {
       | 'queryBackoffSeconds'
       | 'queryBackoffMaxSeconds'
       | 'queryFailureThreshold'
-      | 'recoveryBatchSize',
+      | 'recoveryBatchSize'
+      | 'recoveryProbeSeconds',
   ): number {
     return this.configService.get<number>(`refund.${key}`)!;
   }
