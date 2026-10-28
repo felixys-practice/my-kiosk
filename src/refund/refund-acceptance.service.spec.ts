@@ -282,4 +282,28 @@ describe('RefundAcceptanceService', () => {
       expect(pgGateway.sendCancel).not.toHaveBeenCalled();
     },
   );
+
+  it('같은 멱등 키 재응답도 현재 역할이 USER가 아니면 REFUND_FORBIDDEN으로 거절된다', async () => {
+    // 저장된 최초 응답을 재생하는 멱등 처리 대역(처리 함수는 실행하지 않는다)
+    const replaying = {
+      execute: async (command: { authorize: () => Promise<void> }) => {
+        await command.authorize();
+        return { status: 202, body: { refundId: 'refund-1' } };
+      },
+    } as unknown as RefundIdempotencyService;
+    const replayService = new RefundAcceptanceService(
+      repository as unknown as RefundRepository,
+      locking as unknown as RefundLockingRepository,
+      seatAssignment as unknown as SeatAssignmentService,
+      replaying,
+      pgGateway,
+    );
+
+    await expect(
+      replayService.acceptCustomerRefund(
+        { userId: customer.userId, role: UserRole.OWNER },
+        { ticketId, consentToTerminateTicket: true, idempotencyKey: 'key-1' },
+      ),
+    ).rejects.toBeInstanceOf(RefundForbiddenError);
+  });
 });
