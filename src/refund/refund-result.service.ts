@@ -215,7 +215,8 @@ export class RefundResultService {
   }
 
   /**
-   * 확정된 시도와 모순되는 PG 결과를 검토 필요·운영자 알림으로 기록한다
+   * 확정된 시도와 모순되는 PG 결과를 조치·검토 필요와 운영자 알림으로 기록한다
+   * - 지급 완료(PAID)였어도 검토가 끝날 때까지 조치 필요로 둔다(PAID는 검토 완료일 때만, data-model §2)
    * - 지급 합계·원장·시도 상태는 바꾸지 않는다
    * @param tx 지급 결과 반영 트랜잭션
    * @param attempt 이미 확정된 PG 취소 요청과 그 환불
@@ -225,6 +226,8 @@ export class RefundResultService {
     attempt: AttemptForResult,
   ): Promise<void> {
     await this.refundRepository.updateRefundPayout(tx, attempt.refund.id, {
+      payoutStatus: RefundPayoutStatus.ACTION_REQUIRED,
+      paidAt: null,
       reviewRequired: true,
       actionCode: 'PG_RESULT_CONFLICT',
     });

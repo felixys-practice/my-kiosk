@@ -569,4 +569,36 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       conflictNotifications: 1,
     });
   });
+
+  it('지급 완료(PAID)된 환불에 모순 통보가 오면 환불은 조치 필요·검토 필요·PG_RESULT_CONFLICT가 되고 지급 기록은 그대로다', async () => {
+    const pending = await createPendingRefund();
+    await succeed(pending.paymentCancelId, refundAmount);
+
+    await service.applyPgResult({
+      paymentCancelId: pending.paymentCancelId,
+      outcome: { kind: 'FAILED', reason: '늦은 실패 통보' },
+    });
+
+    const refund = await prisma.refund.findUniqueOrThrow({
+      where: { id: pending.refundId },
+      include: { paymentCancels: true, ledgers: true },
+    });
+    expect({
+      payoutStatus: refund.payoutStatus,
+      paidAt: refund.paidAt,
+      reviewRequired: refund.reviewRequired,
+      actionCode: refund.actionCode,
+      attemptStatus: refund.paymentCancels[0].status,
+      paidAmount: refund.paidAmount,
+      ledgers: refund.ledgers.length,
+    }).toEqual({
+      payoutStatus: RefundPayoutStatus.ACTION_REQUIRED,
+      paidAt: null,
+      reviewRequired: true,
+      actionCode: 'PG_RESULT_CONFLICT',
+      attemptStatus: PaymentCancelStatus.SUCCEEDED,
+      paidAmount: refundAmount,
+      ledgers: 1,
+    });
+  });
 });
