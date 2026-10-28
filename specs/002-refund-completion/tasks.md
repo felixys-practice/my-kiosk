@@ -186,7 +186,7 @@
 - [X] T074 [US5] [A35] E2E: `test/refund-recovery.e2e-spec.ts`에 명세 5-2의 Given/When으로 요청하고 다음 결과를 검증한다: 환불금 지급 완료와 실제 금액의 원장 기록을 함께 반영한다. 이용 종료·좌석 해제는 반복하지 않는다. 테스트 이름 끝에 `(QS-5-2)`를 붙인다.
 - [X] T075 [US5] [A36] E2E: `test/refund-recovery.e2e-spec.ts`에 명세 5-3의 Given/When으로 요청하고 다음 결과를 검증한다: PG 취소 요청 실패와 환불금 지급 조치 필요를 기록하고 알린다. 확정된 환불 금액과 이용 종료는 유지한다. 테스트 이름 끝에 `(QS-5-3)`를 붙인다.
 - [X] T076 [US5] [A37] E2E: `test/refund-recovery.e2e-spec.ts`에 명세 5-4의 Given/When으로 요청하고 다음 결과를 검증한다: 같은 환불 건에서 같은 금액으로 다시 보내고 환불금 지급 처리 중으로 둔다. 테스트 이름 끝에 `(QS-5-4)`를 붙인다.
-- [ ] T077 [US5] [A38] E2E: `test/refund-recovery.e2e-spec.ts`에 명세 5-5의 Given/When으로 요청하고 다음 결과를 검증한다: 4번과 같은 규칙으로 같은 금액을 다시 보낸다. 테스트 이름 끝에 `(QS-5-5)`를 붙인다.
+- [X] T077 [US5] [A38] E2E: `test/refund-recovery.e2e-spec.ts`에 명세 5-5의 Given/When으로 요청하고 다음 결과를 검증한다: 4번과 같은 규칙으로 같은 금액을 다시 보낸다. 테스트 이름 끝에 `(QS-5-5)`를 붙인다.
 - [X] T078 [US5] [A39] E2E: `test/refund-recovery.e2e-spec.ts`에 명세 5-6의 Given/When으로 요청하고 다음 결과를 검증한다: 한도 소진 뒤 PG 미접수가 확인되면 해당 시도 FAILED/RETRY_EXHAUSTED·환불 ACTION_REQUIRED를 함께 기록하고 자동 조회·재전송에서 제외한다. 운영자 알림·금액·종료는 유지한다. 한도 소진 뒤 PG 처리 중·조회 오류이면 실패로 종료하지 않고 계속 조회한다. 테스트 이름 끝에 `(QS-5-6)`를 붙인다.
 - [X] T079 [US5] [A40] E2E: `test/refund-recovery.e2e-spec.ts`에 명세 5-7의 Given/When으로 요청하고 다음 결과를 검증한다: 환불금 지급 성공·실패로 단정하지 않고 정해진 간격으로 다시 조회한다. 다른 PG 취소 요청과 별도 환불금 지급은 허용하지 않는다. 테스트 이름 끝에 `(QS-5-7)`를 붙인다.
 - [X] T080 [US5] [A41] E2E: `test/refund-recovery.e2e-spec.ts`에 명세 5-8의 Given/When으로 요청하고 다음 결과를 검증한다: PG 취소 결과 확인 실패로 표시하고 운영자에게 알린다. 환불금은 미지급·결과 확인 중으로 남고 이용 종료는 유지된다. 테스트 이름 끝에 `(QS-5-8)`를 붙인다.
@@ -195,7 +195,7 @@
 - [X] T083 [US5] [A44] E2E: `test/refund-recovery.e2e-spec.ts`에 명세 5-10a의 Given/When으로 요청하고 다음 결과를 검증한다: 자동 재확인 예정 시각을 기다리지 않고 PG 취소 결과 확인 실패 건을 정해진 건수씩 묶어 조회한다. 재조회 실행은 환불 확정이나 환불금 지급 완료를 뜻하지 않는다. 테스트 이름 끝에 `(QS-5-10a)`를 붙인다.
 - [X] T084 [US5] [A45] E2E: `test/refund-recovery.e2e-spec.ts`에 명세 5-10b의 Given/When으로 요청하고 다음 결과를 검증한다: 권한 오류로 거부된다. 테스트 이름 끝에 `(QS-5-10b)`를 붙인다.
 - [X] T085 [US5] [A46] E2E: `test/refund-recovery.e2e-spec.ts`에 명세 5-11의 Given/When으로 요청하고 다음 결과를 검증한다: 실제 환불금 지급액과 원장을 함께 기록하고 확정된 환불 금액은 바꾸지 않는다. 부족액·초과액을 구분해 환불금 지급 조치 필요로 두고 운영자에게 알린다. 테스트 이름 끝에 `(QS-5-11)`를 붙인다.
-- [ ] T086 [US5] [A47] E2E: `test/refund-recovery.e2e-spec.ts`에 명세 5-12의 Given/When으로 요청하고 다음 결과를 검증한다: 2~11번의 같은 조회·재전송·미지급 관리 규칙을 적용한다. 승인 금액 불일치 건은 이용권을 만들지 않는다. 테스트 이름 끝에 `(QS-5-12)`를 붙인다.
+- [X] T086 [US5] [A47] E2E: `test/refund-recovery.e2e-spec.ts`에 명세 5-12의 Given/When으로 요청하고 다음 결과를 검증한다: 2~11번의 같은 조회·재전송·미지급 관리 규칙을 적용한다. 승인 금액 불일치 건은 이용권을 만들지 않는다. 테스트 이름 끝에 `(QS-5-12)`를 붙인다.
 - [X] T087 [US5] [A48] E2E: `test/refund-recovery.e2e-spec.ts`에 명세 5-13의 Given/When으로 요청하고 다음 결과를 검증한다: 자동 조회 예정 시각 전이라도 해당 시도 한 건만 즉시 조회하고, 환불금 지급 완료·실제액·원장을 한 번 반영해 결과를 보여준다. 테스트 이름 끝에 `(QS-5-13)`를 붙인다.
 - [X] T088 [US5] [A49] E2E: `test/refund-recovery.e2e-spec.ts`에 명세 5-14의 Given/When으로 요청하고 다음 결과를 검증한다: 미확정 요청의 조회는 각각 처리 중 또는 결과 확인 불가로 안내하고 지급을 확정하지 않는다. 기존 조회 일정·오류 처리 규칙으로 다시 확인하며 다른 환불금 지급 차단을 유지한다. 테스트 이름 끝에 `(QS-5-14)`를 붙인다.
 - [X] T089 [US5] [A50] E2E: `test/refund-recovery.e2e-spec.ts`에 명세 5-15의 Given/When으로 요청하고 다음 결과를 검증한다: 진행 중인 작업과 현재 저장 상태를 안내하고 PG를 중복 호출하지 않는다. 이후 환불 상세에서 반영 결과를 확인할 수 있다. 테스트 이름 끝에 `(QS-5-15)`를 붙인다.
@@ -217,7 +217,7 @@
 - [X] T102 [US5] [U166] [U167] [U168] [U169] `src/refund/refund-pg-check.service.ts`에 미확정 시도의 확실한 미접수 즉시 재전송을 구현한다. 기존 ID·금액을 사용하고 manualResendCount만 증가시키며 자동 한도를 검사·초기화하지 않는다. 최근 시도가 이미 RETRY_EXHAUSTED·SEND_FAILED·PG_REJECTED로 FAILED이면 US10의 공통 재요청 서비스를 사용한다. 조회 중 새로 확인한 거절은 실패·조치 필요만 기록하고 같은 실행에서 새 요청을 만들지 않는다. 조회 오류·처리 중에는 보내지 않는다.
 - [X] T103 [US5] [U171] [U172] `src/refund/refund.controller.ts`, `src/refund/refund.module.ts`에 POST /refund/:refundId/pg-check와 worker를 연결한다. 본문은 없음/{}만, 클라이언트 금액·시도 ID·결과 입력은 거부한다. PG_RESULT_CONFLICT와 오래된 담당 결과는 추가 지급 없이 최신 상태로 안내한다.
 
-- [ ] T183 [US5] [A34] [A35] [A36] [A37] [A38] [A39] [A40] [A41] [A42] [A43] [A44] [A45] [A46] [A47] [A48] [A49] [A50] [A51] [A52] [A53] [A54] [A55] `test/refund-recovery.e2e-spec.ts`의 사용자 스토리 5 인수 테스트 A34부터 A55까지 22개가 모두 통과하는지 실행해 확인한 뒤에만 이 스토리를 완료로 표시한다.
+- [X] T183 [US5] [A34] [A35] [A36] [A37] [A38] [A39] [A40] [A41] [A42] [A43] [A44] [A45] [A46] [A47] [A48] [A49] [A50] [A51] [A52] [A53] [A54] [A55] `test/refund-recovery.e2e-spec.ts`의 사용자 스토리 5 인수 테스트 A34부터 A55까지 22개가 모두 통과하는지 실행해 확인한 뒤에만 이 스토리를 완료로 표시한다.
 
 **검수 관문**: T073부터 T103까지의 작업과 T183 작업을 마치면 실행 규칙의 Phase 검수 절차에 따라 Codex 검수를 받는다. "통과" 판정 전에는 다음 Phase로 넘어가지 않는다.
 
@@ -229,19 +229,19 @@
 
 ### HTTP 인수 테스트
 
-- [ ] T104 [US6] [A56] E2E: `test/refund-payment-mismatch.e2e-spec.ts`에 명세 6-1의 Given/When으로 요청하고 다음 결과를 검증한다: 결제는 실패로 처리되고, 이용권은 발행되지 않으며, 좌석 선점은 해제되고, PG가 승인한 금액 전액의 환불과 최초 PG 취소 요청이 함께 저장되고 지급을 시작한다. 테스트 이름 끝에 `(QS-6-1)`를 붙인다.
-- [ ] T105 [US6] [A57] E2E: `test/refund-payment-mismatch.e2e-spec.ts`에 명세 6-2의 Given/When으로 요청하고 다음 결과를 검증한다: 환불금 지급 완료로 바뀌고 실패 결제는 성공으로 복구하지 않는다. 테스트 이름 끝에 `(QS-6-2)`를 붙인다.
-- [ ] T106 [US6] [A58] E2E: `test/refund-payment-mismatch.e2e-spec.ts`에 명세 6-3의 Given/When으로 요청하고 다음 결과를 검증한다: 사용자 스토리 5와 같이 처리된다. 테스트 이름 끝에 `(QS-6-3)`를 붙인다.
-- [ ] T107 [US6] [A59] E2E: `test/refund-payment-mismatch.e2e-spec.ts`에 명세 6-4의 Given/When으로 요청하고 다음 결과를 검증한다: 기존처럼 이용권이 발행된다. 테스트 이름 끝에 `(QS-6-4)`를 붙인다.
+- [X] T104 [US6] [A56] E2E: `test/refund-payment-mismatch.e2e-spec.ts`에 명세 6-1의 Given/When으로 요청하고 다음 결과를 검증한다: 결제는 실패로 처리되고, 이용권은 발행되지 않으며, 좌석 선점은 해제되고, PG가 승인한 금액 전액의 환불과 최초 PG 취소 요청이 함께 저장되고 지급을 시작한다. 테스트 이름 끝에 `(QS-6-1)`를 붙인다.
+- [X] T105 [US6] [A57] E2E: `test/refund-payment-mismatch.e2e-spec.ts`에 명세 6-2의 Given/When으로 요청하고 다음 결과를 검증한다: 환불금 지급 완료로 바뀌고 실패 결제는 성공으로 복구하지 않는다. 테스트 이름 끝에 `(QS-6-2)`를 붙인다.
+- [X] T106 [US6] [A58] E2E: `test/refund-payment-mismatch.e2e-spec.ts`에 명세 6-3의 Given/When으로 요청하고 다음 결과를 검증한다: 사용자 스토리 5와 같이 처리된다. 테스트 이름 끝에 `(QS-6-3)`를 붙인다.
+- [X] T107 [US6] [A59] E2E: `test/refund-payment-mismatch.e2e-spec.ts`에 명세 6-4의 Given/When으로 요청하고 다음 결과를 검증한다: 기존처럼 이용권이 발행된다. 테스트 이름 끝에 `(QS-6-4)`를 붙인다.
 
 ### 단위 테스트와 구현
 
-- [ ] T108 [US6] [U173] [U174] [U175] [U176] [U177] [U178] [U179] [U180] [U181] `src/payment/payment.service.spec.ts`에 승인액 불일치·동일 콜백 반복·정상 승인·좌석 배정 실패·취소 저장 중단을 테스트한다.
-- [ ] T109 [US6] [U173] [U174] [U175] [U176] [U177] [U181] `src/payment/payment.service.ts`, `src/payment/payment.repository.ts`에 승인액 불일치 시 approvedAmount 보존·결제 FAILED·이용권 미발행·좌석 선점 해제·PAYMENT 대상 SYSTEM Refund와 최초 PaymentCancel을 같은 트랜잭션으로 저장한다. 원래 요청 금액은 보존한다.
-- [ ] T110 [US6] [U178] [U179] `src/payment/payment.service.ts`, `src/refund/refund-acceptance.service.ts`에서 좌석 배정 실패의 ORDER_ITEM 대상 SYSTEM 환불을 공통 흐름에 연결한다. 같은 승인 사건 중복 생성은 Payment 잠금과 대상 unique로 막고 커밋 뒤 US5 전송·복구를 사용한다.
-- [ ] T111 [US6] [U180] `src/payment/payment.controller.ts`, `src/payment/dto/pg-callback.dto.ts`에 기존 정상 발행 계약과 새 자동 취소 응답을 연결한다. PG 취소 성공 후에도 실패 결제를 SUCCESS로 복원하지 않는지 `test/refund-payment-mismatch.e2e-spec.ts`에서 확인한다.
+- [X] T108 [US6] [U173] [U174] [U175] [U176] [U177] [U178] [U179] [U180] [U181] `src/payment/payment.service.spec.ts`에 승인액 불일치·동일 콜백 반복·정상 승인·좌석 배정 실패·취소 저장 중단을 테스트한다.
+- [X] T109 [US6] [U173] [U174] [U175] [U176] [U177] [U181] `src/payment/payment.service.ts`, `src/payment/payment.repository.ts`에 승인액 불일치 시 approvedAmount 보존·결제 FAILED·이용권 미발행·좌석 선점 해제·PAYMENT 대상 SYSTEM Refund와 최초 PaymentCancel을 같은 트랜잭션으로 저장한다. 원래 요청 금액은 보존한다.
+- [X] T110 [US6] [U178] [U179] `src/payment/payment.service.ts`, `src/refund/refund-acceptance.service.ts`에서 좌석 배정 실패의 ORDER_ITEM 대상 SYSTEM 환불을 공통 흐름에 연결한다. 같은 승인 사건 중복 생성은 Payment 잠금과 대상 unique로 막고 커밋 뒤 US5 전송·복구를 사용한다.
+- [X] T111 [US6] [U180] `src/payment/payment.controller.ts`, `src/payment/dto/pg-callback.dto.ts`에 기존 정상 발행 계약과 새 자동 취소 응답을 연결한다. PG 취소 성공 후에도 실패 결제를 SUCCESS로 복원하지 않는지 `test/refund-payment-mismatch.e2e-spec.ts`에서 확인한다.
 
-- [ ] T184 [US6] [A56] [A57] [A58] [A59] `test/refund-payment-mismatch.e2e-spec.ts`의 사용자 스토리 6 인수 테스트 A56부터 A59까지 4개가 모두 통과하는지 실행해 확인한 뒤에만 이 스토리를 완료로 표시한다.
+- [X] T184 [US6] [A56] [A57] [A58] [A59] `test/refund-payment-mismatch.e2e-spec.ts`의 사용자 스토리 6 인수 테스트 A56부터 A59까지 4개가 모두 통과하는지 실행해 확인한 뒤에만 이 스토리를 완료로 표시한다.
 
 **검수 관문**: T104부터 T111까지의 작업과 T184 작업을 마치면 실행 규칙의 Phase 검수 절차에 따라 Codex 검수를 받는다. "통과" 판정 전에는 다음 Phase로 넘어가지 않는다.
 

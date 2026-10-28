@@ -1090,3 +1090,32 @@ U10~U15를 마친 뒤, 관계 검증의 비교 대상 설정을 생략하면 정
 - 범위 `3c7927f..919cf0b`. 판정 **통과**. 동작상 추가 지적은 없다. 지적된 문서 끝 빈 줄은 이 기록에서 정리했다.
 - 다음 권장 순서: US6(A38·A47, 승인 금액 불일치 자동 취소) → US10 외부 지급(별도 지급 예약·증빙·미지급 종료·초과 검토, A82 포함) → US7 → US8·US9 → 최종.
 
+## US6 승인 금액 불일치의 자동 취소 사이클 (2026-10-29)
+
+- 사용자 결정:
+  1. **PAYMENT 대상 연결**: `payment_cancels.order_item_id`를 nullable로 바꾸고, 환불에 연결된 행은 환불의 대상 상품과 같아야 한다는 DB 검사를 둔다. 다른 테이블과 비교해야 해서 CHECK 대신 검사 트리거 `payment_cancels_refund_target_check`로 구현했다.
+  2. **기존 payment spec 3개 변경**: 불일치 예외 단언 → 수신 확인. 과거 `refundBySystem` 단언 2개 → 새 공통 흐름 단언.
+  3. **seat-type E2E QS-31 변경**: 승인 직후 이용 종료·상품 대상 SYSTEM 환불을 단언한다.
+
+| 동작 | red(결정적 줄) 또는 뮤턴트 | green | 커밋 |
+|---|---|---|---|
+| U365 | 타입 오류(무효) → 일시 캐스트로 실행 시점 확인: `Argument payment is missing`(null 불허) | 스키마 `String?`·`OrderItem?`(`onDelete: Restrict`로 FK 유지), 마이그레이션 DROP NOT NULL | `6a87426` |
+| U366 | `Received promise resolved instead of rejected` | 마이그레이션: 기존 데이터 검증 DO 블록 + 검사 함수·BEFORE INSERT/UPDATE 트리거 | `0548928` |
+| U367 | `RefundPayoutNotActionableError`(PAYMENT 대상 거절) | 새 요청의 대상 상품 = 환불의 대상 상품(마지막 요청으로 대체하던 것 제거) | `62bf517` |
+| U368 | (기존 단언 변경 뒤) `Received promise rejected instead of resolved` — PaymentAmountMismatchError | 불일치 분기에서 예외 대신 수신 확인 | `783f12f` |
+| U176 | 결제 실패·승인액 저장·환불 확정 호출 없음 | `failMismatchAndStartRefund`: 결제 잠금(`lockForApproval`) → `failApprovalMismatch`(FAILED·approvedAmount) → 선점 해제 → `RefundSystemService.acceptPaymentMismatch`(`createPaymentTargetRefund`: PAYMENT·SYSTEM·ACCEPTED·PENDING·시도 1·전송 담당) → 커밋 뒤 전송 | `8f69ea1` |
+| U174 | 첫 통과 → 뮤턴트(불일치 뒤 승인 흐름 진행) 1 failed | — | `270552e` |
+| U178 | `PaymentAlreadyClosedError` | 실패 결제·같은 승인액의 성공 콜백은 수신 확인만(동시 콜백은 결제 잠금 뒤 재확인) | `270552e` |
+| U179 | (기존 단언 (2)(3) 변경 뒤) `acceptSeatAssignmentFailure` 호출 없음. 전체 suites에서 seat-type QS-31 red → 사용자 결정으로 단언 변경 | 승인 트랜잭션에서 미배정 이용권마다 `acceptSeatAssignmentFailure`(`findLockedTarget` + `confirmAcceptedRefund`, SYSTEM·실행자 null·실결제액) → 커밋 뒤 `sendSystemRefund`(실패 시 SYSTEM_REFUND_REQUEST_FAILED 로그). `createAcceptedRefund`는 SYSTEM이면 이용 종료 동의 시각 null. 결제 서비스의 과거 `RefundService` 의존 제거 | `8eb545b` |
+| A56~A59·U181·A38·A47 | 첫 통과 → 뮤턴트: 선점 해제 생략 / 환불 금액 변경(QS-6-2, 첫 뮤턴트인 시도 금액 변경은 생존 — 지급 완료 판정이 환불 금액 기준이라서) / 시도 금액 변경(QS-6-3) / 같은 금액을 불일치로 처리 / 환불 확정을 트랜잭션 밖으로 / 자동 재전송 금지 / 실패 알림 생략 → 각 1 failed | — | `25c31eb` |
+
+- 이탈·메모:
+  - U173·U175·U177은 U176의 저장 단언, 변경한 기존 테스트, 기존 승인 테스트로 확인했다.
+  - seat-type QS-31의 "PG 취소 확정 뒤 지급 완료" 단계는 뺐다. 그 파일은 PG 대역 없이 미연동 `PgService`를 써서 최초 전송이 SEND_FAILED가 된다. 이 단계는 QS-6-2에서 PG 대역으로 검증한다(사용자 결정 내용과 다른 점).
+  - 결제 콜백 응답은 기존 201을 유지했다. 계약 §7 문구("200 수신 확인")와 다르며, 바꾸려면 기존 E2E 도우미·테스트의 기대 상태도 함께 바뀐다. 보고 항목이다.
+  - `payment.service.ts`의 기존 린트 오류 1건(`requestPayment`의 `throw Error;`)은 범위 밖이라 그대로 두었다. 커밋 때 오류 개수가 늘지 않았음을 확인했다.
+  - U176·U178 커밋 직전, 테스트 파일의 타입 단언만 고친 뒤(로직 변경 없음) 직전 green 결과로 커밋했다.
+  - E2E 도우미: `issueTicket`에서 `orderAwaitingApproval`을 분리했다(동작 동일).
+  - US5 인수 A34~A55가 모두 DONE이 되어 T183을 체크했다.
+- 결과: 단위 526, E2E 140 passed(`25c31eb`).
+

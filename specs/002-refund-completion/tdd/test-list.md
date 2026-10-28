@@ -71,7 +71,7 @@ suite_baseline: green
 | A35 | Given 응답 없음으로 환불금 지급 처리 중일 때, When 정해진 시간이 지나고 거래조회 결과가 확정된 환불 금액의 취소 완료이면, Then 환불금 지급 완료와 실제 금액의 원장 기록을 함께 반영한다. 이용 종료·좌석 해제는 반복하지 않는다. | QS-5-2 | example | DONE | `test/refund-recovery.e2e-spec.ts` |
 | A36 | Given 2번과 같을 때, When 거래조회 결과가 PG 거절이면, Then PG 취소 요청 실패와 환불금 지급 조치 필요를 기록하고 알린다. 확정된 환불 금액과 이용 종료는 유지한다. | QS-5-3 | example | DONE | `test/refund-recovery.e2e-spec.ts` |
 | A37 | Given 고객 환불이나 매장 환불의 PG 응답이 없을 때, When 거래조회로 PG 미접수가 확인되고 재전송 한도가 남아 있으면, Then 같은 환불 건에서 같은 금액으로 다시 보내고 환불금 지급 처리 중으로 둔다. | QS-5-4 | example | DONE | `test/refund-recovery.e2e-spec.ts` |
-| A38 | Given 시스템 자동 취소의 PG 응답이 없을 때, When 거래조회로 PG 미접수가 확인되고 재전송 한도가 남아 있으면, Then 4번과 같은 규칙으로 같은 금액을 다시 보낸다. | QS-5-5 | example | PENDING | 7b: US6 시스템 자동 취소 뒤 |
+| A38 | Given 시스템 자동 취소의 PG 응답이 없을 때, When 거래조회로 PG 미접수가 확인되고 재전송 한도가 남아 있으면, Then 4번과 같은 규칙으로 같은 금액을 다시 보낸다. | QS-5-5 | example | DONE | `test/refund-recovery.e2e-spec.ts` › … (QS-5-5) |
 | A39 | Given 어느 경로든 자동 재전송 한도를 모두 소진했을 때, When 한도 횟수까지 보낸 취소 요청이 PG에 접수되지 않았음을 거래조회로 확인하면, Then 해당 PG 취소 요청을 실패로 종료해 자동 조회·재전송 대상에서 제외하고, 운영자의 지급 재처리가 필요한 환불로 남겨 알린다. 환불 금액과 이용 종료는 유지한다. 조회가 실패하거나 PG가 처리 중이면 시도 실패로 종료하지 않는다. | QS-5-6 | example | DONE | `test/refund-recovery.e2e-spec.ts` |
 | A40 | Given PG 결제 취소 결과가 미확정일 때, When 거래조회 자체가 실패하면, Then 환불금 지급 성공·실패로 단정하지 않고 정해진 간격으로 다시 조회한다. 다른 PG 취소 요청과 별도 환불금 지급은 허용하지 않는다. | QS-5-7 | example | DONE | `test/refund-recovery.e2e-spec.ts` |
 | A41 | Given 거래조회가 연속 실패했을 때, When 정해진 횟수에 도달하면, Then PG 취소 결과 확인 실패로 표시하고 운영자에게 알린다. 환불금은 미지급·결과 확인 중으로 남고 이용 종료는 유지된다. | QS-5-8 | example | DONE | `test/refund-recovery.e2e-spec.ts` |
@@ -80,7 +80,7 @@ suite_baseline: green
 | A44 | Given PG 취소 결과 확인 실패 건이 쌓였을 때, When 운영자가 전체 재확인을 실행하면, Then 자동 재확인 예정 시각을 기다리지 않고 PG 취소 결과 확인 실패 건을 정해진 건수씩 묶어 조회한다. 재조회 실행은 환불 확정이나 환불금 지급 완료를 뜻하지 않는다. | QS-5-10a | example | DONE | `test/refund-recovery.e2e-spec.ts` |
 | A45 | Given PG 취소 결과 확인 실패 건이 있을 때, When 고객지원 계정이 아닌 사용자가 전체 재확인을 실행하면, Then 권한 오류로 거부된다. | QS-5-10b | example | DONE | `test/refund-recovery.e2e-spec.ts` |
 | A46 | Given 확정된 환불 금액의 PG 취소 요청이 있을 때, When PG가 다른 금액의 취소 완료를 알리면, Then 실제 환불금 지급액과 원장을 함께 기록하고 확정된 환불 금액은 바꾸지 않는다. 부족액·초과액을 구분해 환불금 지급 조치 필요로 두고 운영자에게 알린다. | QS-5-11 | example | DONE | `test/refund-recovery.e2e-spec.ts` |
-| A47 | Given 시스템 자동 취소 건일 때, When 환불금 지급 결과를 받지 못하면, Then 2~11번의 같은 조회·재전송·미지급 관리 규칙을 적용한다. 승인 금액 불일치 건은 이용권을 만들지 않는다. | QS-5-12 | example | PENDING | 7b: US6 승인 금액 불일치 뒤 |
+| A47 | Given 시스템 자동 취소 건일 때, When 환불금 지급 결과를 받지 못하면, Then 2~11번의 같은 조회·재전송·미지급 관리 규칙을 적용한다. 승인 금액 불일치 건은 이용권을 만들지 않는다. | QS-5-12 | example | DONE | `test/refund-recovery.e2e-spec.ts` › … (QS-5-12) |
 | A48 | Given 해당 매장 점주 또는 운영자가 조회할 수 있는 환불에 미확정 PG 취소 요청이 있고 최근 조회나 진행 중 작업이 없을 때, When 그 환불의 PG 처리 결과 확인을 실행하고 PG가 확정된 환불 금액의 취소 완료를 응답하면, Then 자동 조회 예정 시각 전이라도 해당 시도 한 건만 즉시 조회하고, 환불금 지급 완료·실제액·원장을 한 번 반영해 결과를 보여준다. | QS-5-13 | example | DONE | `test/refund-recovery.e2e-spec.ts` |
 | A49 | Given 결과가 미확정인 PG 취소 요청의 개별 확인을 실행했을 때, When PG가 아직 처리 중이라고 응답하거나 거래조회가 실패하면, Then 각각 처리 중 또는 결과 확인 불가로 안내하고 지급을 확정하지 않는다. 기존 조회 일정·오류 처리 규칙으로 다시 확인하며 다른 환불금 지급 차단을 유지한다. | QS-5-14 | example | DONE | `test/refund-recovery.e2e-spec.ts` |
 | A50 | Given 그 PG 취소 요청을 전송·조회하는 자동 작업이나 다른 개별 확인이 진행 중일 때, When 점주 또는 운영자가 같은 환불의 PG 확인을 실행하면, Then 진행 중인 작업과 현재 저장 상태를 안내하고 PG를 중복 호출하지 않는다. 이후 환불 상세에서 반영 결과를 확인할 수 있다. | QS-5-15 | example | DONE | `test/refund-recovery.e2e-spec.ts` |
@@ -89,10 +89,10 @@ suite_baseline: green
 | A53 | Given 환불금 지급 완료·0원 환불·별도 환불금 지급 예약·금액 불일치 검토 등으로 개별 PG 조회 대상이 아닌 환불이 있을 때, When 점주 또는 운영자가 개별 PG 확인을 실행하면, Then PG를 호출하지 않고 저장된 상태를 보여준다. 별도 환불금 지급 예약과 기존 실패 이력은 바꾸지 않는다. 최근 시도가 한도 소진·전송 전 실패·PG 거절로 실패한 환불은 개별 조회 대상이므로 19번·스토리 10의 1a번으로 처리한다. | QS-5-18 | example | DONE | `test/refund-recovery.e2e-spec.ts` › … (QS-5-18) 2개(7a 저장 상태, 실패 시도 경로·예약) |
 | A54 | Given 점주 또는 운영자가 권한 범위 안 환불을 개별 확인할 때, When 미확정 시도의 PG 미접수 또는 이미 실패가 확정된 시도의 미접수·거절 확정이 확인되면, Then 자동 재전송 횟수와 관계없이 확정된 환불 금액으로 즉시 다시 보낸다. 미확정 시도는 기존 PG 취소 요청 식별자로 보내고, 최근 시도가 한도 소진·전송 전 실패·PG 거절로 이미 실패한 경우는 FR-057의 조건을 확인한 뒤 실패 이력을 보존한 채 같은 환불 아래 새 식별자를 발급한 PG 취소 요청을 기록해 보낸다. 별도 버튼·추가 대기·반복 조회를 요구하지 않는다. 실제 지급액·다른 미확정 지급·지급 방식·활성 예약·작업 담당을 확인해 중복 지급을 막고 결과와 실행자를 기록한다. 조회 오류이면 보내지 않으며, 실패 확정 건에서 처리 중·취소 성공 등 모순 결과가 오면 운영자 확인 대상으로 남기고 추가 지급을 차단한다. 미확정 요청의 조회에서 거절이 새로 확인되면 실패·조치 필요만 기록하고 같은 실행에서 새 요청을 만들지 않는다. | QS-5-19 | example | DONE | `test/refund-recovery.e2e-spec.ts` › … (QS-5-19) 2개(7a 미확정 시도, 실패 시도 새 요청·새로 확인한 거절) |
 | A55 | Given 같은 시도의 직전 조회가 끝났고 그 조회 시작 시각부터 정해진 간격이 아직 지나지 않았을 때, When 점주 또는 운영자가 개별 PG 확인을 반복 실행하면, Then 최근 조회 시각과 저장된 상태를 보여주고 PG를 추가 호출하지 않는다. 점주·운영자·자동 작업의 조회 시각을 같은 시도 기준으로 공유한다. | QS-5-20 | example | DONE | `test/refund-recovery.e2e-spec.ts` |
-| A56 | Given 결제를 요청한 주문이 있을 때, When PG가 결제 금액과 다른 금액으로 승인했다고 알리면, | QS-6-1 | example | PENDING | |
-| A57 | Given 1번의 자동 취소 환불이 확정됐을 때, When PG가 확정된 환불 금액의 취소를 확정하면, Then 환불금 지급 완료로 바뀌고 실패 결제는 성공으로 복구하지 않는다. | QS-6-2 | example | PENDING | |
-| A58 | Given 1번의 자동 취소가 응답 없음일 때, When 정해진 시간이 지나면, Then 사용자 스토리 5와 같이 처리된다. | QS-6-3 | example | PENDING | |
-| A59 | Given 결제 금액과 같은 금액으로 승인됐을 때, When 승인 결과를 받으면, Then 기존처럼 이용권이 발행된다. | QS-6-4 | example | PENDING | |
+| A56 | Given 결제를 요청한 주문이 있을 때, When PG가 결제 금액과 다른 금액으로 승인했다고 알리면, | QS-6-1 | example | DONE | `test/refund-payment-mismatch.e2e-spec.ts` › … (QS-6-1) |
+| A57 | Given 1번의 자동 취소 환불이 확정됐을 때, When PG가 확정된 환불 금액의 취소를 확정하면, Then 환불금 지급 완료로 바뀌고 실패 결제는 성공으로 복구하지 않는다. | QS-6-2 | example | DONE | `test/refund-payment-mismatch.e2e-spec.ts` › … (QS-6-2) |
+| A58 | Given 1번의 자동 취소가 응답 없음일 때, When 정해진 시간이 지나면, Then 사용자 스토리 5와 같이 처리된다. | QS-6-3 | example | DONE | `test/refund-payment-mismatch.e2e-spec.ts` › … (QS-6-3) |
+| A59 | Given 결제 금액과 같은 금액으로 승인됐을 때, When 승인 결과를 받으면, Then 기존처럼 이용권이 발행된다. | QS-6-4 | example | DONE | `test/refund-payment-mismatch.e2e-spec.ts` › … (QS-6-4) |
 | A60 | Given 환불금 지급 처리 중인 환불이 있을 때, When 올바른 서명을 담은 환불 결과 콜백이 로그인 없이 오면, Then 결과가 반영된다. | QS-7-1 | example | PENDING | |
 | A61 | Given 환불금 지급 처리 중인 환불이 있을 때, When 서명이 없거나 틀린 환불 결과 콜백이 오면, Then 거부되고 환불금 지급 상태는 바뀌지 않는다. | QS-7-2 | example | PENDING | |
 | A62 | Given 환불금 지급 처리 중인 환불이 있을 때, When 로그인한 사용자가 서명 없이 콜백을 보내면, Then 거부된다. | QS-7-3 | example | PENDING | |
@@ -484,15 +484,15 @@ suite_baseline: green
 
 | id | behavior | traces | kind | state | test |
 |---|---|---|---|---|---|
-| U173 | 승인 금액이 요청 금액과 다르면 결제가 FAILED가 된다 | FR-030 | example | PENDING | |
+| U173 | 승인 금액이 요청 금액과 다르면 결제가 FAILED가 된다 | FR-030 | example | DONE | `src/payment/payment.service.spec.ts` › 승인 금액이 다르면 같은 트랜잭션에서 실제 승인액을 보존하고…(failApprovalMismatch) 및 `test/refund-payment-mismatch.e2e-spec.ts` › … (QS-6-1) 결제 FAILED |
 | U174 | 승인 금액이 요청 금액과 다르면 이용권이 발행되지 않는다 | FR-030 | example | DONE | `src/payment/payment.service.spec.ts` › 승인 금액이 다르면 이용권을 발행하지 않는다 |
 | U175 | 승인 금액이 요청 금액과 다르면 좌석 선점이 해제된다 | FR-030 | example | DONE | `src/payment/payment.service.spec.ts` › 승인 금액이 다르면 선점을 PAYMENT_FAILED로 해제하고 콜백은 수신 확인으로 끝난다 |
 | U176 | 승인 금액 불일치 시 approvedAmount와 승인액 전액의 SYSTEM·PAYMENT 대상 환불·최초 PG 취소 요청이 저장된다 | FR-030 | example | DONE | `src/payment/payment.service.spec.ts` › 승인 금액이 다르면 같은 트랜잭션에서 실제 승인액을 보존하고…(저장 결과는 QS-6-1 E2E) |
 | U177 | 승인 금액이 요청 금액과 같으면 기존대로 이용권이 발행된다 | QS-6-4 | example | DONE | `src/payment/payment.service.spec.ts` › 승인 성공 시 이용권 좌석 타입은 주문 항목 스냅샷을 따른다 등 기존 승인 테스트(기존 발행 흐름 유지) |
 | U178 | 같은 승인 불일치 콜백이 반복돼도 SYSTEM 환불은 1건이다 | FR-030 | example | DONE | `src/payment/payment.service.spec.ts` › 이미 반영한 같은 승인 금액 불일치 콜백이 다시 오면 예외 없이 끝나고 시스템 환불을 다시 만들지 않는다(동시 콜백은 결제 잠금 뒤 재확인) |
 | U179 | 좌석 배정 실패 결제는 주문 항목 대상 SYSTEM 환불로 지급을 시작한다 | FR-028 | example | DONE | `src/payment/payment.service.spec.ts` › 좌석을 확정하지 못한 이용권은 승인과 같은 트랜잭션에서 상품 대상 시스템 환불로 확정하고…, 좌석 배정 실패 환불의 PG 전송이 커밋 뒤 예외를 던져도…; `test/seat-type.e2e-spec.ts` QS-31(새 계약 단언, 사용자 결정) |
-| U180 | 자동 취소 PG 성공 뒤에도 결제는 FAILED로 남는다 | FR-030 | example | PENDING | |
-| U181 | 자동 취소 저장 중 중단되면 결제·이용권·환불 어느 것도 바뀌지 않는다 | FR-030 | example | PENDING | |
+| U180 | 자동 취소 PG 성공 뒤에도 결제는 FAILED로 남는다 | FR-030 | example | DONE | `test/refund-payment-mismatch.e2e-spec.ts` › … (QS-6-2) 결제 FAILED 유지 |
+| U181 | 자동 취소 저장 중 중단되면 결제·이용권·환불 어느 것도 바뀌지 않는다 | FR-030 | example | DONE | `test/refund-payment-mismatch.e2e-spec.ts` › 자동 취소 환불 저장 중 오류로 중단되면 결제·좌석 선점·환불 어느 것도 바뀌지 않는다 |
 
 ### `src/refund/refund-retry.service.ts, src/refund/refund-operations.service.ts`
 
