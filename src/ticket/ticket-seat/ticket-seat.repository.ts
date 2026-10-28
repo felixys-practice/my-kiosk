@@ -1,3 +1,4 @@
+import { activePauseWhere } from '../ticket-pause/active-pause';
 import { Injectable } from '@nestjs/common';
 import {
   SeatType,
@@ -178,7 +179,7 @@ export class TicketSeatRepository {
     tx: TransactionClient,
   ): Promise<boolean> {
     const pause = await tx.ticketPause.findFirst({
-      where: { ticketId, resumedAt: null },
+      where: { ticketId, ...activePauseWhere },
       select: { id: true },
     });
     return pause !== null;

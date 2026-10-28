@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
 import request from 'supertest';
 import {
   PaymentStatus,
@@ -262,5 +262,35 @@ describe('고객 환불 (E2E)', () => {
     }).expect(409);
 
     expect(res.body.error.code).toBe('REFUND_IN_PROGRESS');
+  });
+
+  it('환불로 닫힌 정지 기록은 주문·이용권 조회에서 진행 중 정지로 보이지 않는다', async () => {
+    const issued = await ctx.issueTimeTicket();
+    await ctx.prisma.ticketPause.create({
+      data: {
+        ticketId: issued.ticketId,
+        pausedAt: new Date(Date.now() - 60_000),
+        pausedBy: ctx.customer.id,
+      },
+    });
+    await requestRefund({
+      ticketId: issued.ticketId,
+      consentToTerminateTicket: true,
+    }).expect(202);
+
+    const { body: orders } = await request(ctx.server)
+      .get('/orders')
+      .query({ id: issued.orderId })
+      .set('Authorization', `Bearer ${ctx.customer.token}`)
+      .expect(200);
+    const { body: ticket } = await request(ctx.server)
+      .get(`/tickets/${issued.ticketId}`)
+      .set('Authorization', `Bearer ${ctx.customer.token}`)
+      .expect(200);
+
+    expect({
+      orderTicketIsPaused: orders.data[0].orderItems[0].ticket.isPaused,
+      ticketPausedAt: ticket.data.pausedAt ?? null,
+    }).toEqual({ orderTicketIsPaused: false, ticketPausedAt: null });
   });
 });

@@ -1,3 +1,4 @@
+import { activePauseWhere } from 'src/ticket/ticket-pause/active-pause';
 import { Injectable } from '@nestjs/common';
 import {
   LedgerStatus,
@@ -76,7 +77,7 @@ export class RefundRepository {
           select: { id: true },
         },
         ticketPauses: {
-          where: { resumedAt: null, closedAt: null },
+          where: activePauseWhere,
           select: { id: true },
         },
         seatAssignments: {
@@ -171,7 +172,7 @@ export class RefundRepository {
   ): Promise<void> {
     // 재개 없이 닫는다(resumedAt은 그대로 null, 이용 시간을 되돌리지 않는다)
     await tx.ticketPause.updateMany({
-      where: { ticketId, resumedAt: null, closedAt: null },
+      where: { ticketId, ...activePauseWhere },
       data: {
         closedAt: now,
         closeReason: TicketPauseCloseReason.REFUND_TERMINATED,
