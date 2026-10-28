@@ -1669,4 +1669,41 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       enqueued: 0,
     });
   });
+
+  it('장애 복구 확인은 다른 작업자가 맡고 있으면 건너뛰고, 직접 실행한 뒤에는 담당을 내려놓는다', async () => {
+    await resetRecoveryControl();
+    const year = recoveryYear--;
+    await createQueryFailed(new Date(Date.UTC(year, 0, 1)));
+    const now = new Date(Date.UTC(year, 1, 1));
+    pgGateway.inquireCancel.mockResolvedValue({
+      result: 'QUERY_ERROR',
+      reason: 'PG 장애 지속',
+    });
+    const recovery = app.get(RefundRecoveryService);
+    await prisma.refundRecoveryControl.update({
+      where: { id: 'PG_RESULT_RECOVERY' },
+      data: {
+        claimToken: 'other-worker',
+        claimUntil: new Date(now.getTime() + 30_000),
+      },
+    });
+
+    await recovery.recoverQueryFailed(now);
+    const whileOtherRunning = pgGateway.inquireCancel.mock.calls.length;
+    // 다른 작업자의 처리 기한이 지난 뒤에는 직접 맡아 실행한다
+    await recovery.recoverQueryFailed(new Date(now.getTime() + 31_000));
+
+    const control = await prisma.refundRecoveryControl.findFirstOrThrow();
+    expect({
+      whileOtherRunning,
+      afterExpiry: pgGateway.inquireCancel.mock.calls.length,
+      claimToken: control.claimToken,
+      claimUntil: control.claimUntil,
+    }).toEqual({
+      whileOtherRunning: 0,
+      afterExpiry: 1,
+      claimToken: null,
+      claimUntil: null,
+    });
+  });
 });

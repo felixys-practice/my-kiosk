@@ -62,6 +62,27 @@ export class RefundRecoveryService {
    * @param now 실행 시각
    */
   async recoverQueryFailed(now: Date): Promise<void> {
+    // 복구 작업 담당을 잡는다. 다른 작업자가 처리 기한 안에서 맡고 있으면 이번 실행은 건너뛴다
+    const claimToken = randomUUID();
+    await this.workRepository.getRecoveryControl();
+    const claimed = await this.workRepository.claimRecoveryControl(
+      claimToken,
+      now,
+      new Date(now.getTime() + this.config('workLeaseSeconds') * 1000),
+    );
+    if (!claimed) return;
+    try {
+      await this.runRecovery(now);
+    } finally {
+      await this.workRepository.releaseRecoveryControl(claimToken);
+    }
+  }
+
+  /**
+   * 복구 제어 모드에 따라 PROBE 1건 또는 BATCH 처리 단위를 조회한다
+   * @param now 실행 시각
+   */
+  private async runRecovery(now: Date): Promise<void> {
     const control = await this.workRepository.getRecoveryControl();
     if (control.mode === RefundRecoveryMode.BATCH) {
       await this.runRecoveryBatch(control.batchCutoffAt ?? now, now);

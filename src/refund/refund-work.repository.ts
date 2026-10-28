@@ -47,6 +47,39 @@ export class RefundWorkRepository {
   }
 
   /**
+   * 복구 작업 담당을 잡는다(담당이 없거나 처리 기한이 지났을 때만)
+   * @param claimToken 새 담당 토큰
+   * @param now 현재 시각
+   * @param claimUntil 처리 기한
+   * @returns 담당을 잡았으면 true
+   */
+  async claimRecoveryControl(
+    claimToken: string,
+    now: Date,
+    claimUntil: Date,
+  ): Promise<boolean> {
+    const { count } = await this.prisma.refundRecoveryControl.updateMany({
+      where: {
+        id: recoveryControlId,
+        OR: [{ claimUntil: null }, { claimUntil: { lte: now } }],
+      },
+      data: { claimToken, claimUntil },
+    });
+    return count === 1;
+  }
+
+  /**
+   * 맡았던 복구 작업 담당을 내려놓는다(아직 자기 담당일 때만)
+   * @param claimToken 담당 토큰
+   */
+  async releaseRecoveryControl(claimToken: string): Promise<void> {
+    await this.prisma.refundRecoveryControl.updateMany({
+      where: { id: recoveryControlId, claimToken },
+      data: { claimToken: null, claimUntil: null },
+    });
+  }
+
+  /**
    * 복구 제어 상태를 바꾼다
    * @param update 바꿀 모드·다음 확인 시각·BATCH 기준 시각
    */
