@@ -173,17 +173,19 @@ export function evaluateStoreRefund(
   if (candidate && input.amount > candidate.paidAmount) {
     return { eligible: false, code: 'REFUND_AMOUNT_EXCEEDED' };
   }
-  // 어긴 규칙이 없는(기한 안 미사용) 이용권은 실결제액 전액만 환불할 수 있다
-  if (
-    candidate &&
-    unusedRuleViolations(candidate.ticket, now).length === 0 &&
-    input.amount !== candidate.paidAmount
-  ) {
-    return { eligible: false, code: 'UNUSED_TICKET_FULL_REFUND_REQUIRED' };
-  }
   // 사유는 앞뒤 공백을 지운 값으로 본다. 공백만 있으면 사유가 없는 것이다
   const reason = input.reason?.trim() || null;
-  // 사용 이력이 있으면 사유가 필수다
+  // 어긴 규칙이 없는(기한 안 미사용) 이용권은 실결제액 전액만 환불할 수 있고 사유는 선택이다
+  const unusedInDeadline =
+    candidate !== null &&
+    unusedRuleViolations(candidate.ticket, now).length === 0;
+  if (unusedInDeadline) {
+    if (input.amount !== candidate.paidAmount) {
+      return { eligible: false, code: 'UNUSED_TICKET_FULL_REFUND_REQUIRED' };
+    }
+    return { eligible: true, amount: input.amount, reason };
+  }
+  // 사용 이력이 있거나 기한이 지났으면 사유가 필수다
   if (reason === null) {
     return { eligible: false, code: 'REFUND_REASON_REQUIRED' };
   }

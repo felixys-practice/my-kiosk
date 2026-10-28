@@ -398,4 +398,17 @@ describe('evaluateStoreRefund', () => {
       code: 'UNUSED_TICKET_FULL_REFUND_REQUIRED',
     });
   });
+  it('기한 안 미사용 이용권은 전액이면 사유 없이 확정된다', () => {
+    const decision = evaluateStoreRefund(
+      usedCandidate({}, { activatedAt: null }),
+      { amount: paidAmount },
+      now,
+    );
+
+    expect(decision).toEqual({
+      eligible: true,
+      amount: paidAmount,
+      reason: null,
+    });
+  });
 });
