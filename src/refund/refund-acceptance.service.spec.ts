@@ -220,4 +220,31 @@ describe('RefundAcceptanceService', () => {
       amount: 10000,
     });
   });
+
+  it('확정 트랜잭션 커밋이 실패하면 PG가 호출되지 않는다', async () => {
+    const commitFailure = {
+      execute: async (
+        _command: unknown,
+        handler: (t: TransactionClient) => Promise<unknown>,
+      ) => {
+        await handler(tx);
+        throw new Error('커밋 실패');
+      },
+    } as unknown as RefundIdempotencyService;
+    const failingService = new RefundAcceptanceService(
+      repository as unknown as RefundRepository,
+      locking as unknown as RefundLockingRepository,
+      seatAssignment as unknown as SeatAssignmentService,
+      commitFailure,
+      pgGateway,
+    );
+
+    await expect(
+      failingService.acceptCustomerRefund(customer, {
+        ticketId,
+        consentToTerminateTicket: true,
+      }),
+    ).rejects.toThrow('커밋 실패');
+    expect(pgGateway.sendCancel).not.toHaveBeenCalled();
+  });
 });
