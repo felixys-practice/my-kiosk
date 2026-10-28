@@ -40,6 +40,7 @@ import { RefundRecoveryService } from './refund-recovery.service';
 import { RefundWorkRepository } from './refund-work.repository';
 import { RefundPgCheckService } from './refund-pg-check.service';
 import { RefundRetryService } from './refund-retry.service';
+import { RefundOperationsService } from './refund-operations.service';
 
 /**
  * 환불금 지급 결과 공통 처리를 실제 PostgreSQL에서 확인한다 (US4, tasks T068~T071)
@@ -2706,6 +2707,64 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
         requestedById: managerId,
         retryReason: '개별 확인에서 PG 미접수 확인 후 재시도',
         manualResendCount: 0,
+      });
+    });
+  });
+
+  describe('별도 환불금 지급', () => {
+    const reserveReason = 'PG 원인 확인 후 계좌 이체로 지급';
+
+    it('별도 지급 예약은 미지급액과 같은 금액을 RESERVED로 저장하고 환불 지급 방식을 MANUAL로 바꾼다', async () => {
+      const failed = await createFailedRefund(
+        PaymentCancelFailureCode.PG_REJECTED,
+      );
+
+      const response = await app
+        .get(RefundOperationsService)
+        .reserveManualPayout(manager(), failed.refundId, {
+          amount: refundAmount,
+          reason: reserveReason,
+          idempotencyKey: `reserve-${randomUUID()}`,
+        });
+
+      const payouts = await prisma.manualRefundPayout.findMany({
+        where: { refundId: failed.refundId },
+      });
+      const refund = await prisma.refund.findUniqueOrThrow({
+        where: { id: failed.refundId },
+      });
+      expect({
+        response: { status: response.status, body: response.body },
+        payouts: payouts.map((payout) => ({
+          status: payout.status,
+          amount: payout.amount,
+          reservedById: payout.reservedById,
+          reason: payout.reason,
+        })),
+        refund: [refund.payoutStatus, refund.payoutMethod, refund.paidAmount],
+      }).toEqual({
+        response: {
+          status: 201,
+          body: {
+            refundId: failed.refundId,
+            payoutId: payouts[0]?.id,
+            status: ManualRefundPayoutStatus.RESERVED,
+            amount: refundAmount,
+          },
+        },
+        payouts: [
+          {
+            status: ManualRefundPayoutStatus.RESERVED,
+            amount: refundAmount,
+            reservedById: managerId,
+            reason: reserveReason,
+          },
+        ],
+        refund: [
+          RefundPayoutStatus.ACTION_REQUIRED,
+          RefundPayoutMethod.MANUAL,
+          0,
+        ],
       });
     });
   });

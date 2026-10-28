@@ -26,6 +26,8 @@ import { RefundRecoveryController } from './refund-recovery.controller';
 import { RefundPgCheckService } from './refund-pg-check.service';
 import { RefundRetryService } from './refund-retry.service';
 import { RefundSystemService } from './refund-system.service';
+import { RefundOperationsService } from './refund-operations.service';
+import { RefundOperationsRepository } from './refund-operations.repository';
 import { RefundOperationsController } from './refund-operations.controller';
 import { RefundEventRepository } from './refund-event.repository';
 import { RefundLedgerRepository } from 'src/ledger/refund-ledger.repository';
@@ -63,6 +65,8 @@ import { RefundLedgerRepository } from 'src/ledger/refund-ledger.repository';
     RefundPgCheckService,
     RefundRetryService,
     RefundSystemService,
+    RefundOperationsService,
+    RefundOperationsRepository,
   ],
   controllers: [
     RefundController,

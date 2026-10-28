@@ -182,3 +182,13 @@ export class RefundPartialPayoutRequiresManualError extends DomainConflictError 
     this.name = 'RefundPartialPayoutRequiresManualError';
   }
 }
+
+/** 별도 지급 예약 금액이 미지급액과 다름 (400) */
+export class RefundOutstandingAmountMismatchError extends DomainBadRequestError {
+  readonly code = 'REFUND_OUTSTANDING_AMOUNT_MISMATCH';
+
+  constructor() {
+    super('예약 금액은 현재 미지급액과 같아야 합니다');
+    this.name = 'RefundOutstandingAmountMismatchError';
+  }
+}
