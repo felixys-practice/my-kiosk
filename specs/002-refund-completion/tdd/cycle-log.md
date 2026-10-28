@@ -722,3 +722,26 @@ U10~U15를 마친 뒤, 관계 검증의 비교 대상 설정을 생략하면 정
   - 서명 인증은 US7이다.
   - PAYMENT 대상 PaymentCancel.orderItemId 표현 결정은 US6 전에 한다(콜백 DTO의 null 허용은 이번에 완료).
 - 결과: 단위 387 passed, E2E 74 passed(`f003079`). 스위트 실행 중 E2E 간헐 실패 4회(ticket-pause 426·404, seat-type QS-10 404·QS-3 socket hang up)가 있었고 모두 재실행에서 통과했다.
+
+## Phase 6 Codex 재검수 1차 (2026-10-28)
+
+- 범위: `ca147d3..b05d0f6`
+- 판정: **수정 필요**. P1 1건, P2 2건, 권고 1건이다.
+  1. [P1] `orderItemId`를 생략하면(undefined) 서비스가 대상 비교를 건너뛴다. 상품 대상 환불이 PAID가 되는 것을 재현했다.
+  2. [P2] 서로 다른 환불이 같은 거래 ID로 사전 확인을 함께 통과하면 DB unique 위반이 503 REFUND_STORAGE_UNAVAILABLE로 바뀐다. 409 PG_CALLBACK_TARGET_MISMATCH여야 한다.
+  3. [P2] 모순 처리 뒤 반환값이 처리 전 상태(PAID)다. DB에는 ACTION_REQUIRED가 저장된다.
+  - 권고: 모순 거래 로그에 식별자만 있다. 대사할 수 있게 기존 결과와 새 통보의 종류·실제액·거래 ID를 남긴다.
+- Codex 실행: DB 없는 재현, DTO·필터 테스트 11개 통과. 공유 DB 테스트는 실행하지 않았다.
+
+## 사이클: Phase 6 재검수 1차 수정 (U328~U331)
+
+| 동작 | 테스트 | red | green·검증 | 커밋 |
+|---|---|---|---|---|
+| U330 | 모순 처리 반환 상태 = 저장된 상태(ACTION_REQUIRED) | payoutStatus PAID | 모순 분기 반환에 ACTION_REQUIRED | `8a6de9b` |
+| U328 | (E2E) orderItemId 생략 콜백 → 409 PG_CALLBACK_TARGET_MISMATCH, 반영 없음 | 첫 통과(HTTP 경로는 컨트롤러 `?? null`이 이미 정규화) → 뮤턴트(컨트롤러·서비스 정규화 모두 제거) `expected 409, got 200` | `applyCallback`에서도 `?? null`로 정규화(서비스 직접 호출 우회 방지) | `9c4bda6` |
+| U329 | 동시 사용으로 거래 ID unique 위반 → 409(503 아님), 반영 없음 | Received constructor: RefundStorageUnavailableError | `applyPgResult` 트랜잭션에 `.catch(rethrowCancelTransactionConflict)`: P2002·PaymentCancel·pg_transaction_id면 연결 불일치. 경쟁은 사전 확인 스파이(false 1회)로 재현했고, 실제 DB unique 위반이 났다 | `f03bb62` |
+| U331 | 모순 거래 로그 metadata에 stored(종류·실제액·거래 ID)·received | stored·received 없음 | `recordResultConflict`가 새 결과를 받아 로그에 함께 기록 | `adf241c` |
+
+- Prisma 7 어댑터의 unique 위반은 컬럼이 `meta.driverAdapterError.cause.constraint.fields`에 담긴다. 임시 로그로 확인한 뒤 로그를 지웠고, 판별은 meta 문자열로 한다.
+- 실제 DB에서 두 트랜잭션을 동시에 돌리는 경합 테스트는 아니다. 사전 확인을 통과시키는 대역으로 같은 unique 위반 경로를 재현했다.
+- 결과: 단위 390 passed, E2E 75 passed(`adf241c`). seat-type 간헐 실패 1회(QS-11a 404, e2e-183804)가 있었고 재실행에서 통과했다.

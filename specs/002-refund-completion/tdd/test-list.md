@@ -235,6 +235,10 @@ suite_baseline: green
 | U325 | 기존 경로가 만든 PG 취소 요청에 orderItemId null 콜백이 오면 PG_CALLBACK_TARGET_MISMATCH(409)로 거절된다 (Phase 6 검수 4 진행 중 발견) | FR-032 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
 | U326 | 일시적 처리 불가 도메인 오류(DomainServiceUnavailableError)는 503과 지정한 code로 응답한다 (Phase 6 검수 5, U324의 선행) | FR-032 | example | DONE | `src/common/filters/http-exception.filter.spec.ts` |
 | U327 | 콜백 대상 오류(PG_CALLBACK_TARGET_NOT_FOUND)는 저장 실패로 바뀌지 않고 그대로 전달된다 (U324 과대 변환 방지) | FR-032 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
+| U328 | (E2E) orderItemId를 생략한 콜백도 상품 대상 환불이면 PG_CALLBACK_TARGET_MISMATCH(409)로 거절되고 반영하지 않는다 (Phase 6 재검수 P1) | FR-032 | example | DONE | `test/refund-ledger.e2e-spec.ts` |
+| U329 | 다른 요청과 같은 PG 취소 거래 ID가 동시에 저장돼 DB unique 위반이 나면 503이 아니라 PG_CALLBACK_TARGET_MISMATCH(409)로 거절된다 (Phase 6 재검수 P2) | FR-032 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
+| U330 | 모순 결과 처리의 반환 상태는 처리 후 저장된 환불 상태(ACTION_REQUIRED)와 같다 (Phase 6 재검수 P2) | FR-032 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
+| U331 | 모순 결과의 거래 로그에는 기존 결과와 새 통보의 종류·실제액·거래 ID가 함께 남는다 (Phase 6 재검수 권고) | FR-032 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
 
 ### `src/refund/refund-idempotency.service.ts`
 
