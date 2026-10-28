@@ -673,3 +673,52 @@ U10~U15를 마친 뒤, 관계 검증의 비교 대상 설정을 생략하면 정
   - 서명 인증(US7)
 - 남은 연결: A31의 "거래조회로 다시 반영"은 US5 조회 경로에서 같은 `applyPgResult`를 쓸 때 다시 확인한다. SUCCEEDED 뒤 FAILED 통보도 같은 모순 규칙으로 처리되지만 별도 테스트는 없다.
 - 결과: 단위 368 passed, E2E 74 passed(`f480742`). 스위트 실행 중 ticket-pause E2E에서 426 간헐 실패가 1회 있었고(e2e-141915), 재실행에서 통과했다.
+
+## Phase 6 Codex 검수 1차 (2026-10-28)
+
+- 범위: `c49fcd6..ca147d3`, T064~T072·T182
+- 판정: **수정 필요**. P2 5건과 계층 지적 1건이다.
+  1. 결과 중복 판정이 상태 종류만 비교한다. 실제액·거래 ID가 다른 성공 통보도 같은 결과로 무시된다.
+  2. 모순 통보가 오면 PAID인데 reviewRequired=true인 상태가 된다. 정상액 판정도 기존 검토 필요를 고려하지 않는다. data-model은 PAID를 검토 완료일 때만 허용한다.
+  3. 실패·금액 불일치에 필요한 알림과 거래 로그가 없다(FR-037·FR-027, T070은 내부 알림 저장 포함).
+  4. T072 콜백 검증이 끝나지 않았다. 금액 정수 검증, 원승인 거래 ID 구별·전역 unique 검증이 없고, PAYMENT 대상 null 허용은 완료 범위에서 명시적으로 분리해야 한다.
+  5. 콜백 저장 실패가 500으로 나간다. 계약 §7·§10은 503 REFUND_STORAGE_UNAVAILABLE이다.
+  - 계층 지적: 컨트롤러가 저장소를 직접 조회한다(3계층 규칙 위반).
+- 타당하다고 본 것: 대상별 기존/신규 분기와 200 통일, 조회 → Refund → PaymentCancel 잠금 → 재조회 순서, 실제액·합계·원장의 같은 트랜잭션 저장.
+- 사용자 결정: 지적 2의 앞부분은 문서 해석이 갈려서 사용자에게 물었다. 결정은 "조치 필요로 내림"이다. 계약 §7의 "최종 상태 유지"는 PG 취소 요청의 확정 결과·실제액·원장을 덮어쓰지 않는다는 뜻으로 읽고, 환불은 ACTION_REQUIRED·reviewRequired·PG_RESULT_CONFLICT로 둔다.
+
+## 사이클: Phase 6 검수 1차 수정 (U312~U327)
+
+| 동작 | 테스트 | red | green·검증 | 커밋 |
+|---|---|---|---|---|
+| U312 | 성공 확정 뒤 실제액이 다른 성공 통보 → 모순·운영자 알림, 실제액·원장 유지 | actionCode null·알림 0 | `contradicts()`: 종류 또는 성공 실제액이 다르면 모순 | `5b91907` |
+| U313 | 성공 확정 뒤 거래 ID가 다른 성공 통보 → 모순 | actionCode null·알림 0 | 모순 판정에 pgTransactionId 비교 추가 | `cd9cf06` |
+| U314 | PAID 환불에 모순 통보 → ACTION_REQUIRED·paidAt null·reviewRequired·PG_RESULT_CONFLICT, 시도·지급·원장 유지 | payoutStatus PAID | 모순 기록 때 지급 상태를 내림(사용자 결정) | `8d2d8ad` |
+| U315 | 검토 필요인 환불은 정상 금액 성공에도 PAID가 아님 | PAID·paidAt 기록 | settled = 금액 일치 && !reviewRequired. 금액이 맞고 검토 중이면 ACTION_REQUIRED만(기존 actionCode 유지) | `1978ccd` |
+| U316 | 고객 환불 PG 거절 → 고객 본인·점주·운영자 알림 | 알림 [] | `notifyPayoutAction`(eventKey `<kind>:<시도ID>`) | `6ad007b` |
+| U317 | 매장 환불 PG 거절 → 점주·운영자만 | CUSTOMER 알림 포함 | 고객 알림은 source CUSTOMER일 때만 | `8af6792` |
+| U318 | 실제액 불일치 → 운영자 알림 | 알림 [] | 불일치면 `notifyOperator(AMOUNT_MISMATCH)`. 리팩터로 알림 공통화(모순 알림 eventKey도 `<kind>:<시도ID>`로 통일) | `63130f5` |
+| U319 | 거절·불일치·모순 → 거래 로그(it.each 3개) | Received array [] (3 failed) | 운영자 알림 때 로그 항목을 모으고, 커밋 뒤 `TransactionLoggerService.logTransaction` | `56397f8` |
+| U320 | 콜백 amount 1.5 → 형식 오류 | 오류 필드 [] | `@IsNumber` → `@IsInt` | `d1708aa` |
+| U321 | 콜백 orderItemId null 허용(UUID 아닌 문자열은 계속 거절) | orderItemId isUuid | `@IsOptional`, 타입 `string \| null`. 기존 경로에 null이면 연결 불일치 가드(타입상 필요) | `249a040` |
+| 리팩터 | 콜백 대상별 분기를 컨트롤러에서 `RefundResultService.receiveCallback`으로 이동(계층 지적) | — | 테스트 변경 없음 | `28350ab` |
+| U325 | 기존 경로 PG 취소 요청에 null 대상 콜백 → PG_CALLBACK_TARGET_MISMATCH | 첫 통과(U321 가드) → 뮤턴트(가드 제거) 1 failed | 구현 변경 없음 | `891f838` |
+| U322 | PG 취소 거래 ID = 원승인 거래 ID → 409, 반영 없음 | resolved instead of rejected | 성공 결과의 거래 ID가 Payment.pgTransactionId와 같으면 연결 불일치 | `a73c324` |
+| U323 | 다른 PG 취소 요청이 쓰는 거래 ID → 409, 반영 없음 | Received constructor: PrismaClientKnownRequestError | 성공 반영 전 `isCancelTransactionUsedByOther` | `3f59061` |
+| U326 | 공통: DomainServiceUnavailableError → 503·지정 code | status 500·INTERNAL_SERVER_ERROR | 공통 오류와 필터 매핑 추가 | `cde3235` |
+| U324 | 콜백 저장 실패 → RefundStorageUnavailableError(503) | Received constructor: Error | `receiveCallback`이 도메인 오류는 그대로, 그 밖의 오류는 503으로 바꿈(cause 보존) | `774b319` |
+| U327 | 대상 없음 오류는 503으로 바뀌지 않음 | 첫 통과 → 뮤턴트(모든 오류 503) 1 failed | U324 과대 변환 방지 | `f003079` |
+
+- 사용자 승인으로 이전 테스트를 고친 것: U135의 단언을 "운영자 알림 전체 = [모순 1건]"에서 "운영자·PG_RESULT_CONFLICT 알림 정확히 1건"으로 좁혔다. U316 이후 준비 단계(PG 거절)에서 정상적인 PG_REJECTED 알림이 생기기 때문이다. 확인하는 동작은 그대로이고, 거절 알림은 U316이 확인한다(`6ad007b`).
+- 이탈과 보정:
+  - U314: 커밋 전에 한 paidAt 뮤턴트는 sed가 적용되지 않아 무효였다. 커밋 뒤 python으로 다시 적용해 1 failed를 확인했다.
+  - U314·U327: `-t` 패턴에 괄호가 있어 첫 실행이 0건 매치였다. 패턴을 바꿔 다시 실행했다.
+  - U326: 필터 파일의 기존 eslint 오류 8건 때문에 커밋 도구(gc.sh)가 멈췄다. HEAD와 변경 후가 모두 8건이라 새 오류가 없음을 확인하고, 같은 절차(green 스위트·tsc)로 직접 커밋했다.
+  - 린트 비교 중 `git stash`를 쓰고 바로 pop했다. 사용자 미커밋 변경이 그대로인 것을 확인했고, 앞으로는 쓰지 않는다.
+- 미검증·남은 것:
+  - 같은 거래 ID로 동시에 온 콜백 두 건이 함께 확인을 통과하는 경쟁은 DB unique가 막는다. 다만 그때 응답 코드가 계약 코드인지는 확인하지 않았다.
+  - 롤백된 사건이 거래 로그에 남지 않는지는 별도 테스트가 없다(구조상 커밋 뒤 기록).
+  - SYSTEM 경로의 점주 알림 여부는 US6에서 정한다.
+  - 서명 인증은 US7이다.
+  - PAYMENT 대상 PaymentCancel.orderItemId 표현 결정은 US6 전에 한다(콜백 DTO의 null 허용은 이번에 완료).
+- 결과: 단위 387 passed, E2E 74 passed(`f003079`). 스위트 실행 중 E2E 간헐 실패 4회(ticket-pause 426·404, seat-type QS-10 404·QS-3 socket hang up)가 있었고 모두 재실행에서 통과했다.

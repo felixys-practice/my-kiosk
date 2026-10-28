@@ -219,6 +219,22 @@ suite_baseline: green
 | U309 | 실결제액 0원 고객 환불은 PG 취소 요청 없이 이용 종료·Refund PAID·0원 원장을 함께 저장하고 PG를 호출하지 않는다 (Phase 3 검수 2) | FR-016a | example | DONE | `src/refund/refund-acceptance.integration.spec.ts`(실제 DB) |
 | U310 | 0원 고객 환불 응답은 200과 지급 완료(PAID)다 (Phase 3 검수 2) | FR-016a | example | DONE | `src/refund/refund-acceptance.service.spec.ts` |
 | U311 | 환불로 닫힌 정지 기록(closedAt)은 이용권·주문 조회에서 진행 중 정지로 보이지 않는다 (Phase 3 검수 3) | FR-042 | example | DONE | `test/refund-customer.e2e-spec.ts` |
+| U312 | 이미 성공으로 확정된 PG 취소 요청에 실제액이 다른 성공 통보가 오면 기존 실제액·원장을 유지하고 PG_RESULT_CONFLICT·운영자 알림을 남긴다 (Phase 6 검수 1) | FR-057 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
+| U313 | 이미 성공으로 확정된 PG 취소 요청에 거래 ID가 다른 성공 통보가 오면 PG_RESULT_CONFLICT·운영자 알림을 남긴다 (Phase 6 검수 1) | FR-057 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
+| U314 | 지급 완료(PAID)된 환불에 모순 통보가 오면 환불은 ACTION_REQUIRED·reviewRequired·PG_RESULT_CONFLICT가 된다 (Phase 6 검수 2, 사용자 결정) | FR-057 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
+| U315 | 이미 검토 필요인 환불은 확정 금액과 같은 성공 결과가 와도 PAID가 되지 않는다 (Phase 6 검수 2) | FR-023 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
+| U316 | 고객 환불의 PG 거절은 고객·점주·운영자 알림을 같은 트랜잭션에 저장한다 (Phase 6 검수 3) | FR-037 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
+| U317 | 매장 환불의 PG 거절은 점주·운영자에게 알리고 고객에게는 알리지 않는다 (Phase 6 검수 3) | FR-037 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
+| U318 | PG 실제액 불일치는 운영자 알림을 저장한다 (Phase 6 검수 3) | FR-027 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
+| U319 | PG 거절·금액 불일치·모순 결과는 거래 로그에 기록된다 (Phase 6 검수 3) | FR-037 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
+| U320 | 환불 콜백의 amount가 정수가 아니면 400을 받는다 (Phase 6 검수 4) | FR-032 | example | DONE | `src/refund/dto/pg-refund-callback.dto.spec.ts` |
+| U321 | 환불 콜백의 orderItemId는 null(PAYMENT 대상)을 형식상 허용한다 (Phase 6 검수 4) | FR-032 | example | DONE | `src/refund/dto/pg-refund-callback.dto.spec.ts` |
+| U322 | 환불 콜백의 PG 취소 거래 ID가 원승인 거래 ID와 같으면 PG_CALLBACK_TARGET_MISMATCH(409)로 거절된다 (Phase 6 검수 4) | FR-032 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
+| U323 | 환불 콜백의 PG 취소 거래 ID가 다른 PG 취소 요청에 이미 쓰였으면 PG_CALLBACK_TARGET_MISMATCH(409)로 거절된다 (Phase 6 검수 4) | FR-032 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
+| U324 | 환불 콜백 결과 저장이 실패하면 503 REFUND_STORAGE_UNAVAILABLE을 받는다 (Phase 6 검수 5) | FR-032 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
+| U325 | 기존 경로가 만든 PG 취소 요청에 orderItemId null 콜백이 오면 PG_CALLBACK_TARGET_MISMATCH(409)로 거절된다 (Phase 6 검수 4 진행 중 발견) | FR-032 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
+| U326 | 일시적 처리 불가 도메인 오류(DomainServiceUnavailableError)는 503과 지정한 code로 응답한다 (Phase 6 검수 5, U324의 선행) | FR-032 | example | DONE | `src/common/filters/http-exception.filter.spec.ts` |
+| U327 | 콜백 대상 오류(PG_CALLBACK_TARGET_NOT_FOUND)는 저장 실패로 바뀌지 않고 그대로 전달된다 (U324 과대 변환 방지) | FR-032 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
 
 ### `src/refund/refund-idempotency.service.ts`
 
