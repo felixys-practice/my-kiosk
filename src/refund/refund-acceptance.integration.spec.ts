@@ -9,6 +9,9 @@ import {
   RefundDecisionStatus,
   RefundPayoutStatus,
   RefundSource,
+  SeatAssignmentStatus,
+  SeatReleaseReason,
+  SeatType,
   TicketStatus,
   TicketType,
   UserRole,
@@ -39,6 +42,8 @@ describe('환불 확정 저장 (실제 DB)', () => {
 
   /** 결제 금액(원) */
   const paidAmount = 10000;
+  /** 매장 안 좌석 번호(겹치지 않게 증가) */
+  let nextSeatNumber = 1;
 
   /**
    * 결제를 마친 미사용 정기권을 만든다
@@ -207,5 +212,31 @@ describe('환불 확정 저장 (실제 DB)', () => {
       where: { id: issued.ticketId },
     });
     expect(ticket.status).toBe(TicketStatus.REVOKED);
+  });
+
+  it('환불 확정 뒤 고정석 배정이 해제된다', async () => {
+    const issued = await createUnusedPeriodTicket();
+    const seat = await prisma.seat.create({
+      data: { number: nextSeatNumber++, shopId, type: SeatType.FIXED },
+    });
+    await prisma.seatAssignment.create({
+      data: {
+        seatId: seat.id,
+        orderItemId: issued.orderItemId,
+        ticketId: issued.ticketId,
+        status: SeatAssignmentStatus.ACTIVE,
+        assignedAt: new Date(),
+      },
+    });
+
+    await accept(issued.ticketId);
+
+    const assignment = await prisma.seatAssignment.findFirstOrThrow({
+      where: { ticketId: issued.ticketId },
+    });
+    expect(assignment).toMatchObject({
+      status: SeatAssignmentStatus.RELEASED,
+      releaseReason: SeatReleaseReason.TICKET_REVOKED,
+    });
   });
 });

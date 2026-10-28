@@ -3,6 +3,7 @@ import {
   RefundDecisionStatus,
   RefundPayoutStatus,
   RefundSource,
+  SeatReleaseReason,
 } from '@prisma/client';
 import { REFUND_PG_GATEWAY } from 'src/pg/refund-pg.gateway';
 import type { RefundPgGateway } from 'src/pg/refund-pg.gateway';
@@ -102,6 +103,14 @@ export class RefundAcceptanceService {
 
         // 이용권을 종료한다
         await this.refundRepository.terminateTicket(command.ticketId, now, tx);
+
+        // 고정석 배정을 해제한다(자유석이면 할 일 없음)
+        await this.seatAssignmentService.releaseByTicket(
+          command.ticketId,
+          SeatReleaseReason.TICKET_REVOKED,
+          now,
+          tx,
+        );
 
         // 확정된 환불과 최초 PG 취소 요청을 저장한다
         const created = await this.refundRepository.createAcceptedRefund(
