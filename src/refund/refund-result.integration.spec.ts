@@ -878,4 +878,17 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
     );
     storageFailure.mockRestore();
   });
+
+  it('콜백 대상이 없다는 오류는 저장 실패(503)로 바뀌지 않고 그대로 전달된다', async () => {
+    await expect(
+      service.receiveCallback({
+        success: true,
+        paymentCancelId: randomUUID(),
+        pgTransactionId: `pg-cancel-${randomUUID()}`,
+        orderItemId: randomUUID(),
+        amount: refundAmount,
+        reason: null,
+      }),
+    ).rejects.toBeInstanceOf(PgCallbackTargetNotFoundError);
+  });
 });
