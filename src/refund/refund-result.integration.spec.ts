@@ -601,4 +601,29 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       ledgers: 1,
     });
   });
+
+  it('이미 검토 필요인 환불은 확정 금액과 같은 성공 결과가 와도 지급 완료가 되지 않는다', async () => {
+    const pending = await createPendingRefund();
+    await prisma.refund.update({
+      where: { id: pending.refundId },
+      data: { reviewRequired: true, actionCode: 'PG_RESULT_CONFLICT' },
+    });
+
+    await succeed(pending.paymentCancelId, refundAmount);
+
+    const refund = await prisma.refund.findUniqueOrThrow({
+      where: { id: pending.refundId },
+    });
+    expect({
+      payoutStatus: refund.payoutStatus,
+      paidAt: refund.paidAt,
+      paidAmount: refund.paidAmount,
+      reviewRequired: refund.reviewRequired,
+    }).toEqual({
+      payoutStatus: RefundPayoutStatus.ACTION_REQUIRED,
+      paidAt: null,
+      paidAmount: refundAmount,
+      reviewRequired: true,
+    });
+  });
 });

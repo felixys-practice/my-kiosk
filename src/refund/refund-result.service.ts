@@ -165,8 +165,9 @@ export class RefundResultService {
         paymentCancelId: attempt.id,
       });
       const paidAmount = attempt.refund.paidAmount + outcome.actualAmount;
-      // 확정된 환불 금액과 같으면 지급 완료, 다르면 금액은 그대로 두고 조치·검토 필요(API 계약 §6)
-      const settled = paidAmount === attempt.refund.amount;
+      // 지급 완료는 미지급액 0이고 검토가 끝났을 때만이다(data-model §2). 금액이 다르면 금액은 그대로 두고 조치·검토 필요(API 계약 §6)
+      const amountMatches = paidAmount === attempt.refund.amount;
+      const settled = amountMatches && !attempt.refund.reviewRequired;
       const payoutStatus = settled
         ? RefundPayoutStatus.PAID
         : RefundPayoutStatus.ACTION_REQUIRED;
@@ -174,13 +175,15 @@ export class RefundResultService {
         tx,
         attempt.refund.id,
         settled
-          ? { paidAmount, payoutStatus: RefundPayoutStatus.PAID, paidAt: now }
-          : {
-              paidAmount,
-              payoutStatus: RefundPayoutStatus.ACTION_REQUIRED,
-              reviewRequired: true,
-              actionCode: 'AMOUNT_MISMATCH',
-            },
+          ? { paidAmount, payoutStatus, paidAt: now }
+          : amountMatches
+            ? { paidAmount, payoutStatus }
+            : {
+                paidAmount,
+                payoutStatus,
+                reviewRequired: true,
+                actionCode: 'AMOUNT_MISMATCH',
+              },
       );
       return {
         applied: true,
