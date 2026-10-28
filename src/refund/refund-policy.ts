@@ -169,15 +169,18 @@ export function evaluateStoreRefund(
   input: StoreRefundInput,
   now: Date,
 ): StoreRefundDecision {
+  // 매장 범위에서 찾지 못한 이용권은 다른 매장에 있더라도 드러내지 않고 찾을 수 없음으로 판정한다
+  if (!candidate) {
+    return { eligible: false, code: 'TICKET_NOT_FOUND' };
+  }
   // 금액 상한: 실결제액을 넘을 수 없다
-  if (candidate && input.amount > candidate.paidAmount) {
+  if (input.amount > candidate.paidAmount) {
     return { eligible: false, code: 'REFUND_AMOUNT_EXCEEDED' };
   }
   // 사유는 앞뒤 공백을 지운 값으로 본다. 공백만 있으면 사유가 없는 것이다
   const reason = input.reason?.trim() || null;
   // 어긴 규칙이 없는(기한 안 미사용) 이용권은 실결제액 전액만 환불할 수 있고 사유는 선택이다
   const unusedInDeadline =
-    candidate !== null &&
     unusedRuleViolations(candidate.ticket, now).length === 0;
   if (unusedInDeadline) {
     if (input.amount !== candidate.paidAmount) {

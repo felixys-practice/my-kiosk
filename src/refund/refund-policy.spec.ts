@@ -471,4 +471,13 @@ describe('evaluateStoreRefund', () => {
       reason: '소진 후 불편 보상',
     });
   });
+  it('매장 범위에서 찾지 못한 이용권은 TICKET_NOT_FOUND로 판정된다', () => {
+    const decision = evaluateStoreRefund(
+      null,
+      { amount: 1000, reason: '보상' },
+      now,
+    );
+
+    expect(decision).toEqual({ eligible: false, code: 'TICKET_NOT_FOUND' });
+  });
 });
