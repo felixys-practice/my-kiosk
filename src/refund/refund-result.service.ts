@@ -172,6 +172,11 @@ export class RefundResultService {
         // 확정된 결과와 모순되는 늦은 통보는 덮어쓰지 않고 검토 필요·운영자 알림으로 남긴다(API 계약 §7)
         if (contradicts(attempt, outcome)) {
           await this.recordResultConflict(tx, attempt, actionLogs);
+          // 모순 기록으로 환불은 조치 필요가 됐다. 반환 상태도 저장된 상태와 맞춘다
+          return {
+            ...stored,
+            payoutStatus: RefundPayoutStatus.ACTION_REQUIRED,
+          };
         }
         return stored;
       }

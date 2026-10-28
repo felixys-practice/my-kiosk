@@ -891,4 +891,23 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       }),
     ).rejects.toBeInstanceOf(PgCallbackTargetNotFoundError);
   });
+
+  it('모순 결과 처리의 반환 상태는 처리 후 저장된 환불 상태와 같다', async () => {
+    const pending = await createPendingRefund();
+    await succeed(pending.paymentCancelId, refundAmount);
+
+    const result = await service.applyPgResult({
+      paymentCancelId: pending.paymentCancelId,
+      outcome: { kind: 'FAILED', reason: '늦은 실패 통보' },
+    });
+
+    const refund = await prisma.refund.findUniqueOrThrow({
+      where: { id: pending.refundId },
+    });
+    expect(result).toEqual({
+      applied: false,
+      attemptStatus: PaymentCancelStatus.SUCCEEDED,
+      payoutStatus: refund.payoutStatus,
+    });
+  });
 });
