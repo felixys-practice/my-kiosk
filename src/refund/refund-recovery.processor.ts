@@ -27,8 +27,8 @@ export class RefundRecoveryProcessor extends WorkerHost {
     if (!this.configService.get<boolean>('refund.recoveryWorkerEnabled')) {
       return;
     }
-    const now = new Date();
-    await this.recoveryService.sweep(now);
-    await this.recoveryService.recoverQueryFailed(now);
+    await this.recoveryService.sweep(new Date());
+    // 탐색이 오래 걸렸을 수 있으므로 장애 복구 담당 기한은 지금 시각으로 잡는다
+    await this.recoveryService.recoverQueryFailed(new Date());
   }
 }

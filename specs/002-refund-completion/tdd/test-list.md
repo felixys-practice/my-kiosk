@@ -257,7 +257,7 @@ suite_baseline: green
 | U347 | 결과 확인 실패(QUERY_FAILED) 건이 PG 처리 중 응답을 받으면 일반 조회 일정(REQUESTED)으로 돌아간다 (US5 진행 중 추가, 계약 §8 정상 응답) | FR-026 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
 | U348 | REFUND_RECOVERY_WORKER_ENABLED를 생략하면 true, 'false'면 false로 읽힌다 (US5 진행 중 추가, 사용자 결정: 테스트 환경에서 자동 작업자 끄기) | 계약 §8 운영 설정 | example | DONE | `src/config/configuration.spec.ts` |
 | U349 | 자동 작업자 설정이 꺼져 있으면 기동 시 정기 탐색 스케줄을 등록하지 않는다 (US5 진행 중 추가) | FR-022 | example | DONE | `src/refund/refund-recovery.scheduler.spec.ts` |
-| U350 | 정기 탐색 작업은 일반 탐색과 장애 복구 확인을 실행하고, 작업자 설정이 꺼져 있으면 아무것도 하지 않는다 (US5 진행 중 추가) | FR-022 | example | DONE | `src/refund/refund-recovery.processor.spec.ts` |
+| U350 | 정기 탐색 작업은 일반 탐색과 장애 복구 확인을 실행하고(U362에서 단언을 '복구 시각 ≥ 탐색 시각'으로 변경, 사용자 결정), 작업자 설정이 꺼져 있으면 아무것도 하지 않는다 (US5 진행 중 추가) | FR-022 | example | DONE | `src/refund/refund-recovery.processor.spec.ts` |
 | U351 | 장애 복구 확인은 실행 동안 복구 제어 담당을 잡고, 다른 작업자가 처리 기한 안에서 맡고 있으면 건너뛰며, 끝나면 담당을 내려놓는다 (US5 진행 중 추가, T100 중복 실행 방지) | FR-026a | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
 | U352 | (E2E) GET /refund/recovery/status는 MANAGER에게 {mode,running,requestedCount,queryFailedCount,actionRequiredCount,reservedManualCount,oldestQueryFailedAt,nextProbeAt}를 주고 다른 역할은 403이다 (US5 진행 중 추가, 계약 §8) | FR-026a | example | DONE | `test/refund-recovery.e2e-spec.ts` |
 | U353 | 결과 확인 실패 건이 미접수 확인 뒤 재전송이 접수되면 연속 오류를 지우고 일반 조회 일정(REQUESTED)으로 복귀한다 (Phase 7a 검수 3) | FR-026 | example | DONE | `src/refund/refund-result.integration.spec.ts` › 결과 확인 실패 건이 미접수 확인 뒤 재전송이 접수되면 연속 오류를 지우고 일반 조회 일정으로 복귀한다 |
