@@ -1592,4 +1592,18 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       nextProbeAt: now.getTime() + 900_000,
     });
   });
+
+  it('전체 재확인 요청은 결과 확인 실패 대상이 없으면 NO_WORK를 받고 복구 제어를 바꾸지 않는다', async () => {
+    await resetRecoveryControl();
+    // 어떤 결과 확인 실패 건보다도 이른 기준 시각
+    const now = new Date(Date.UTC(1970, 0, 2));
+
+    const outcome = await app.get(RefundRecoveryService).resumeRecovery(now);
+
+    const control = await prisma.refundRecoveryControl.findFirstOrThrow();
+    expect({ outcome, mode: control.mode }).toEqual({
+      outcome: 'NO_WORK',
+      mode: 'PROBE',
+    });
+  });
 });

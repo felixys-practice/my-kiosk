@@ -82,6 +82,20 @@ export class RefundRecoveryService {
   }
 
   /**
+   * 운영자 전체 재확인: 자동 확인 예정 시각을 기다리지 않고 결과 확인 실패 건을 처리 단위씩 조회하도록 예약한다 (API 계약 §8)
+   * @param now 요청 시각(BATCH 대상 기준 시각)
+   * @returns SCHEDULED(예약함) / ALREADY_RUNNING(복구 작업 진행 중) / NO_WORK(대상 없음)
+   */
+  async resumeRecovery(
+    now: Date,
+  ): Promise<'SCHEDULED' | 'ALREADY_RUNNING' | 'NO_WORK'> {
+    // 기준 시각 이전의 결과 확인 실패 건이 없으면 할 일이 없다
+    const [any] = await this.workRepository.findQueryFailed(now, 1);
+    if (!any) return 'NO_WORK';
+    return Promise.reject(new Error('구현 전'));
+  }
+
+  /**
    * BATCH: 기준 시각 이전의 결과 확인 실패 건을 처리 단위만큼 조회한다
    * - 조회 장애가 다시 나면 PROBE로 돌아가고, 남은 건이 없으면 PROBE 대기로 돌아간다
    * @param cutoff BATCH 대상 기준 시각
