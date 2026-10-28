@@ -37,6 +37,8 @@ export type AttemptForResult = {
   id: string;
   status: PaymentCancelStatus;
   claimToken: string | null;
+  actualAmount: number | null; // 성공으로 확정됐으면 PG 실제 취소액
+  pgTransactionId: string | null; // 성공으로 확정됐으면 PG 취소 거래 ID
   refund: {
     id: string;
     amount: number; // 확정된 환불 금액(불변)
@@ -290,6 +292,8 @@ export class RefundRepository {
         id: true,
         status: true,
         claimToken: true,
+        actualAmount: true,
+        pgTransactionId: true,
         refund: {
           select: {
             id: true,
@@ -309,6 +313,8 @@ export class RefundRepository {
       id: attempt.id,
       status: attempt.status,
       claimToken: attempt.claimToken,
+      actualAmount: attempt.actualAmount,
+      pgTransactionId: attempt.pgTransactionId,
       refund: {
         id: attempt.refund.id,
         amount: attempt.refund.amount,

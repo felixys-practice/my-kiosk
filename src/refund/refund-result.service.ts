@@ -36,6 +36,20 @@ export type RefundCallbackInput = {
   reason?: string | null;
 };
 
+/**
+ * 확정된 PG 취소 요청과 새로 온 결과가 모순되는지 판단한다
+ * @param attempt 이미 확정된 PG 취소 요청
+ * @param outcome 새로 온 결과
+ * @returns 결과 종류 또는 성공 실제액이 다르면 true
+ */
+function contradicts(attempt: AttemptForResult, outcome: PgCancelOutcome) {
+  if (attempt.status !== outcome.kind) return true;
+  return (
+    outcome.kind === 'SUCCEEDED' &&
+    attempt.actualAmount !== outcome.actualAmount
+  );
+}
+
 /** 결과 반영 결과 */
 export type ApplyPgResultOutcome = {
   applied: boolean; // 이번 요청으로 결과를 저장했는지
@@ -113,7 +127,7 @@ export class RefundResultService {
       // 결과는 미확정 시도에만 한 번 반영한다(이미 확정된 시도는 저장된 결과를 유지)
       if (!unresolvedAttemptStatuses.includes(attempt.status)) {
         // 확정된 결과와 모순되는 늦은 통보는 덮어쓰지 않고 검토 필요·운영자 알림으로 남긴다(API 계약 §7)
-        if (attempt.status !== outcome.kind) {
+        if (contradicts(attempt, outcome)) {
           await this.recordResultConflict(tx, attempt);
         }
         return stored;

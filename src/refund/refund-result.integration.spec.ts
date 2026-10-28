@@ -511,4 +511,39 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       ledgers: refund.ledgers.length,
     }).toEqual({ attemptStatus: PaymentCancelStatus.REQUESTED, ledgers: 0 });
   });
+
+  it('이미 성공으로 확정된 PG 취소 요청에 실제액이 다른 성공 통보가 오면 기존 실제액·원장을 유지하고 모순·운영자 알림을 남긴다', async () => {
+    const pending = await createPendingRefund();
+    const pgTransactionId = `pg-cancel-${randomUUID()}`;
+    const succeedWith = (actualAmount: number) =>
+      service.applyPgResult({
+        paymentCancelId: pending.paymentCancelId,
+        outcome: { kind: 'SUCCEEDED', pgTransactionId, actualAmount },
+      });
+    await succeedWith(refundAmount);
+
+    await succeedWith(refundAmount - 2000);
+
+    const refund = await prisma.refund.findUniqueOrThrow({
+      where: { id: pending.refundId },
+      include: { paymentCancels: true, ledgers: true, notifications: true },
+    });
+    expect({
+      actualAmount: refund.paymentCancels[0].actualAmount,
+      paidAmount: refund.paidAmount,
+      ledgerAmounts: refund.ledgers.map((l) => l.amount),
+      actionCode: refund.actionCode,
+      conflictNotifications: refund.notifications.filter(
+        (n) =>
+          n.kind === 'PG_RESULT_CONFLICT' &&
+          n.audience === RefundNotificationAudience.OPERATOR,
+      ).length,
+    }).toEqual({
+      actualAmount: refundAmount,
+      paidAmount: refundAmount,
+      ledgerAmounts: [-refundAmount],
+      actionCode: 'PG_RESULT_CONFLICT',
+      conflictNotifications: 1,
+    });
+  });
 });
