@@ -160,9 +160,11 @@ export function evaluateStoreRefund(
   if (candidate && input.amount > candidate.paidAmount) {
     return { eligible: false, code: 'REFUND_AMOUNT_EXCEEDED' };
   }
+  // 사유는 앞뒤 공백을 지운 값으로 본다. 공백만 있으면 사유가 없는 것이다
+  const reason = input.reason?.trim() || null;
   // 사용 이력이 있으면 사유가 필수다
-  if (input.reason === undefined) {
+  if (reason === null) {
     return { eligible: false, code: 'REFUND_REASON_REQUIRED' };
   }
-  return { eligible: true, amount: input.amount, reason: input.reason };
+  return { eligible: true, amount: input.amount, reason };
 }

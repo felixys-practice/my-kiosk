@@ -374,4 +374,16 @@ describe('evaluateStoreRefund', () => {
       code: 'REFUND_REASON_REQUIRED',
     });
   });
+  it('공백만 있는 사유는 사유 누락으로 처리된다', () => {
+    const decision = evaluateStoreRefund(
+      usedCandidate(),
+      { amount: paidAmount - 3000, reason: '   ' },
+      now,
+    );
+
+    expect(decision).toEqual({
+      eligible: false,
+      code: 'REFUND_REASON_REQUIRED',
+    });
+  });
 });
