@@ -480,4 +480,38 @@ describe('환불 확정 저장 (실제 DB)', () => {
       refundCode: 'USED_TICKET',
     });
   });
+
+  it('지급 조치가 필요한 환불로 종료된 이용권도 입실 트랜잭션에서 TICKET_TERMINATED로 거절된다', async () => {
+    const issued = await createUnusedPeriodTicket();
+    const { body } = await accept(issued.ticketId);
+    await prisma.refund.update({
+      where: { id: body.refundId },
+      data: {
+        payoutStatus: RefundPayoutStatus.ACTION_REQUIRED,
+        actionCode: 'PG_REJECTED',
+      },
+    });
+    const seat = await prisma.seat.create({
+      data: { number: nextSeatNumber++, shopId, type: SeatType.FREE },
+    });
+    const now = new Date();
+
+    // 서비스의 사전 확인을 거치지 않고 입실 트랜잭션의 잠금 아래 재확인만 검증한다
+    const entry = app
+      .get(UsageSessionRepository)
+      .createSession(
+        issued.ticketId,
+        shopId,
+        seat.id,
+        customerId,
+        new Date(now.getTime() + 86_400_000),
+        now,
+      );
+
+    await expect(entry).rejects.toMatchObject({ code: 'TICKET_TERMINATED' });
+    const sessions = await prisma.usageSession.count({
+      where: { ticketId: issued.ticketId },
+    });
+    expect(sessions).toBe(0);
+  });
 });
