@@ -9,8 +9,10 @@ import {
   RefundSource,
   TicketStatus,
   TicketType,
+  UsageSessionStatus,
   UserRole,
 } from '@prisma/client';
+import { DomainConflictError } from 'src/common/errors';
 import { randomUUID } from 'crypto';
 import { AppModule } from 'src/app.module';
 import { REFUND_PG_GATEWAY } from 'src/pg/refund-pg.gateway';
@@ -338,6 +340,64 @@ describe('매장 환불 확정 저장 (실제 DB)', () => {
       status: 200,
       payoutStatus: RefundPayoutStatus.PAID,
       paymentCancelId: null,
+    });
+  });
+
+  /** 매장 안 좌석 번호(겹치지 않게 증가) */
+  let nextSeatNumber = 1;
+
+  /**
+   * 이용권으로 지금 좌석을 이용 중인 세션을 만든다
+   * @param ticketId 이용권 ID
+   * @param startedAt 입실 시각(기본: 30분 전)
+   * @returns 세션 ID
+   */
+  async function startSession(
+    ticketId: string,
+    startedAt = new Date(Date.now() - 30 * 60_000),
+  ): Promise<string> {
+    const seat = await prisma.seat.create({
+      data: { shopId, number: nextSeatNumber++ },
+    });
+    const session = await prisma.usageSession.create({
+      data: {
+        ticketId,
+        seatId: seat.id,
+        shopId,
+        userId: customerId,
+        startedAt,
+        plannedEndAt: new Date(startedAt.getTime() + 4 * 60 * 60_000),
+      },
+    });
+    return session.id;
+  }
+
+  it('이용 중인 이용권에 퇴실 동의가 없으면 TICKET_IN_USE(409)로 거절되고 이용·이용권은 그대로다', async () => {
+    const issued = await createUsedPeriodTicket();
+    const sessionId = await startSession(issued.ticketId);
+
+    const rejection = service.acceptStoreRefund(
+      { userId: ownerId, role: UserRole.OWNER },
+      shopId,
+      {
+        ticketId: issued.ticketId,
+        amount: 7000,
+        reason: '보상',
+        consentToTerminateTicket: true,
+      },
+    );
+
+    await expect(rejection).rejects.toBeInstanceOf(DomainConflictError);
+    await expect(rejection).rejects.toMatchObject({ code: 'TICKET_IN_USE' });
+    const session = await prisma.usageSession.findUniqueOrThrow({
+      where: { id: sessionId },
+    });
+    const ticket = await prisma.ticket.findUniqueOrThrow({
+      where: { id: issued.ticketId },
+    });
+    expect({ session: session.status, ticket: ticket.status }).toEqual({
+      session: UsageSessionStatus.ACTIVE,
+      ticket: TicketStatus.ACTIVE,
     });
   });
 });

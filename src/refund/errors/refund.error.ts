@@ -122,3 +122,13 @@ export class RefundInputRejectedError extends DomainBadRequestError {
     this.name = 'RefundInputRejectedError';
   }
 }
+
+/** 이용 중인 이용권을 퇴실 동의 없이 매장 환불함 (409) */
+export class TicketInUseError extends DomainConflictError {
+  readonly code = 'TICKET_IN_USE';
+
+  constructor() {
+    super('이용 중인 이용권입니다. 퇴실에 동의해야 환불할 수 있습니다');
+    this.name = 'TicketInUseError';
+  }
+}

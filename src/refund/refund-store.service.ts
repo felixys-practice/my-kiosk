@@ -17,6 +17,7 @@ import {
   RefundInputRejectedError,
   RefundNotEligibleError,
   RefundTerminationConsentRequiredError,
+  TicketInUseError,
   TicketNotFoundError,
 } from './errors';
 
@@ -101,6 +102,13 @@ export class RefundStoreService {
         // 판정을 모두 통과한 뒤 종료 동의를 확인한다
         if (command.consentToTerminateTicket !== true) {
           throw new RefundTerminationConsentRequiredError();
+        }
+        // 지금 이용 중이면 퇴실 동의가 있어야 한다(금액·사유 검증은 이미 끝났으므로 거절해도 퇴실하지 않음)
+        if (
+          target!.candidate.ticket.inUse &&
+          command.consentToEndSession !== true
+        ) {
+          throw new TicketInUseError();
         }
 
         // 이용권 종료·좌석 해제·확정 환불·최초 PG 취소 요청을 함께 저장한다
