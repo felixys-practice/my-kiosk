@@ -104,6 +104,15 @@ describe('evaluateCustomerRefund', () => {
 
     expect(decision).toMatchObject({ eligible: false, code: 'USED_TICKET' });
   });
+  it('활성화된 정기권은 USED_TICKET으로 판정된다', () => {
+    const decision = evaluateCustomerRefund(
+      candidate({}, { activatedAt: new Date('2026-10-20T09:00:00Z') }),
+      customerId,
+      now,
+    );
+
+    expect(decision).toMatchObject({ eligible: false, code: 'USED_TICKET' });
+  });
 });
 
 void RefundDecisionStatus;

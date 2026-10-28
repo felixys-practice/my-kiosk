@@ -72,9 +72,19 @@ export function evaluateCustomerRefund(
   }
 
   // 5. 사용 여부: 지금 이용 중이면 사용 이력이 있다
-  if (candidate.ticket.inUse) {
+  if (candidate.ticket.inUse || !isUnused(candidate.ticket)) {
     return { eligible: false, code: 'USED_TICKET' };
   }
   void now;
   return { eligible: true, amount: 0 };
+}
+
+/**
+ * 이용권이 미사용인지 판정한다(이용 중 여부는 호출하는 쪽에서 먼저 본다)
+ * - 정기권: 활성화 전이면 미사용
+ * @param ticket 이용권
+ * @returns 미사용이면 true
+ */
+function isUnused(ticket: CustomerRefundCandidate['ticket']): boolean {
+  return ticket.activatedAt === null;
 }
