@@ -23,6 +23,10 @@ export class RefundRecoveryScheduler implements OnApplicationBootstrap {
    * 기동 시 정기 탐색 작업 스케줄을 등록한다(작업자 설정이 켜져 있을 때만)
    */
   async onApplicationBootstrap(): Promise<void> {
+    // 테스트 환경 등 작업자를 끈 환경에서는 등록하지 않는다
+    if (!this.configService.get<boolean>('refund.recoveryWorkerEnabled')) {
+      return;
+    }
     const sweepSeconds = this.configService.get<number>(
       'refund.sweepIntervalSeconds',
     )!;

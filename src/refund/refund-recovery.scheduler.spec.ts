@@ -37,4 +37,11 @@ describe('RefundRecoveryScheduler', () => {
       { name: 'sweep' },
     );
   });
+  it('자동 작업자 설정이 꺼져 있으면 정기 탐색 스케줄을 등록하지 않는다', async () => {
+    const { scheduler, queue } = schedulerWith(false);
+
+    await scheduler.onApplicationBootstrap();
+
+    expect(queue.upsertJobScheduler).not.toHaveBeenCalled();
+  });
 });
