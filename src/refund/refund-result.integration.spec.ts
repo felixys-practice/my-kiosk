@@ -823,4 +823,37 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
     });
     expect(after.status).toBe(PaymentCancelStatus.REQUESTED);
   });
+
+  it('콜백의 PG 취소 거래 ID가 다른 PG 취소 요청에 이미 쓰였으면 PG_CALLBACK_TARGET_MISMATCH로 거절되고 반영하지 않는다', async () => {
+    const first = await createPendingRefund();
+    const second = await createPendingRefund();
+    const usedTransactionId = `pg-cancel-${randomUUID()}`;
+    await service.applyPgResult({
+      paymentCancelId: first.paymentCancelId,
+      outcome: {
+        kind: 'SUCCEEDED',
+        pgTransactionId: usedTransactionId,
+        actualAmount: refundAmount,
+      },
+    });
+
+    await expect(
+      service.applyCallback({
+        success: true,
+        paymentCancelId: second.paymentCancelId,
+        pgTransactionId: usedTransactionId,
+        orderItemId: second.orderItemId,
+        amount: refundAmount,
+        reason: null,
+      }),
+    ).rejects.toBeInstanceOf(PgCallbackTargetMismatchError);
+    const refund = await prisma.refund.findUniqueOrThrow({
+      where: { id: second.refundId },
+      include: { paymentCancels: true, ledgers: true },
+    });
+    expect({
+      attemptStatus: refund.paymentCancels[0].status,
+      ledgers: refund.ledgers.length,
+    }).toEqual({ attemptStatus: PaymentCancelStatus.REQUESTED, ledgers: 0 });
+  });
 });

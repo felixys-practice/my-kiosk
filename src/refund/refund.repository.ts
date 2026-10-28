@@ -354,6 +354,25 @@ export class RefundRepository {
   }
 
   /**
+   * PG 취소 거래 ID를 다른 PG 취소 요청이 이미 쓰고 있는지 확인한다
+   * @param tx 지급 결과 반영 트랜잭션
+   * @param pgTransactionId PG 취소 거래 ID
+   * @param attemptId 결과를 반영하려는 PG 취소 요청 ID
+   * @returns 다른 요청이 쓰고 있으면 true
+   */
+  async isCancelTransactionUsedByOther(
+    tx: TransactionClient,
+    pgTransactionId: string,
+    attemptId: string,
+  ): Promise<boolean> {
+    const used = await tx.paymentCancel.findUnique({
+      where: { pgTransactionId },
+      select: { id: true },
+    });
+    return used !== null && used.id !== attemptId;
+  }
+
+  /**
    * PG 취소 요청을 성공으로 확정하고 실제 취소액을 기록한다
    * @param tx 지급 결과 반영 트랜잭션
    * @param id PG 취소 요청 ID

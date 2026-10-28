@@ -169,6 +169,16 @@ export class RefundResultService {
         };
       }
 
+      // PG 취소 거래 ID는 전역에서 한 요청에만 쓰인다(API 계약 §7). 최종 중복 방지는 DB unique가 맡는다
+      if (
+        await this.refundRepository.isCancelTransactionUsedByOther(
+          tx,
+          outcome.pgTransactionId,
+          attempt.id,
+        )
+      ) {
+        throw new PgCallbackTargetMismatchError();
+      }
       // PG 취소 성공: 실제액을 기록하고 지급 합계에 더한다
       await this.refundRepository.markAttemptSucceeded(tx, attempt.id, {
         pgTransactionId: outcome.pgTransactionId,
