@@ -18,6 +18,7 @@ import { GetRefundQueryDto, RefundDto, PgRefundCallbackDto } from './dto';
 import { RefundAcceptanceService } from './refund-acceptance.service';
 import { RefundResultService } from './refund-result.service';
 import { RefundRepository } from './refund.repository';
+import { PgCallbackTargetMismatchError } from './errors';
 
 @Controller('refund')
 export class RefundController {
@@ -66,6 +67,10 @@ export class RefundController {
   @HttpCode(HttpStatus.OK)
   async callbackRefund(@Body() dto: PgRefundCallbackDto) {
     if (await this.refundRepository.isLegacyAttempt(dto.paymentCancelId)) {
+      // 기존 경로의 PG 취소 요청은 항상 주문 상품 대상이다. 결제 전체(null) 콜백은 연결 불일치다
+      if (dto.orderItemId === null || dto.orderItemId === undefined) {
+        throw new PgCallbackTargetMismatchError();
+      }
       await this.refundService.callback(
         dto.success,
         dto.paymentCancelId,

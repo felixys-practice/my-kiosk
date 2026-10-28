@@ -36,4 +36,19 @@ describe('PG 취소 결과 콜백 DTO(PgRefundCallbackDto)', () => {
 
     expect(Object.keys(constraints)).toEqual(['amount']);
   });
+
+  it('orderItemId가 null(결제 전체 대상)이어도 형식 오류가 아니다', async () => {
+    await expect(
+      constraintsOf({ ...validBody, orderItemId: null }),
+    ).resolves.toEqual({});
+  });
+
+  it('orderItemId가 UUID 형식이 아닌 문자열이면 형식 오류다', async () => {
+    const constraints = await constraintsOf({
+      ...validBody,
+      orderItemId: 'item-1',
+    });
+
+    expect(Object.keys(constraints)).toEqual(['orderItemId']);
+  });
 });

@@ -16,8 +16,10 @@ export class PgRefundCallbackDto {
   @IsNotEmpty()
   pgTransactionId!: string;
 
+  // 상품 대상이면 그 주문 상품, 결제 전체(PAYMENT) 대상이면 null(API 계약 §7)
+  @IsOptional()
   @IsUUID()
-  orderItemId!: string;
+  orderItemId!: string | null;
 
   @IsUUID()
   paymentCancelId!: string;
