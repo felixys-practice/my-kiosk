@@ -36,6 +36,7 @@ import { RefundResultService } from './refund-result.service';
 import { RefundDispatchService } from './refund-dispatch.service';
 import { RefundRecoveryService } from './refund-recovery.service';
 import { RefundWorkRepository } from './refund-work.repository';
+import { RefundPgCheckService } from './refund-pg-check.service';
 
 /**
  * 환불금 지급 결과 공통 처리를 실제 PostgreSQL에서 확인한다 (US4, tasks T068~T071)
@@ -1704,6 +1705,48 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       afterExpiry: 1,
       claimToken: null,
       claimUntil: null,
+    });
+  });
+
+  /** 개별 확인을 요청하는 운영자 */
+  const operator = { userId: 'operator-1', role: UserRole.MANAGER };
+
+  /**
+   * 마지막 조회가 지정한 시간 전에 끝난 미확정 PG 취소 요청을 만든다
+   * @param secondsSinceLastInquiry 마지막 조회 뒤 지난 초
+   * @returns 환불·PG 취소 요청과 기준 시각
+   */
+  async function createInquiredBefore(secondsSinceLastInquiry: number) {
+    const pending = await createPendingRefund();
+    const now = new Date();
+    await prisma.paymentCancel.update({
+      where: { id: pending.paymentCancelId },
+      data: {
+        sendAttemptCount: 1,
+        lastSendAttemptAt: new Date(now.getTime() - 120_000),
+        lastInquiryAt: new Date(now.getTime() - secondsSinceLastInquiry * 1000),
+        nextInquiryAt: new Date(now.getTime() + 600_000),
+      },
+    });
+    return { ...pending, now };
+  }
+
+  it('최근 조회 후 15초가 지났으면 자동 조회 예정 시각 전이라도 그 시도 한 건을 즉시 조회한다', async () => {
+    const target = await createInquiredBefore(15);
+    pgGateway.inquireCancel.mockResolvedValueOnce({ result: 'IN_PROGRESS' });
+
+    const result = await app
+      .get(RefundPgCheckService)
+      .check(operator, target.refundId, target.now);
+
+    expect({
+      checkStatus: result.checkStatus,
+      inquiryResult: result.inquiryResult,
+      inquired: pgGateway.inquireCancel.mock.calls,
+    }).toEqual({
+      checkStatus: 'CHECKED',
+      inquiryResult: 'IN_PROGRESS',
+      inquired: [[{ paymentCancelId: target.paymentCancelId }]],
     });
   });
 });

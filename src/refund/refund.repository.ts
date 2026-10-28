@@ -421,6 +421,28 @@ export class RefundRepository {
   }
 
   /**
+   * 환불의 미확정 PG 취소 요청(결과 확인 중·결과 확인 실패) 한 건과 조회 기록을 찾는다
+   * @param refundId 환불 ID
+   * @returns 가장 최근 미확정 시도, 없으면 null
+   */
+  async findPendingAttemptOfRefund(refundId: string): Promise<{
+    id: string;
+    lastInquiryAt: Date | null;
+    lastInquiryError: string | null;
+  } | null> {
+    return this.prisma.paymentCancel.findFirst({
+      where: {
+        refundId,
+        status: {
+          in: [PaymentCancelStatus.REQUESTED, PaymentCancelStatus.QUERY_FAILED],
+        },
+      },
+      orderBy: { attemptNumber: 'desc' },
+      select: { id: true, lastInquiryAt: true, lastInquiryError: true },
+    });
+  }
+
+  /**
    * 정기 탐색에서 조회할 PG 취소 요청을 찾는다(일정의 원천은 DB의 nextInquiryAt)
    * @param now 탐색 시각
    * @param limit 한 번에 처리할 최대 건수
