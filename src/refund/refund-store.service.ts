@@ -1,9 +1,21 @@
-import { Injectable } from '@nestjs/common';
-import { UserRole } from '@prisma/client';
+import { Inject, Injectable } from '@nestjs/common';
+import { RefundSource, UserRole } from '@prisma/client';
+import { REFUND_PG_GATEWAY } from 'src/pg/refund-pg.gateway';
+import type { RefundPgGateway } from 'src/pg/refund-pg.gateway';
 import { RefundActor } from './refund-access.service';
-import { IdempotentResult } from './refund-idempotency.service';
-import { RefundAcceptance } from './refund-acceptance.service';
-import { RefundForbiddenError } from './errors';
+import {
+  IdempotentResult,
+  RefundIdempotencyService,
+} from './refund-idempotency.service';
+import {
+  RefundAcceptance,
+  RefundAcceptanceService,
+} from './refund-acceptance.service';
+import { evaluateStoreRefund } from './refund-policy';
+import {
+  RefundForbiddenError,
+  RefundTerminationConsentRequiredError,
+} from './errors';
 
 /** 점주 매장 환불 요청 */
 export type StoreRefundCommand = {
@@ -22,6 +34,12 @@ export type StoreRefundCommand = {
  */
 @Injectable()
 export class RefundStoreService {
+  constructor(
+    private readonly acceptanceService: RefundAcceptanceService,
+    private readonly idempotencyService: RefundIdempotencyService,
+    @Inject(REFUND_PG_GATEWAY) private readonly pgGateway: RefundPgGateway,
+  ) {}
+
   /**
    * 매장 환불을 확정한다
    * @param actor 요청한 점주
@@ -37,8 +55,70 @@ export class RefundStoreService {
   ): Promise<IdempotentResult<RefundAcceptance>> {
     // 새 매장 환불은 OWNER만 요청한다(MANAGER도 거절, API 계약 §2·FR-050)
     if (actor.role !== UserRole.OWNER) throw new RefundForbiddenError();
-    void shopId;
-    void command;
-    return Promise.reject(new Error('구현 전'));
+
+    // 이번 요청이 실제로 확정한 PG 취소 요청(저장된 응답을 재생한 경우는 없음)
+    let pending: { paymentCancelId: string; amount: number } | undefined;
+    const result = await this.idempotencyService.execute(
+      {
+        requesterId: actor.userId,
+        operation: 'STORE_REFUND',
+        key: command.idempotencyKey,
+        request: {
+          shopId,
+          ticketId: command.ticketId,
+          amount: command.amount,
+          reason: command.reason ?? null,
+          consentToTerminateTicket: command.consentToTerminateTicket ?? null,
+          consentToEndSession: command.consentToEndSession ?? null,
+        },
+        authorize: () => Promise.resolve(),
+      },
+      async (tx) => {
+        // 대상 판정(결제 → 기존 환불 → 금액 상한 → 전액 원칙·사유)
+        const now = new Date();
+        const target = await this.acceptanceService.findLockedTarget(
+          command.ticketId,
+          tx,
+        );
+        const decision = evaluateStoreRefund(
+          target?.candidate ?? null,
+          { amount: command.amount, reason: command.reason },
+          now,
+        );
+        if (!decision.eligible) {
+          throw new Error(decision.code);
+        }
+
+        // 판정을 모두 통과한 뒤 종료 동의를 확인한다
+        if (command.consentToTerminateTicket !== true) {
+          throw new RefundTerminationConsentRequiredError();
+        }
+
+        // 이용권 종료·좌석 해제·확정 환불·최초 PG 취소 요청을 함께 저장한다
+        const confirmed = await this.acceptanceService.confirmAcceptedRefund(
+          {
+            ticketId: command.ticketId,
+            paymentId: target!.paymentId,
+            orderItemId: target!.orderItemId,
+            orderId: target!.orderId,
+            shopId: target!.shopId,
+            source: RefundSource.STORE,
+            amount: decision.amount,
+            reason: decision.reason ?? undefined,
+            requestedById: actor.userId,
+            now,
+          },
+          tx,
+        );
+        pending = confirmed.pending;
+        return confirmed.result;
+      },
+    );
+
+    // PG 전송은 커밋 뒤에만 한다
+    if (pending) {
+      await this.pgGateway.sendCancel(pending);
+    }
+    return result;
   }
 }

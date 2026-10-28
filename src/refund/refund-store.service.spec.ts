@@ -1,5 +1,7 @@
 import { UserRole } from '@prisma/client';
 import { RefundStoreService } from './refund-store.service';
+import { RefundAcceptanceService } from './refund-acceptance.service';
+import { RefundIdempotencyService } from './refund-idempotency.service';
 import { RefundForbiddenError } from './errors';
 
 describe('RefundStoreService', () => {
@@ -8,7 +10,12 @@ describe('RefundStoreService', () => {
   let service: RefundStoreService;
 
   beforeEach(() => {
-    service = new RefundStoreService();
+    // 역할 확인은 저장·판정 전에 끝나므로 협력 객체는 빈 대역으로 둔다
+    service = new RefundStoreService(
+      {} as RefundAcceptanceService,
+      {} as RefundIdempotencyService,
+      { sendCancel: jest.fn(), inquireCancel: jest.fn() },
+    );
   });
 
   it('MANAGER가 새 매장 환불을 요청하면 REFUND_FORBIDDEN으로 거절된다', async () => {
