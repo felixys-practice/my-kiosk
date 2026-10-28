@@ -90,3 +90,13 @@ export class PgCallbackTargetNotFoundError extends DomainNotFoundError {
     this.name = 'PgCallbackTargetNotFoundError';
   }
 }
+
+/** PG 콜백의 PG 취소 요청이 콜백이 가리키는 환불 대상과 다름 (409) */
+export class PgCallbackTargetMismatchError extends DomainConflictError {
+  readonly code = 'PG_CALLBACK_TARGET_MISMATCH';
+
+  constructor() {
+    super('콜백의 PG 취소 요청이 콜백 대상과 일치하지 않습니다');
+    this.name = 'PgCallbackTargetMismatchError';
+  }
+}

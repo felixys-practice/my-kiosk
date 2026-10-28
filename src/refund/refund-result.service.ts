@@ -9,7 +9,10 @@ import { TransactionClient } from 'src/prisma/prisma.service';
 import { RefundLedgerRepository } from 'src/ledger/refund-ledger.repository';
 import { AttemptForResult, RefundRepository } from './refund.repository';
 import { RefundEventRepository } from './refund-event.repository';
-import { PgCallbackTargetNotFoundError } from './errors';
+import {
+  PgCallbackTargetMismatchError,
+  PgCallbackTargetNotFoundError,
+} from './errors';
 import { RefundLockingRepository } from './refund-locking.repository';
 
 /** PG가 확정한 PG 취소 요청 결과 */
@@ -45,6 +48,7 @@ export type ApplyPgResultCommand = {
   paymentCancelId: string; // 결과가 온 PG 취소 요청
   outcome: PgCancelOutcome;
   claimToken?: string; // 자동 작업이 반영할 때의 담당 토큰(콜백은 없음)
+  expectedOrderItemId?: string | null; // 콜백이 가리킨 환불 대상(콜백만, PAYMENT 대상이면 null)
 };
 
 /**
@@ -85,6 +89,13 @@ export class RefundResultService {
         command.paymentCancelId,
         tx,
       ))!;
+      // 콜백이 가리킨 대상이 저장된 PaymentCancel → Refund 대상과 다르면 반영하지 않는다(API 계약 §7)
+      if (
+        command.expectedOrderItemId !== undefined &&
+        attempt.refund.orderItemId !== command.expectedOrderItemId
+      ) {
+        throw new PgCallbackTargetMismatchError();
+      }
       const stored: ApplyPgResultOutcome = {
         applied: false,
         attemptStatus: attempt.status,
@@ -181,6 +192,7 @@ export class RefundResultService {
       : { kind: 'FAILED', reason: callback.reason ?? '' };
     const result = await this.applyPgResult({
       paymentCancelId: callback.paymentCancelId,
+      expectedOrderItemId: callback.orderItemId,
       outcome,
     });
     if (!result) throw new PgCallbackTargetNotFoundError();

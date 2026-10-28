@@ -19,10 +19,13 @@ import {
 } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { AppModule } from 'src/app.module';
-import { DomainNotFoundError } from 'src/common/errors';
+import { DomainConflictError, DomainNotFoundError } from 'src/common/errors';
 import { REFUND_PG_GATEWAY } from 'src/pg/refund-pg.gateway';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { PgCallbackTargetNotFoundError } from './errors';
+import {
+  PgCallbackTargetMismatchError,
+  PgCallbackTargetNotFoundError,
+} from './errors';
 import { RefundRepository } from './refund.repository';
 import { RefundResultService } from './refund-result.service';
 
@@ -50,6 +53,7 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
     refundId: string;
     paymentCancelId: string;
     orderId: string;
+    orderItemId: string;
   }> {
     const now = new Date();
     const order = await prisma.order.create({
@@ -124,6 +128,7 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       refundId: refund.id,
       paymentCancelId: refund.paymentCancels[0].id,
       orderId: order.id,
+      orderItemId: orderItem.id,
     };
   }
 
@@ -477,5 +482,33 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
     await expect(rejection).rejects.toMatchObject({
       code: 'PG_CALLBACK_TARGET_NOT_FOUND',
     });
+  });
+
+  it('콜백의 PG 취소 요청이 다른 환불에 속하면 PG_CALLBACK_TARGET_MISMATCH(409)로 거절되고 아무것도 반영하지 않는다', async () => {
+    const pending = await createPendingRefund();
+    const other = await createPendingRefund();
+
+    const rejection = service.applyCallback({
+      success: true,
+      paymentCancelId: pending.paymentCancelId,
+      pgTransactionId: `pg-cancel-${randomUUID()}`,
+      orderItemId: other.orderItemId,
+      amount: refundAmount,
+      reason: null,
+    });
+
+    // DomainConflictError는 HttpExceptionFilter에서 409로 바뀐다
+    await expect(rejection).rejects.toBeInstanceOf(
+      PgCallbackTargetMismatchError,
+    );
+    await expect(rejection).rejects.toBeInstanceOf(DomainConflictError);
+    const refund = await prisma.refund.findUniqueOrThrow({
+      where: { id: pending.refundId },
+      include: { paymentCancels: true, ledgers: true },
+    });
+    expect({
+      attemptStatus: refund.paymentCancels[0].status,
+      ledgers: refund.ledgers.length,
+    }).toEqual({ attemptStatus: PaymentCancelStatus.REQUESTED, ledgers: 0 });
   });
 });
