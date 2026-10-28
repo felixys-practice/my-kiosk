@@ -419,6 +419,13 @@ describe('좌석 타입 (E2E)', () => {
     await prisma.paymentCancel.deleteMany({
       where: { payment: { order: { userId: { in: userIds } } } },
     });
+    // 002 환불 계약의 환불 확정 기록(QS-21)과 그 멱등 기록
+    await prisma.refundIdempotencyRecord.deleteMany({
+      where: { requesterId: { in: userIds } },
+    });
+    await prisma.refund.deleteMany({
+      where: { payment: { order: { userId: { in: userIds } } } },
+    });
     await prisma.ticketSeatChange.deleteMany({
       where: { ticket: { userId: { in: userIds } } },
     });
@@ -957,28 +964,12 @@ describe('좌석 타입 (E2E)', () => {
         seatId,
       );
 
+      // 002 환불 계약: 종료 동의가 필수이고, 환불 확정(202) 즉시 배정을 해제한다(PG 콜백을 기다리지 않음)
       await request(server)
         .post('/refund')
         .set('Authorization', `Bearer ${userToken}`)
-        .send({ ticketId })
-        .expect(201);
-      const ticket = await prisma.ticket.findUniqueOrThrow({
-        where: { id: ticketId },
-      });
-      const cancel = await prisma.paymentCancel.findFirstOrThrow({
-        where: { orderItemId: ticket.orderItemId },
-      });
-      await request(server)
-        .post('/refund/callback')
-        .set('Authorization', `Bearer ${userToken}`)
-        .send({
-          success: true,
-          pgTransactionId: `refund-${cancel.id}`,
-          orderItemId: ticket.orderItemId,
-          paymentCancelId: cancel.id,
-          amount: cancel.amount,
-        })
-        .expect(201);
+        .send({ ticketId, consentToTerminateTicket: true })
+        .expect(202);
 
       // 조회 시점 판정(isAssignable)과 별개로 배정 행이 즉시 해제됐는지 확인한다
       const assignment = await prisma.seatAssignment.findFirstOrThrow({
