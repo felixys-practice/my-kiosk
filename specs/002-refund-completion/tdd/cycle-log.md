@@ -1196,3 +1196,28 @@ U10~U15를 마친 뒤, 관계 검증의 비교 대상 설정을 생략하면 정
 - 범위 `395b8e6..6a1c34e`. 판정 **통과**. US10 전체(T112~T138, T185)가 완료됐다.
 - 다음 권장 순서: US7(PG 콜백 서명 인증) → US8·US9 → 최종 검증.
 
+## US7 PG 콜백 서명 인증 사이클 (2026-10-29)
+
+- 사용자 결정: 기존 E2E 9곳(ticket-pause·seat-type 포함)의 콜백 요청은 서명 도우미(`test/helpers/pg-callback.ts`의 `signedCallback`)로 바꾼다. 테스트 앱 생성에 `rawBody: true`를 넣는다. 단언은 바꾸지 않는다.
+- 진행 중 추가한 동작: U380(서명 시각이 십진 Unix 초가 아니면 거절). 'abc'로 서명한 요청이 NaN 시각 검사를 통과하던 결함이다.
+
+| 동작 | red(결정적 줄) 또는 뮤턴트 | green | 커밋 |
+|---|---|---|---|
+| U225 | `Received: "DENIED"` | 가짜 구현(true) | `8cb3fe8` |
+| U226 | `Received: "PASS"` | 원문 바이트 sha256 canonical·HMAC-SHA256·`timingSafeEqual`. 설정 대역을 키별로 바꾸자 잘못된 키로 2 failed → `pgCallback.secret` 설정 추가 | `8cb3fe8` |
+| U227~U231 | 첫 통과 → 뮤턴트(키 정렬 정규화 해시 — 테스트 원문을 정렬된 본문으로 바꿔 재시도 / 서명 없으면 통과 / 중복 헤더 첫 값 / 받은 길이만 비교 / 대소문자 무시) 각 1 failed | — | `5a8834d` |
+| U233·U234·U232 | `Received: "PASS"`(2) / 첫 통과→뮤턴트(>=) | `|now - ts| > pgCallback.maxSkewSeconds`면 PG_CALLBACK_EXPIRED | `64ce4c5` |
+| U380 | `Received: "PASS"` | 서명 시각 `/^\d+$/` 아니면 UNAUTHORIZED | `64ce4c5` |
+| U235·U236 | `Received: "PASS"`(2) | Content-Encoding(identity 외)·URL의 `?`면 PG_CALLBACK_FORMAT_INVALID(400), 서명 확인보다 먼저 | `4ec59b7` |
+| U237·A62 | JWT만 있는 환불 콜백이 200·PAID 반영 | 두 콜백에 `@Public()`+`@UseGuards(PgSignatureGuard)`, `main.ts`의 `rawBody: true`, 기존 E2E 서명 도우미 전환 | `264f8f0` |
+| A60·A61·A63·만료 재서명·중복·U238 | 첫 통과 → 뮤턴트(canonical 메서드 GET 고정 / 서명 없으면 통과 / 결제 콜백 가드 제거 / 시각 검사 해제) 각 1 failed | — | `b4fc9ca` |
+| 저장 실패 503 | 결제 콜백 `500 INTERNAL_SERVER_ERROR` | `isDomainError`를 `common/errors`로 옮기고, 결제 콜백도 도메인 오류 외 저장 실패를 REFUND_STORAGE_UNAVAILABLE(503)로 | `b4fc9ca` |
+
+- 이탈·메모:
+  - 중복 통보 1회 반영은 기존 공통 결과 처리(미확정 시도에만 반영)에 의존한다.
+  - 로그 미노출(U238)은 현재 상태를 확인한 테스트다(가드는 아무것도 로그에 남기지 않는다). 뮤턴트로 확인하지 않았다.
+  - `Content-Type: application/json` 강제는 하지 않았다(대상 동작에 없음).
+  - `payment.service.ts`의 기존 린트 오류(`throw Error;`)는 그대로 두었고, 오류 수가 늘지 않았음을 확인했다.
+  - `.env.example`의 `PG_CALLBACK_SECRET`은 사용자 미커밋 변경이 있는 파일이라 건드리지 않았다(항목은 이미 있음).
+- 결과: 단위 573, E2E 160 passed(`b4fc9ca`).
+

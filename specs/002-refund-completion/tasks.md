@@ -296,19 +296,19 @@
 
 ### HTTP 인수 테스트
 
-- [ ] T139 [US7] [A60] E2E: `test/refund-callback-auth.e2e-spec.ts`에 명세 7-1의 Given/When으로 요청하고 다음 결과를 검증한다: 결과가 반영된다. 테스트 이름 끝에 `(QS-7-1)`를 붙인다.
-- [ ] T140 [US7] [A61] E2E: `test/refund-callback-auth.e2e-spec.ts`에 명세 7-2의 Given/When으로 요청하고 다음 결과를 검증한다: 거부되고 환불금 지급 상태는 바뀌지 않는다. 테스트 이름 끝에 `(QS-7-2)`를 붙인다.
-- [ ] T141 [US7] [A62] E2E: `test/refund-callback-auth.e2e-spec.ts`에 명세 7-3의 Given/When으로 요청하고 다음 결과를 검증한다: 거부된다. 테스트 이름 끝에 `(QS-7-3)`를 붙인다.
-- [ ] T142 [US7] [A63] E2E: `test/refund-callback-auth.e2e-spec.ts`에 명세 7-4의 Given/When으로 요청하고 다음 결과를 검증한다: 1~3번과 같이 처리된다. 테스트 이름 끝에 `(QS-7-4)`를 붙인다.
+- [X] T139 [US7] [A60] E2E: `test/refund-callback-auth.e2e-spec.ts`에 명세 7-1의 Given/When으로 요청하고 다음 결과를 검증한다: 결과가 반영된다. 테스트 이름 끝에 `(QS-7-1)`를 붙인다.
+- [X] T140 [US7] [A61] E2E: `test/refund-callback-auth.e2e-spec.ts`에 명세 7-2의 Given/When으로 요청하고 다음 결과를 검증한다: 거부되고 환불금 지급 상태는 바뀌지 않는다. 테스트 이름 끝에 `(QS-7-2)`를 붙인다.
+- [X] T141 [US7] [A62] E2E: `test/refund-callback-auth.e2e-spec.ts`에 명세 7-3의 Given/When으로 요청하고 다음 결과를 검증한다: 거부된다. 테스트 이름 끝에 `(QS-7-3)`를 붙인다.
+- [X] T142 [US7] [A63] E2E: `test/refund-callback-auth.e2e-spec.ts`에 명세 7-4의 Given/When으로 요청하고 다음 결과를 검증한다: 1~3번과 같이 처리된다. 테스트 이름 끝에 `(QS-7-4)`를 붙인다.
 
 ### 단위 테스트와 구현
 
-- [ ] T143 [US7] [U225] [U226] [U227] [U228] [U229] [U230] [U231] [U232] [U233] [U234] [U235] [U236] [U237] [U238] `src/pg/guards/pg-signature.guard.spec.ts`에 원문 바이트·키 순서/공백 변경·중복 헤더·잘못된 hex·시각 ±300초 경계·압축/query string 거절을 테스트한다.
-- [ ] T144 [US7] [U225] [U226] [U227] [U228] [U229] [U230] [U231] [U232] [U233] [U234] [U235] [U236] `src/pg/guards/pg-signature.guard.ts`, `src/pg/pg.module.ts`에 API 계약 §7의 canonical UTF-8/LF 규격과 HMAC-SHA256·상수 시간 비교를 구현한다. X-PG-Timestamp와 v1=소문자 hex 64자리 서명을 검사하며 PG_CALLBACK_UNAUTHORIZED/EXPIRED/FORMAT_INVALID를 구분한다.
-- [ ] T145 [US7] [U225] [U237] `src/main.ts`, `src/payment/payment.controller.ts`, `src/refund/refund.controller.ts`에 rawBody:true와 두 콜백의 Public+PG 서명 가드를 적용한다. 사용자 JWT만으로 서명을 우회하지 못하게 하고 다른 경로의 JWT 보호를 유지한다.
-- [ ] T146 [US7] [U238] `test/refund-callback-auth.e2e-spec.ts`에 만료 서명의 재통보 거절·새 시각 재서명 허용·DB 커밋 실패 503·유효 시간 내 중복 통보 1회 반영을 추가한다. 비밀값·서명·개인정보가 `src/logger/transaction-logger.service.ts` 로그에 남지 않는지 확인한다.
+- [X] T143 [US7] [U225] [U226] [U227] [U228] [U229] [U230] [U231] [U232] [U233] [U234] [U235] [U236] [U237] [U238] `src/pg/guards/pg-signature.guard.spec.ts`에 원문 바이트·키 순서/공백 변경·중복 헤더·잘못된 hex·시각 ±300초 경계·압축/query string 거절을 테스트한다.
+- [X] T144 [US7] [U225] [U226] [U227] [U228] [U229] [U230] [U231] [U232] [U233] [U234] [U235] [U236] `src/pg/guards/pg-signature.guard.ts`, `src/pg/pg.module.ts`에 API 계약 §7의 canonical UTF-8/LF 규격과 HMAC-SHA256·상수 시간 비교를 구현한다. X-PG-Timestamp와 v1=소문자 hex 64자리 서명을 검사하며 PG_CALLBACK_UNAUTHORIZED/EXPIRED/FORMAT_INVALID를 구분한다.
+- [X] T145 [US7] [U225] [U237] `src/main.ts`, `src/payment/payment.controller.ts`, `src/refund/refund.controller.ts`에 rawBody:true와 두 콜백의 Public+PG 서명 가드를 적용한다. 사용자 JWT만으로 서명을 우회하지 못하게 하고 다른 경로의 JWT 보호를 유지한다.
+- [X] T146 [US7] [U238] `test/refund-callback-auth.e2e-spec.ts`에 만료 서명의 재통보 거절·새 시각 재서명 허용·DB 커밋 실패 503·유효 시간 내 중복 통보 1회 반영을 추가한다. 비밀값·서명·개인정보가 `src/logger/transaction-logger.service.ts` 로그에 남지 않는지 확인한다.
 
-- [ ] T186 [US7] [A60] [A61] [A62] [A63] `test/refund-callback-auth.e2e-spec.ts`의 사용자 스토리 7 인수 테스트 A60부터 A63까지 4개가 모두 통과하는지 실행해 확인한 뒤에만 이 스토리를 완료로 표시한다.
+- [X] T186 [US7] [A60] [A61] [A62] [A63] `test/refund-callback-auth.e2e-spec.ts`의 사용자 스토리 7 인수 테스트 A60부터 A63까지 4개가 모두 통과하는지 실행해 확인한 뒤에만 이 스토리를 완료로 표시한다.
 
 **검수 관문**: T139부터 T146까지의 작업과 T186 작업을 마치면 실행 규칙의 Phase 검수 절차에 따라 Codex 검수를 받는다. "통과" 판정 전에는 다음 Phase로 넘어가지 않는다.
 

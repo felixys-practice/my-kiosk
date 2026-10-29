@@ -93,10 +93,10 @@ suite_baseline: green
 | A57 | Given 1번의 자동 취소 환불이 확정됐을 때, When PG가 확정된 환불 금액의 취소를 확정하면, Then 환불금 지급 완료로 바뀌고 실패 결제는 성공으로 복구하지 않는다. | QS-6-2 | example | DONE | `test/refund-payment-mismatch.e2e-spec.ts` › … (QS-6-2) |
 | A58 | Given 1번의 자동 취소가 응답 없음일 때, When 정해진 시간이 지나면, Then 사용자 스토리 5와 같이 처리된다. | QS-6-3 | example | DONE | `test/refund-payment-mismatch.e2e-spec.ts` › … (QS-6-3) |
 | A59 | Given 결제 금액과 같은 금액으로 승인됐을 때, When 승인 결과를 받으면, Then 기존처럼 이용권이 발행된다. | QS-6-4 | example | DONE | `test/refund-payment-mismatch.e2e-spec.ts` › … (QS-6-4) |
-| A60 | Given 환불금 지급 처리 중인 환불이 있을 때, When 올바른 서명을 담은 환불 결과 콜백이 로그인 없이 오면, Then 결과가 반영된다. | QS-7-1 | example | PENDING | |
-| A61 | Given 환불금 지급 처리 중인 환불이 있을 때, When 서명이 없거나 틀린 환불 결과 콜백이 오면, Then 거부되고 환불금 지급 상태는 바뀌지 않는다. | QS-7-2 | example | PENDING | |
-| A62 | Given 환불금 지급 처리 중인 환불이 있을 때, When 로그인한 사용자가 서명 없이 콜백을 보내면, Then 거부된다. | QS-7-3 | example | PENDING | |
-| A63 | Given 결제를 요청한 주문이 있을 때, When 결제 결과 콜백에 1~3번과 같은 조건으로 요청이 오면, Then 1~3번과 같이 처리된다. | QS-7-4 | example | PENDING | |
+| A60 | Given 환불금 지급 처리 중인 환불이 있을 때, When 올바른 서명을 담은 환불 결과 콜백이 로그인 없이 오면, Then 결과가 반영된다. | QS-7-1 | example | DONE | `test/refund-callback-auth.e2e-spec.ts` › … (QS-7-1) |
+| A61 | Given 환불금 지급 처리 중인 환불이 있을 때, When 서명이 없거나 틀린 환불 결과 콜백이 오면, Then 거부되고 환불금 지급 상태는 바뀌지 않는다. | QS-7-2 | example | DONE | `test/refund-callback-auth.e2e-spec.ts` › … (QS-7-2) |
+| A62 | Given 환불금 지급 처리 중인 환불이 있을 때, When 로그인한 사용자가 서명 없이 콜백을 보내면, Then 거부된다. | QS-7-3 | example | DONE | `test/refund-callback-auth.e2e-spec.ts` › … (QS-7-3) |
+| A63 | Given 결제를 요청한 주문이 있을 때, When 결제 결과 콜백에 1~3번과 같은 조건으로 요청이 오면, Then 1~3번과 같이 처리된다. | QS-7-4 | example | DONE | `test/refund-callback-auth.e2e-spec.ts` › … (QS-7-4) |
 | A64 | Given 점주가 매장을 소유하고 있을 때, When 자기 매장의 환불 내역을 조회하면, Then 조회된다. | QS-8-1 | example | PENDING | |
 | A65 | Given 점주가 있을 때, When 자기 소유가 아닌 매장의 환불 내역을 조회하면, | QS-8-2 | example | PENDING | |
 | A66 | Given 고객이 있을 때, When 자기 환불 내역을 조회하면, Then 조회된다. | QS-8-3 | example | PENDING | |
@@ -287,7 +287,7 @@ suite_baseline: green
 | U377 | 장기 미확인 알림은 저장 직전에 예약을 잠그고 다시 확인해 이미 지급 결과가 등록된 예약에는 알리지 않는다 (US10 외부 지급 검수 3) | FR-037 | example | DONE | `src/refund/refund-result.integration.spec.ts` › 별도 환불금 지급 › 장기 미확인 알림을 저장하기 직전에 지급 결과가 등록됐으면… |
 | U378 | 새 장기 미확인 알림이 저장되면 거래 로그도 한 번 남긴다 (FR-037, US10 외부 지급 검수 4) | FR-037 | example | DONE | `src/refund/refund-result.integration.spec.ts` › 별도 환불금 지급 › 새 장기 미확인 알림을 저장하면 거래 로그를 한 번 남기고… |
 | U379 | 별도 지급 결과 등록의 지급 시각은 날짜·시각·명시적 시간대가 모두 있어야 하며 날짜만 있거나 시간대가 없으면 형식 오류(400)다 (계약 'UTC ISO 시각', US10 외부 지급 검수 2차) | FR-046 | example | DONE | `src/refund/dto/confirm-manual-refund-payout.dto.spec.ts` › 실제 지급 시각에 시각이나 시간대가 없으면…, 시간대가 붙은 지급 시각(+09:00)은… |
-| U380 | 서명 시각이 십진 Unix 초가 아니면(그 값으로 서명했더라도) PG_CALLBACK_UNAUTHORIZED로 거절된다 (계약 §7 '십진 Unix 초'·'잘못된 형식은 인증 실패', US7 진행 중 추가) | FR-032 | example | PENDING | |
+| U380 | 서명 시각이 십진 Unix 초가 아니면(그 값으로 서명했더라도) PG_CALLBACK_UNAUTHORIZED로 거절된다 (계약 §7 '십진 Unix 초'·'잘못된 형식은 인증 실패', US7 진행 중 추가) | FR-032 | example | DONE | `src/pg/guards/pg-signature.guard.spec.ts` › 서명 시각이 십진 Unix 초가 아니면… |
 
 ### `src/refund/refund-idempotency.service.ts`
 
@@ -558,20 +558,20 @@ suite_baseline: green
 
 | id | behavior | traces | kind | state | test |
 |---|---|---|---|---|---|
-| U225 | 올바른 서명과 현재 시각의 콜백은 로그인 없이 통과한다 | FR-031 | example | PENDING | |
-| U226 | 본문 바이트가 1개 바뀌면 PG_CALLBACK_UNAUTHORIZED로 거절된다 | FR-032 | example | PENDING | |
-| U227 | 키 순서·공백만 다른 본문도 원문 바이트가 다르면 PG_CALLBACK_UNAUTHORIZED로 거절된다 | FR-032 | example | PENDING | |
-| U228 | 서명 헤더가 없으면 PG_CALLBACK_UNAUTHORIZED로 거절된다 | FR-032 | example | PENDING | |
-| U229 | 서명 헤더가 두 번 오면 PG_CALLBACK_UNAUTHORIZED로 거절된다 | FR-032 | example | PENDING | |
-| U230 | 서명 hex가 63자리이면 PG_CALLBACK_UNAUTHORIZED로 거절된다 | FR-032 | example | PENDING | |
-| U231 | 서명 hex가 대문자이면 PG_CALLBACK_UNAUTHORIZED로 거절된다 | FR-032 | example | PENDING | |
-| U232 | 서명 시각이 300초 전이면 통과한다 | FR-032 | example | PENDING | |
-| U233 | 서명 시각이 301초 전이면 PG_CALLBACK_EXPIRED로 거절된다 | FR-032 | example | PENDING | |
-| U234 | 서명 시각이 301초 뒤이면 PG_CALLBACK_EXPIRED로 거절된다 | FR-032 | example | PENDING | |
-| U235 | 압축된 본문은 PG_CALLBACK_FORMAT_INVALID로 거절된다 | FR-032 | example | PENDING | |
-| U236 | query string이 붙은 콜백은 PG_CALLBACK_FORMAT_INVALID로 거절된다 | FR-032 | example | PENDING | |
-| U237 | 사용자 JWT만 있고 서명이 없는 콜백은 PG_CALLBACK_UNAUTHORIZED로 거절된다 | FR-032 | example | PENDING | |
-| U238 | 비밀값과 서명 값은 거래 로그에 남지 않는다 | FR-032 | example | PENDING | |
+| U225 | 올바른 서명과 현재 시각의 콜백은 로그인 없이 통과한다 | FR-031 | example | DONE | `src/pg/guards/pg-signature.guard.spec.ts` › 올바른 서명과 현재 시각의 콜백은 로그인 없이 통과한다 |
+| U226 | 본문 바이트가 1개 바뀌면 PG_CALLBACK_UNAUTHORIZED로 거절된다 | FR-032 | example | DONE | `src/pg/guards/pg-signature.guard.spec.ts` › 본문 바이트가 1개 바뀌면… |
+| U227 | 키 순서·공백만 다른 본문도 원문 바이트가 다르면 PG_CALLBACK_UNAUTHORIZED로 거절된다 | FR-032 | example | DONE | `src/pg/guards/pg-signature.guard.spec.ts` › 키 순서·공백만 다른 본문도… |
+| U228 | 서명 헤더가 없으면 PG_CALLBACK_UNAUTHORIZED로 거절된다 | FR-032 | example | DONE | `src/pg/guards/pg-signature.guard.spec.ts` › 서명 헤더가 없으면… |
+| U229 | 서명 헤더가 두 번 오면 PG_CALLBACK_UNAUTHORIZED로 거절된다 | FR-032 | example | DONE | `src/pg/guards/pg-signature.guard.spec.ts` › 서명 헤더가 두 번 오면… |
+| U230 | 서명 hex가 63자리이면 PG_CALLBACK_UNAUTHORIZED로 거절된다 | FR-032 | example | DONE | `src/pg/guards/pg-signature.guard.spec.ts` › 서명 hex가 63자리이면… |
+| U231 | 서명 hex가 대문자이면 PG_CALLBACK_UNAUTHORIZED로 거절된다 | FR-032 | example | DONE | `src/pg/guards/pg-signature.guard.spec.ts` › 서명 hex가 대문자이면… |
+| U232 | 서명 시각이 300초 전이면 통과한다 | FR-032 | example | DONE | `src/pg/guards/pg-signature.guard.spec.ts` › 서명 시각이 300초 전이면 통과한다 |
+| U233 | 서명 시각이 301초 전이면 PG_CALLBACK_EXPIRED로 거절된다 | FR-032 | example | DONE | `src/pg/guards/pg-signature.guard.spec.ts` › 서명 시각이 301초 전이면… |
+| U234 | 서명 시각이 301초 뒤이면 PG_CALLBACK_EXPIRED로 거절된다 | FR-032 | example | DONE | `src/pg/guards/pg-signature.guard.spec.ts` › 서명 시각이 301초 뒤이면… |
+| U235 | 압축된 본문은 PG_CALLBACK_FORMAT_INVALID로 거절된다 | FR-032 | example | DONE | `src/pg/guards/pg-signature.guard.spec.ts` › 압축된 본문(Content-Encoding)은… |
+| U236 | query string이 붙은 콜백은 PG_CALLBACK_FORMAT_INVALID로 거절된다 | FR-032 | example | DONE | `src/pg/guards/pg-signature.guard.spec.ts` › query string이 붙은 콜백은… |
+| U237 | 사용자 JWT만 있고 서명이 없는 콜백은 PG_CALLBACK_UNAUTHORIZED로 거절된다 | FR-032 | example | DONE | `test/refund-callback-auth.e2e-spec.ts` › … (QS-7-3) |
+| U238 | 비밀값과 서명 값은 거래 로그에 남지 않는다 | FR-032 | example | DONE | `test/refund-callback-auth.e2e-spec.ts` › 서명 비밀값과 서명 값은 거래 로그에 남지 않는다 |
 
 ### `src/refund/refund-query.service.ts, src/refund/dto/get-refund-query.dto.ts`
 
