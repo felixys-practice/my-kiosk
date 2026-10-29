@@ -1140,3 +1140,31 @@ U10~U15를 마친 뒤, 관계 검증의 비교 대상 설정을 생략하면 정
 - 범위 `916e042..07de33d`. 판정 **통과**. US6과 US5(T183)가 모두 완료됐다.
 - 다음 권장 순서: US10 외부 지급(별도 지급 예약·증빙·미지급 종료·초과 검토·장기 미확인 알림, A82~A92) → US7 → US8·US9 → 최종.
 
+## US10 외부 지급(별도 지급 예약·결과 등록·미지급 확인·초과 취소 검토·장기 미확인 알림) 사이클 (2026-10-29)
+
+- 범위: T117~T128, T132~T138, T185, U205~U224, A82~A92.
+- 진행 중 추가한 동작: U372(없는 예약 404), U373(종료된 예약 409), U374(등록 금액 불일치 400). 모두 계약 §10에 코드가 있지만 단위 목록에 없던 것이다.
+
+| 동작 | red(결정적 줄) 또는 뮤턴트 | green | 커밋 |
+|---|---|---|---|
+| U207·U206 | 정책 spec `+ "allowed": true` / `+ "outstandingAmount": 11999`. 삼각측량: 지급 완료·초과 지급 허용 | `hasUnresolvedPayout`을 재시도 판정에서 꺼내 공유. 미지급액 = amount - paidAmount, 0 이하면 재처리 불가 | `c0c0fd5` |
+| U205 | 예약 없음·PG 방식(스텁 응답) | `reserveManualPayout`: 역할→키→404→멱등→잠금·판정→RESERVED·payoutMethod MANUAL, 201 | `88ec04e` |
+| U208 | 예약 RESERVED·원장 없음 | `confirmManualPayout` 정상 흐름: 성공 확정·원장(manualRefundPayoutId)·지급 합계, 미지급 0이면 PAID | `0c392b5` |
+| U212·U213·U214·U372·U373·U374 | 증빙 없이 PAID / 원장 고유 위반 / `P2002` / 다른 환불 예약으로 성공 / 200 / 성공 응답 | 증빙 필수, 같은 결과 반복은 저장 결과, 거래 ID 재사용(동시 경쟁 P2002도 변환), 없는 예약, RESERVED 아님, 금액 불일치 | `9308239` |
+| U215 | 검토 미완료 | 미지급 0이 되면 이 증빙으로 부족 지급 검토 완료(검토자·시각·증빙) | `6d1f9b1` |
+| U216·U217 | RESERVED 그대로 / 증빙 없이 성공 | `markManualPayoutNotPaid`: 근거 필수, RESERVED만 FAILED, 환불·지급액 그대로 | `a6ad694` |
+| U219·U220 | ACTION_REQUIRED·검토 기록 없음 / 성공 응답 | `reviewRefundAmount`: 미확정 지급 UNRESOLVED, 검토 대상 아님·부족액 REVIEW_INCOMPLETE, 검토 기록·PAID | `870278d` |
+| U221·U222·U223·U218 | 알림 0 / 첫 통과→뮤턴트(기준 1초 앞당김) / sweep 알림 0 / 뮤턴트(알림 때 예약 FAILED) | `alertUnconfirmedManualPayouts`(예약 ID 사건 키, OPERATOR, MANUAL_CONFIRMATION_REQUIRED), sweep 끝에서 호출 | `354ca06` |
+| U209·U210·U211 | 오류 필드 [undefined] / 첫 통과→뮤턴트(199) / 201자 허용 | `ConfirmManualPayoutDto`(MaxDate 현재·거래 ID 1~200·증빙 1000). DTO spec에 `reflect-metadata` import | `59ba01c` |
+| U224 | 경로 없음 404 | 경로 4개(RefundOperatorGuard·멱등 키 헤더)와 DTO 3개 | `0b352ac` |
+| A82 | `+ "REFUND_PAYOUT_NOT_ACTIONABLE"`(처리 중 환불의 예약) | 예약 판정 순서를 재시도와 같게(지급 완료·비확정 → 미확정 지급 → 조치 필요 아님) | `74ab217` |
+| A83~A92 | 첫 통과 → 뮤턴트 각 1개 이상 실패(가드는 이중 방어라 가드+서비스 역할 확인을 함께 해제해 확인) | — | `74ab217` |
+
+- 이탈·메모:
+  - U208 첫 실행 때 이 통합 테스트의 `afterAll`이 원장보다 별도 지급을 먼저 지워 FK 오류로 정리가 중단됐다. 남은 조회 대기 데이터 때문에 59/60초 정기 탐색 테스트가 실패했다. 정리 순서를 고치고, 공유 DB에 남은 이 테스트 사용자 12명 범위의 데이터를 `afterAll`과 같은 순서로 한 트랜잭션에서 정리했다.
+  - 새 DTO 3개(예약·미지급 확인·검토)의 형식 규칙은 단위 테스트가 없다. 계약에 길이 규칙이 따로 없는 사유는 재시도와 같은 1~500자로 맞췄다.
+  - 거래 ID 동시 등록 경쟁(P2002) 변환 경로는 테스트가 없다.
+  - 잠금 뒤 재조회 코드(`lockPayoutTarget`)가 재시도 서비스의 `lockRetryTarget`과 같다. 리팩터 후보다.
+  - 미지급 확인·검토 요청에서도 근거가 없으면 MANUAL_PAYOUT_EVIDENCE_REQUIRED로 거절한다(계약 §10 '실제 지급·확실한 미지급 증빙 누락'을 검토 근거에도 적용).
+- 결과: 단위 552, E2E 152 passed(`74ab217`).
+

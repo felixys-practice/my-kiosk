@@ -115,17 +115,17 @@ suite_baseline: green
 | A79 | Given 점주 또는 운영자의 개별 확인으로 1a번처럼 PG에 취소 요청을 새 PG 취소 요청 식별자로 보냈을 때, When 그 요청의 응답이 없고 이후 자동 조회에서 PG 미접수가 확인되면, Then 자동 작업은 새 PG 취소 요청 식별자로 보낸 취소 요청을 정해진 횟수까지만 다시 보낸다. 이전에 실패한 요청의 상태·재전송 횟수는 바꾸지 않는다. 재전송 한도를 소진한 뒤에도 PG 미접수가 확인되면 자동 처리를 멈춘다. 점주 또는 운영자는 개별 확인을 다시 실행할 수 있다. | QS-10-1b | example | DONE | `test/refund-operations.e2e-spec.ts` › … (QS-10-1b) |
 | A80 | Given 운영자가 요청 키 K1로 환불 R에 대해 직접 재시도를 실행해 PG 취소 요청 A를 생성했고 최초 202 응답이 저장됐으며 A의 결과가 미확정일 때, When 그 운영자가 환불 R에 대해 K1 또는 다른 키 K2로 다시 요청하면, Then K1은 환불 대상과 입력 사유를 첫 요청과 비교해 내용이 같으면 최초 응답과 PG 취소 요청 식별자 A를 반환하고, 내용이 바뀌었으면 IDEMPOTENCY_KEY_REUSED로 거절한다. K2는 환불 R을 잠근 뒤 A가 미확정임을 확인해 REFUND_PAYOUT_UNRESOLVED로 거절한다. 반복·동시 요청으로 취소 요청 기록을 추가하거나 PG에 취소를 추가 요청하지 않는다. | QS-10-1c | example | DONE | `test/refund-operations.e2e-spec.ts` › … (QS-10-1c) |
 | A81 | Given PG 취소 직접 재시도 요청이 들어올 때, When 고객이나 점주가 실행하면, Then 역할 제한으로 REFUND_FORBIDDEN(403)을 반환한다. 운영자의 같은 키·같은 내용 반복은 현재 상태와 관계없이 최초 응답을 반환한다. 새 실행 요청의 지급 완료 등 재처리 불가 상태는 REFUND_PAYOUT_NOT_ACTIONABLE(409), 결과 미확정·활성 별도 지급 예약은 REFUND_PAYOUT_UNRESOLVED(409), 미지급액이 남은 일부 지급은 REFUND_PARTIAL_PAYOUT_REQUIRES_MANUAL(409)로 거절한다. 거절하거나 최초 응답을 반환한 요청은 PG 취소 요청 기록과 호출을 추가하지 않는다. | QS-10-1d | example | DONE | `test/refund-operations.e2e-spec.ts` › … (QS-10-1d) |
-| A82 | Given PG 취소 요청이 처리 중이거나 조회 결과를 확인하지 못했을 때, When 새 식별자를 발급한 PG 취소 요청 또는 별도 환불금 지급을 요청하면, Then 환불금 지급 결과 미확정 오류로 거부한다. | QS-10-2 | example | PENDING | |
-| A83 | Given 모든 PG 취소 요청의 결과가 확정됐고 환불금 지급 조치 필요·미지급액이 남아 있을 때, When 운영자가 별도 환불금 지급을 예약하면, Then 미지급액과 같은 금액을 예약하고 다른 PG 취소 요청·별도 환불금 지급을 차단한다. 예약은 환불금 지급 완료가 아니다. | QS-10-3 | example | PENDING | |
-| A84 | Given 운영자가 예약한 별도 환불금 지급이 있을 때, When 실제 지급 뒤 거래 식별자·환불금 지급 시각·예약과 같은 금액·증빙을 제출하면, Then 별도 환불금 지급과 실제 금액의 원장을 함께 한 번만 기록한다. 합계가 확정된 환불 금액에 이르고 검토 사항이 없으면 환불금 지급 완료가 된다. | QS-10-4 | example | PENDING | |
-| A85 | Given 별도 환불금 지급이 예약됐지만 실제 환불금 지급 여부를 확인하지 못했을 때, When 확인 지연 알림 기준에 도달하거나 담당자가 바뀌면, Then 예약을 유지하고 운영자에게 확인을 요구한다. 시간 초과만으로 예약을 풀거나 다른 환불금 지급을 허용하지 않는다. | QS-10-5 | example | PENDING | |
-| A86 | Given 별도 환불금 지급이 이미 기록됐을 때, When 같은 지급 확정 요청이 반복되면, Then 기존 결과를 반환하고 환불금 지급액·원장을 더하지 않는다. 다른 환불에서 같은 지급 거래 식별자를 쓰면 거부한다. | QS-10-6 | example | PENDING | |
-| A87 | Given PG가 확정된 환불 금액보다 적게 취소했고 실제 금액이 확인됐을 때, When 운영자가 별도 환불금 지급을 예약하면, Then 확정된 환불 금액에서 실제 환불금 지급액을 뺀 부족액만 예약·지급할 수 있다. 같은 환불의 PG 결제 취소와 부족액 지급은 각각 실제 금액으로 원장에 기록한다. 부족액의 실제 환불금 지급 증빙을 확정할 때 부족 지급 검토도 함께 마치고 전체 환불금 지급 완료로 바꾼다. | QS-10-7 | example | PENDING | |
-| A88 | Given PG가 확정된 환불 금액보다 많이 취소했을 때, When 운영자가 증빙과 사유로 불일치 검토를 마치면, Then 실제액·초과액·검토 기록을 유지하고 환불금 지급 완료로 표시한다. 추가 환불금 지급이나 확정된 환불 금액 덮어쓰기는 하지 않으며 초과액 회수는 후속 범위다. | QS-10-8 | example | PENDING | |
-| A89 | Given 고객이나 점주 계정일 때, When PG 외 수단으로 지급할 환불금의 예약을 요청하면, Then 권한 오류로 거부된다. | QS-10-9 | example | PENDING | |
-| A90 | Given 고객이나 점주 계정일 때, When PG 외 수단으로 실제 지급한 환불금의 증빙 등록이나 미지급 확인을 요청하면, Then 권한 오류로 거부된다. | QS-10-9a | example | PENDING | |
-| A91 | Given 고객이나 점주 계정일 때, When PG 초과 취소에 대한 운영자 검토 결과 등록을 요청하면, Then 권한 오류로 거부된다. | QS-10-9b | example | PENDING | |
-| A92 | Given 별도 환불금 지급이 예약됐을 때, When 운영자가 실제로 지급하지 않았음을 증빙과 사유로 확인하면, Then 해당 예약을 실패로 종료하고 환불금 지급 조치 필요로 남긴다. 환불금 지급 여부가 불명확하면 예약을 종료할 수 없다. | QS-10-10 | example | PENDING | |
+| A82 | Given PG 취소 요청이 처리 중이거나 조회 결과를 확인하지 못했을 때, When 새 식별자를 발급한 PG 취소 요청 또는 별도 환불금 지급을 요청하면, Then 환불금 지급 결과 미확정 오류로 거부한다. | QS-10-2 | example | DONE | `test/refund-operations.e2e-spec.ts` › … (QS-10-2) |
+| A83 | Given 모든 PG 취소 요청의 결과가 확정됐고 환불금 지급 조치 필요·미지급액이 남아 있을 때, When 운영자가 별도 환불금 지급을 예약하면, Then 미지급액과 같은 금액을 예약하고 다른 PG 취소 요청·별도 환불금 지급을 차단한다. 예약은 환불금 지급 완료가 아니다. | QS-10-3 | example | DONE | `test/refund-operations.e2e-spec.ts` › … (QS-10-3) |
+| A84 | Given 운영자가 예약한 별도 환불금 지급이 있을 때, When 실제 지급 뒤 거래 식별자·환불금 지급 시각·예약과 같은 금액·증빙을 제출하면, Then 별도 환불금 지급과 실제 금액의 원장을 함께 한 번만 기록한다. 합계가 확정된 환불 금액에 이르고 검토 사항이 없으면 환불금 지급 완료가 된다. | QS-10-4 | example | DONE | `test/refund-operations.e2e-spec.ts` › … (QS-10-4) |
+| A85 | Given 별도 환불금 지급이 예약됐지만 실제 환불금 지급 여부를 확인하지 못했을 때, When 확인 지연 알림 기준에 도달하거나 담당자가 바뀌면, Then 예약을 유지하고 운영자에게 확인을 요구한다. 시간 초과만으로 예약을 풀거나 다른 환불금 지급을 허용하지 않는다. | QS-10-5 | example | DONE | `test/refund-operations.e2e-spec.ts` › … (QS-10-5) |
+| A86 | Given 별도 환불금 지급이 이미 기록됐을 때, When 같은 지급 확정 요청이 반복되면, Then 기존 결과를 반환하고 환불금 지급액·원장을 더하지 않는다. 다른 환불에서 같은 지급 거래 식별자를 쓰면 거부한다. | QS-10-6 | example | DONE | `test/refund-operations.e2e-spec.ts` › … (QS-10-6) |
+| A87 | Given PG가 확정된 환불 금액보다 적게 취소했고 실제 금액이 확인됐을 때, When 운영자가 별도 환불금 지급을 예약하면, Then 확정된 환불 금액에서 실제 환불금 지급액을 뺀 부족액만 예약·지급할 수 있다. 같은 환불의 PG 결제 취소와 부족액 지급은 각각 실제 금액으로 원장에 기록한다. 부족액의 실제 환불금 지급 증빙을 확정할 때 부족 지급 검토도 함께 마치고 전체 환불금 지급 완료로 바꾼다. | QS-10-7 | example | DONE | `test/refund-operations.e2e-spec.ts` › … (QS-10-7) |
+| A88 | Given PG가 확정된 환불 금액보다 많이 취소했을 때, When 운영자가 증빙과 사유로 불일치 검토를 마치면, Then 실제액·초과액·검토 기록을 유지하고 환불금 지급 완료로 표시한다. 추가 환불금 지급이나 확정된 환불 금액 덮어쓰기는 하지 않으며 초과액 회수는 후속 범위다. | QS-10-8 | example | DONE | `test/refund-operations.e2e-spec.ts` › … (QS-10-8) |
+| A89 | Given 고객이나 점주 계정일 때, When PG 외 수단으로 지급할 환불금의 예약을 요청하면, Then 권한 오류로 거부된다. | QS-10-9 | example | DONE | `test/refund-operations.e2e-spec.ts` › … (QS-10-9) |
+| A90 | Given 고객이나 점주 계정일 때, When PG 외 수단으로 실제 지급한 환불금의 증빙 등록이나 미지급 확인을 요청하면, Then 권한 오류로 거부된다. | QS-10-9a | example | DONE | `test/refund-operations.e2e-spec.ts` › … (QS-10-9a) |
+| A91 | Given 고객이나 점주 계정일 때, When PG 초과 취소에 대한 운영자 검토 결과 등록을 요청하면, Then 권한 오류로 거부된다. | QS-10-9b | example | DONE | `test/refund-operations.e2e-spec.ts` › … (QS-10-9b) |
+| A92 | Given 별도 환불금 지급이 예약됐을 때, When 운영자가 실제로 지급하지 않았음을 증빙과 사유로 확인하면, Then 해당 예약을 실패로 종료하고 환불금 지급 조치 필요로 남긴다. 환불금 지급 여부가 불명확하면 예약을 종료할 수 없다. | QS-10-10 | example | DONE | `test/refund-operations.e2e-spec.ts` › … (QS-10-10) |
 
 ## 내부 루프: 단위 동작
 
