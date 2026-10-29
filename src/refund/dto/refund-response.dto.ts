@@ -41,7 +41,10 @@ export class RefundResponseDto {
       source: row.source,
       amount: row.amount,
       paidAmount: row.paidAmount,
-      outstandingAmount: Math.max(row.amount - row.paidAmount, 0),
+      outstandingAmount:
+        row.payoutStatus === 'NOT_APPLICABLE'
+          ? 0
+          : Math.max(row.amount - row.paidAmount, 0),
       overpaidAmount: Math.max(row.paidAmount - row.amount, 0),
       requestedAt: row.requestedAt,
       acceptedAt: row.acceptedAt,

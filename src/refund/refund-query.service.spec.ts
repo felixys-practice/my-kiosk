@@ -34,6 +34,31 @@ function refundRow(overrides: Partial<RefundQueryRow> = {}): RefundQueryRow {
 }
 
 describe('환불 조회', () => {
+  it('U248 과거 승인 대기 이관은 신규 이용 종료나 미지급 환불로 표시하지 않는다', async () => {
+    const row = refundRow({
+      decisionStatus: 'LEGACY_REJECTED',
+      policyVersion: 'LEGACY',
+      payoutStatus: 'NOT_APPLICABLE',
+      acceptedAt: null,
+      terminatedAt: null,
+    });
+    const repository = {
+      findMany: jest.fn().mockResolvedValue({ items: [row], total: 1 }),
+    } as unknown as jest.Mocked<RefundQueryRepository>;
+    const result = await new RefundQueryService(repository).byMe({
+      userId: 'customer',
+      role: 'USER',
+    });
+    expect(result.items[0]).toMatchObject({
+      policyVersion: 'LEGACY',
+      decisionStatus: 'LEGACY_REJECTED',
+      payoutStatus: 'NOT_APPLICABLE',
+      acceptedAt: null,
+      terminatedAt: null,
+      amount: 1000,
+      outstandingAmount: 0,
+    });
+  });
   it('U246 지급 합계로 미지급액과 초과액을 계산하고 음수를 표시하지 않는다', async () => {
     const items = [0, 700, 1300].map((paidAmount) => refundRow({ paidAmount }));
     const repository = {

@@ -1414,3 +1414,16 @@ U10~U15를 마친 뒤, 관계 검증의 비교 대상 설정을 생략하면 정
 - 전체 회귀: Test Suites: 51 passed, 51 total / Tests:       581 passed, 581 total / Time:        16.486 s; Test Suites: 13 passed, 13 total / Tests:       166 passed, 166 total / Time:        18.915 s. 리팩터링 없음.
 
 - 실패 근거: 위 U246 금액 뮤턴트 참조.
+
+- U246 구현·회귀 커밋: `722b3e2`.
+
+### U248 red
+
+- `npx jest src/refund/refund-query.service.spec.ts -t U248` → `- "outstandingAmount": 0`, `+ "outstandingAmount": 1000`, 1 failed. 과거 거절은 NOT_APPLICABLE이므로 미지급으로 집계하지 않는 계약 §3을 확인한다.
+
+### U248
+
+- LEGACY_REJECTED의 policyVersion·null 종료/확정 시각을 보존하고 NOT_APPLICABLE의 미지급액은 0으로 표시한다.
+- 전체 회귀: Test Suites: 51 passed, 51 total / Tests:       582 passed, 582 total / Time:        14.954 s, estimated 17 s; Test Suites: 13 passed, 13 total / Tests:       166 passed, 166 total / Time:        17.403 s, estimated 18 s. 리팩터링 없음.
+
+- 실패 근거: 위 U248 red 참조.
