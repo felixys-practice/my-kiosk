@@ -288,6 +288,7 @@ suite_baseline: green
 | U378 | 새 장기 미확인 알림이 저장되면 거래 로그도 한 번 남긴다 (FR-037, US10 외부 지급 검수 4) | FR-037 | example | DONE | `src/refund/refund-result.integration.spec.ts` › 별도 환불금 지급 › 새 장기 미확인 알림을 저장하면 거래 로그를 한 번 남기고… |
 | U379 | 별도 지급 결과 등록의 지급 시각은 날짜·시각·명시적 시간대가 모두 있어야 하며 날짜만 있거나 시간대가 없으면 형식 오류(400)다 (계약 'UTC ISO 시각', US10 외부 지급 검수 2차) | FR-046 | example | DONE | `src/refund/dto/confirm-manual-refund-payout.dto.spec.ts` › 실제 지급 시각에 시각이나 시간대가 없으면…, 시간대가 붙은 지급 시각(+09:00)은… |
 | U380 | 서명 시각이 십진 Unix 초가 아니면(그 값으로 서명했더라도) PG_CALLBACK_UNAUTHORIZED로 거절된다 (계약 §7 '십진 Unix 초'·'잘못된 형식은 인증 실패', US7 진행 중 추가) | FR-032 | example | DONE | `src/pg/guards/pg-signature.guard.spec.ts` › 서명 시각이 십진 Unix 초가 아니면… |
+| U381 | Content-Type이 application/json이 아닌 콜백은 서명이 맞아도 PG_CALLBACK_FORMAT_INVALID로 거절된다(charset 매개변수는 허용) (계약 §7, US7 검수 1) | FR-032 | example | DONE | `src/pg/guards/pg-signature.guard.spec.ts` › Content-Type이 application/json이 아니면… |
 
 ### `src/refund/refund-idempotency.service.ts`
 

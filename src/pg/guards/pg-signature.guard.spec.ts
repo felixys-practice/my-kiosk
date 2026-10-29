@@ -212,4 +212,18 @@ describe('PgSignatureGuard', () => {
       ),
     ).toBe('PG_CALLBACK_FORMAT_INVALID');
   });
+
+  it('Content-Type이 application/json이 아니면 서명이 맞아도 PG_CALLBACK_FORMAT_INVALID로 거절되고, charset 매개변수가 붙은 application/json은 통과한다', () => {
+    const withType = (contentType: string): [string, string][] =>
+      signedHeaders().map(([name, value]) =>
+        name === 'Content-Type' ? [name, contentType] : [name, value],
+      );
+
+    expect({
+      text: outcomeOf(contextOf({ headers: withType('text/plain') })),
+      charset: outcomeOf(
+        contextOf({ headers: withType('application/json; charset=utf-8') }),
+      ),
+    }).toEqual({ text: 'PG_CALLBACK_FORMAT_INVALID', charset: 'PASS' });
+  });
 });

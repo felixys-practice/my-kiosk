@@ -34,13 +34,16 @@ export class PgSignatureGuard implements CanActivate {
    * @returns 서명이 맞으면 true
    * @throws PgCallbackUnauthorizedError 서명이 없거나 일치하지 않을 때(401)
    * @throws PgCallbackExpiredError 서명 시각이 허용 범위를 벗어났을 때(401)
-   * @throws PgCallbackFormatInvalidError 압축 본문·query string일 때(400)
+   * @throws PgCallbackFormatInvalidError JSON이 아니거나 압축 본문·query string일 때(400)
    */
   canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest<SignedRequest>();
-    // 압축 본문과 query string은 서명 대상 규격 밖이므로 형식 오류로 거절한다
+    // JSON 이외의 본문, 압축 본문, query string은 서명 대상 규격 밖이므로 형식 오류로 거절한다
+    const contentType = request.headers['content-type'];
     const encoding = request.headers['content-encoding'];
     if (
+      typeof contentType !== 'string' ||
+      contentType.split(';')[0].trim().toLowerCase() !== 'application/json' ||
       (encoding !== undefined && encoding !== 'identity') ||
       request.originalUrl.includes('?')
     ) {
