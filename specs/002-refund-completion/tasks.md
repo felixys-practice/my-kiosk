@@ -330,7 +330,7 @@
 
 - [ ] T152 [US8] [U239] [U240] [U241] [U242] [U243] [U244] [U245] [U246] [U247] [U248] [U249] `src/refund/refund-query.service.spec.ts`, `src/refund/dto/get-refund-query.dto.spec.ts`에 본인/소유 매장 범위·운영 정보 필터·정렬·페이지 경계·과거 이력 노출 테스트를 작성한다.
 - [ ] T153 [US8] [U239] [U240] [U241] [U242] [U243] [U244] [U249] `src/refund/refund-query.repository.ts`, `src/refund/refund-query.service.ts`에 GET me/shop/user/:userId/:refundId를 구현한다. 정렬 requestedAt DESC,id DESC, page=1, limit=20(1~100), payoutStatus/decisionStatus 필터, MANAGER actionRequiredOnly를 적용한다. 범위 안 빈 목록은 200, 범위 밖은 404다.
-- [ ] T154 [US8] [U246] [U247] [U248] `src/refund/dto/get-refund-query.dto.ts`, `src/refund/dto/refund-response.dto.ts`에 확정된 환불 금액·실제 지급액·미지급액·초과액·종료 시각·PG 요청/외부 지급 이력을 반영한다. 운영 상세 오류·증빙·검토 사유는 MANAGER에만 노출하고 LEGACY 이력을 신규 이용 종료와 구분한다.
+- [X] T154 [US8] [U246] [U247] [U248] `src/refund/dto/get-refund-query.dto.ts`, `src/refund/dto/refund-response.dto.ts`에 확정된 환불 금액·실제 지급액·미지급액·초과액·종료 시각·PG 요청/외부 지급 이력을 반영한다. 운영 상세 오류·증빙·검토 사유는 MANAGER에만 노출하고 LEGACY 이력을 신규 이용 종료와 구분한다.
 - [ ] T155 [US8] [U245] `src/refund/refund.controller.ts`, `src/refund/refund-query.service.ts`에 고정 경로를 동적 refundId보다 먼저 연결한다. 고객이 다른 userId를 지정하지 못하게 하고 조회 때 현재 ShopOwner를 재검사한다.
 
 - [X] T187 [US8] [A64] [A65] [A66] [A67] [A68] `test/refund-history.e2e-spec.ts`의 사용자 스토리 8 인수 테스트 A64부터 A68까지 5개가 모두 통과하는지 실행해 확인한 뒤에만 이 스토리를 완료로 표시한다.

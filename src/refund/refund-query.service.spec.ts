@@ -34,6 +34,77 @@ function refundRow(overrides: Partial<RefundQueryRow> = {}): RefundQueryRow {
 }
 
 describe('환불 조회', () => {
+  it('U247 원본 오류·증빙·검토 사유는 운영자에게만 제공하고 고객·점주에는 조치 안내를 제공한다', async () => {
+    const privateValue = '비공개 운영 원문';
+    const row = refundRow({
+      actionCode: 'PG_REJECTED',
+      actionReason: privateValue,
+      reviewReason: privateValue,
+      reviewEvidenceReference: privateValue,
+      paymentCancels: [
+        {
+          id: 'attempt',
+          amount: 1000,
+          actualAmount: null,
+          status: 'FAILED',
+          failureCode: 'PG_REJECTED',
+          pgErrorCode: privateValue,
+          failureReason: privateValue,
+          lastInquiryError: privateValue,
+        },
+      ] as RefundQueryRow['paymentCancels'],
+      manualPayouts: [
+        {
+          id: 'manual',
+          status: 'FAILED',
+          amount: 1000,
+          evidenceReference: privateValue,
+          notPaidEvidence: privateValue,
+          failureReason: privateValue,
+          externalTransactionId: privateValue,
+        },
+      ] as RefundQueryRow['manualPayouts'],
+    });
+    const repository = {
+      findById: jest.fn().mockResolvedValue(row),
+      findShop: jest.fn().mockResolvedValue({ id: 'shop' }),
+      findMany: jest.fn().mockResolvedValue({ items: [row], total: 1 }),
+    } as unknown as jest.Mocked<RefundQueryRepository>;
+    const service = new RefundQueryService(repository);
+    const manager = await service.detail(
+      { userId: 'manager', role: 'MANAGER' },
+      'refund',
+    );
+    expect(manager).toMatchObject({
+      actionReason: privateValue,
+      reviewReason: privateValue,
+      reviewEvidenceReference: privateValue,
+      attempts: [
+        {
+          pgErrorCode: privateValue,
+          failureReason: privateValue,
+          lastInquiryError: privateValue,
+        },
+      ],
+      manualPayouts: [
+        {
+          evidenceReference: privateValue,
+          notPaidEvidence: privateValue,
+          failureReason: privateValue,
+          externalTransactionId: privateValue,
+        },
+      ],
+    });
+    for (const actor of [
+      { userId: 'customer', role: 'USER' },
+      { userId: 'owner', role: 'OWNER' },
+    ]) {
+      const detail = await service.detail(actor, 'refund');
+      const list = await service.byMe(actor);
+      expect(detail.actionReason).toEqual(expect.any(String));
+      expect(JSON.stringify({ detail, list })).not.toContain(privateValue);
+    }
+  });
   it('U248 과거 승인 대기 이관은 신규 이용 종료나 미지급 환불로 표시하지 않는다', async () => {
     const row = refundRow({
       decisionStatus: 'LEGACY_REJECTED',

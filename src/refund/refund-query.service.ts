@@ -26,7 +26,7 @@ export class RefundQueryService {
       (await this.repository.findShop(row.payment.order.shopId, actor.userId));
     if (actor.role !== UserRole.MANAGER && !ownOrder && !currentOwner)
       throw new RefundNotFoundError();
-    return RefundResponseDto.detail(row);
+    return RefundResponseDto.detail(row, actor.role === UserRole.MANAGER);
   }
 
   async byShop(
@@ -42,11 +42,15 @@ export class RefundQueryService {
       actor.role === UserRole.OWNER ? actor.userId : undefined,
     );
     if (!shop) throw new ShopNotFoundError(shopId);
-    return this.list({ payment: { order: { shopId } } }, query);
+    return this.list(actor, { payment: { order: { shopId } } }, query);
   }
 
   byMe(actor: RefundActor, query = new GetRefundQueryDto()) {
-    return this.list({ payment: { order: { userId: actor.userId } } }, query);
+    return this.list(
+      actor,
+      { payment: { order: { userId: actor.userId } } },
+      query,
+    );
   }
 
   async byUser(
@@ -57,13 +61,19 @@ export class RefundQueryService {
     if (actor.role !== UserRole.MANAGER) throw new RefundForbiddenError();
     if (!(await this.repository.findUser(userId)))
       throw new RefundUserNotFoundError();
-    return this.list({ payment: { order: { userId } } }, query);
+    return this.list(actor, { payment: { order: { userId } } }, query);
   }
 
-  private async list(where: Prisma.RefundWhereInput, query: GetRefundQueryDto) {
+  private async list(
+    actor: RefundActor,
+    where: Prisma.RefundWhereInput,
+    query: GetRefundQueryDto,
+  ) {
     const rows = await this.repository.findMany(where, query.page, query.limit);
     return {
-      items: rows.items.map((row) => RefundResponseDto.from(row)),
+      items: rows.items.map((row) =>
+        RefundResponseDto.from(row, actor.role === UserRole.MANAGER),
+      ),
       meta: PaginationUtil.createMeta(query.page, query.limit, rows.total),
     };
   }

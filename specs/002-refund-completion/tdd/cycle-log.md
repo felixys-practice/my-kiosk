@@ -1427,3 +1427,16 @@ U10~U15를 마친 뒤, 관계 검증의 비교 대상 설정을 생략하면 정
 - 전체 회귀: Test Suites: 51 passed, 51 total / Tests:       582 passed, 582 total / Time:        14.954 s, estimated 17 s; Test Suites: 13 passed, 13 total / Tests:       166 passed, 166 total / Time:        17.403 s, estimated 18 s. 리팩터링 없음.
 
 - 실패 근거: 위 U248 red 참조.
+
+- U248 구현·회귀 커밋: `5c00c0f`.
+
+### U247 red
+
+- `npx jest src/refund/refund-query.service.spec.ts -t U247` → `- "actionReason": "비공개 운영 원문"`, `+ "actionReason": null`, 운영 증빙/오류 필드 누락, 1 failed. 원문은 MANAGER만, 고객·점주는 조치 코드에 대응하는 안전한 설명만 받도록 검증한다.
+
+### U247
+
+- 반환 필드를 명시하여 고객·점주에게 원본 오류/증빙/검토 사유를 내보내지 않는다. MANAGER만 상세 운영 필드를 받고, 고객·점주는 조치 코드와 안전한 조치 설명을 받는다. 담당 토큰·멱등 키는 운영자에게도 반환하지 않는다.
+- 전체 회귀: Test Suites: 51 passed, 51 total / Tests:       583 passed, 583 total / Time:        14.724 s, estimated 15 s; Test Suites: 13 passed, 13 total / Tests:       166 passed, 166 total / Time:        16.657 s, estimated 17 s. 리팩터링 없음.
+
+- 실패 근거: 위 U247 red 참조.
