@@ -604,7 +604,7 @@ suite_baseline: green
 | U257 | 공동 점주 한 명의 읽음 처리는 다른 점주의 읽음 상태를 바꾸지 않는다 | FR-039 | example | PENDING | |
 | U258 | 이미 읽은 알림을 다시 읽음 처리해도 최초 readAt이 유지된다 | FR-039 | example | PENDING | |
 | U259 | unreadOnly=true 조회는 안 읽은 알림만 돌려준다 | FR-039 | example | DONE | `src/refund/refund-notification.service.spec.ts` / U259 |
-| U260 | 받을 수 없는 알림의 읽음 처리는 404 NOTIFICATION_NOT_FOUND로 거절된다 | FR-039 | example | PENDING | |
+| U260 | 받을 수 없는 알림의 읽음 처리는 404 NOTIFICATION_NOT_FOUND로 거절된다 | FR-039 | example | DONE | `src/refund/refund-notification.service.spec.ts` / U260 |
 | U261 | PG 실패가 있어도 접수 응답은 502가 아니라 202와 ACCEPTED·ACTION_REQUIRED 상태다 | FR-035 | example | PENDING | |
 
 ### `scripts/refund/check-legacy-refunds.ts, scripts/refund/migrate-legacy-refunds.ts`

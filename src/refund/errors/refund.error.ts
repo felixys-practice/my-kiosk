@@ -144,6 +144,15 @@ export class TicketInUseError extends DomainConflictError {
 }
 
 /** 요청자의 범위 밖이거나 없는 환불 (404) */
+export class RefundNotificationNotFoundError extends DomainNotFoundError {
+  readonly code = 'NOTIFICATION_NOT_FOUND';
+  constructor() {
+    super('알림을 찾을 수 없습니다');
+    this.name = 'RefundNotificationNotFoundError';
+  }
+}
+
+/** 요청자의 범위 밖이거나 없는 환불 (404) */
 export class RefundNotFoundError extends DomainNotFoundError {
   readonly code = 'REFUND_NOT_FOUND';
 

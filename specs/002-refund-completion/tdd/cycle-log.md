@@ -1818,3 +1818,20 @@ Tests:       1 failed, 1 total
 - 고정 알림 경로를 동적 환불 ID보다 먼저 등록했다. 실제 PG 거절 사건으로 현재 소유 매장 알림만 조회되는지 HTTP로 확인했다.
 - 전체 회귀: Test Suites: 53 passed, 53 total / Tests:       596 passed, 596 total / Time:        15.539 s, estimated 16 s; Test Suites: 14 passed, 14 total / Tests:       171 passed, 171 total / Time:        17.834 s, estimated 18 s. 리팩터링 없음.
 - 실패/기존 근거: 위 A73 실제 HTTP red 및 선행 단위 근거 참조.
+
+- A73 커밋: `5f59bce`.
+
+### U260 red
+
+- `npx jest src/refund/refund-notification.service.spec.ts -t U260`
+```text
+    Received promise resolved instead of rejected
+Tests:       1 failed, 8 skipped, 9 total
+```
+- 읽음 처리의 수신 권한 선행 조건을 먼저 구현한다. 실제 읽음 HTTP 연결에서 같은 오류 코드도 검증한다.
+
+### U260
+
+- 読み음 요청 전에 알림 ID와 현재 수신 범위를 함께 조회하고, 없거나 범위 밖이면 같은 NOTIFICATION_NOT_FOUND로 거절한다.
+- 전체 회귀: Test Suites: 53 passed, 53 total / Tests:       597 passed, 597 total / Time:        15.951 s, estimated 16 s; Test Suites: 14 passed, 14 total / Tests:       171 passed, 171 total / Time:        16.847 s, estimated 17 s. 리팩터링 없음.
+- 실패/기존 근거: 위 U260 실제 red 참조.

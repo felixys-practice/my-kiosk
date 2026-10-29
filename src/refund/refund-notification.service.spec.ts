@@ -7,6 +7,7 @@ import { GetRefundNotificationQueryDto } from './dto/get-refund-notification-que
 import { RefundNotificationService } from './refund-notification.service';
 import { BadRequestException } from '@nestjs/common';
 import type { NotificationRow } from './refund-notification.repository';
+import { RefundNotificationNotFoundError } from './errors';
 
 const notificationAt = new Date('2026-10-29T00:00:00.000Z');
 function notificationRow(
@@ -29,20 +30,34 @@ function notificationRow(
 }
 
 describe('환불 알림 수신 범위', () => {
+  it('U260 수신할 수 없는 알림은 읽음 전 조회 단계에서 찾을 수 없음으로 거절한다', async () => {
+    const findVisible = jest.fn().mockResolvedValue(null);
+    const service = new RefundNotificationService({
+      findVisible,
+    } as unknown as RefundNotificationRepository);
+    await expect(
+      service.getForRead(
+        { userId: 'owner', role: 'OWNER' },
+        'other-notification',
+      ),
+    ).rejects.toBeInstanceOf(RefundNotificationNotFoundError);
+    expect(findVisible).toHaveBeenCalledWith(
+      { userId: 'owner', role: 'OWNER' },
+      'other-notification',
+    );
+  });
   it('U396 알림은 공개 사건 필드와 본인의 읽음만 응답하고 내부 사건 키를 노출하지 않는다', async () => {
     const repository = {
-      list: jest
-        .fn()
-        .mockResolvedValue({
-          items: [
-            notificationRow(),
-            notificationRow({
-              id: 'read',
-              receipts: [{ readAt: notificationAt }],
-            }),
-          ],
-          total: 2,
-        }),
+      list: jest.fn().mockResolvedValue({
+        items: [
+          notificationRow(),
+          notificationRow({
+            id: 'read',
+            receipts: [{ readAt: notificationAt }],
+          }),
+        ],
+        total: 2,
+      }),
     } as unknown as RefundNotificationRepository;
     const result = await new RefundNotificationService(repository).list({
       userId: 'owner',

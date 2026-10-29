@@ -12,6 +12,18 @@ export type NotificationRow = RefundNotification & {
 export class RefundNotificationRepository {
   constructor(private readonly prisma: PrismaService) {}
 
+  findVisible(
+    actor: RefundActor,
+    notificationId: string,
+  ): Promise<NotificationRow | null> {
+    return this.prisma.refundNotification.findFirst({
+      where: { AND: [notificationScope(actor), { id: notificationId }] },
+      include: {
+        receipts: { where: { userId: actor.userId }, select: { readAt: true } },
+      },
+    });
+  }
+
   async list(
     actor: RefundActor,
     query: GetRefundNotificationQueryDto,

@@ -4,6 +4,7 @@ import type { RefundActor } from './refund-access.service';
 import { GetRefundNotificationQueryDto } from './dto/get-refund-notification-query.dto';
 import type { NotificationRow } from './refund-notification.repository';
 import { PaginationUtil } from 'src/common/pagination/pagination.util';
+import { RefundNotificationNotFoundError } from './errors';
 
 const notificationMessages: Record<string, string> = {
   SEND_FAILED: '환불금 지급 요청을 보내지 못해 확인이 필요합니다.',
@@ -18,6 +19,15 @@ const notificationMessages: Record<string, string> = {
 @Injectable()
 export class RefundNotificationService {
   constructor(private readonly repository: RefundNotificationRepository) {}
+
+  async getForRead(
+    actor: RefundActor,
+    notificationId: string,
+  ): Promise<NotificationRow> {
+    const row = await this.repository.findVisible(actor, notificationId);
+    if (!row) throw new RefundNotificationNotFoundError();
+    return row;
+  }
 
   async list(actor: RefundActor, query = new GetRefundNotificationQueryDto()) {
     if (!Number.isSafeInteger((query.page - 1) * query.limit)) {
