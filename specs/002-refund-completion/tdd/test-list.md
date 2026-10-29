@@ -581,7 +581,7 @@ suite_baseline: green
 | U239 | 목록은 requestedAt 내림차순, 같으면 id 내림차순으로 정렬된다 | FR-036 | example | PENDING | |
 | U240 | page·limit을 생략하면 page=1·limit=20으로 조회된다 | FR-036 | example | DONE | `src/refund/dto/get-refund-query.dto.spec.ts` / U240 |
 | U241 | limit=100은 허용된다 | FR-036 | example | PENDING | |
-| U242 | limit=101은 400을 받는다 | FR-036 | example | PENDING | |
+| U242 | limit=101은 400을 받는다 | FR-036 | example | DONE | `src/refund/dto/get-refund-query.dto.spec.ts` / U242 |
 | U243 | limit=0은 400을 받는다 | FR-036 | example | PENDING | |
 | U244 | 권한 범위 안에 환불이 없으면 200과 빈 목록을 받는다 | FR-033 | example | PENDING | |
 | U245 | 고객이 userId를 지정하면 미허용 필드로 400을 받는다 | FR-034 | example | PENDING | |

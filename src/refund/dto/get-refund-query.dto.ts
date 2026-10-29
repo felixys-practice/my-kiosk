@@ -1,4 +1,4 @@
-import { IsEnum, IsInt, IsOptional } from 'class-validator';
+import { IsEnum, IsInt, IsOptional, Max } from 'class-validator';
 import { Type } from 'class-transformer';
 import { PaymentCancelStatus } from '../refund.types';
 
@@ -11,6 +11,7 @@ export class GetRefundQueryDto {
   @IsOptional()
   @Type(() => Number)
   @IsInt()
+  @Max(100)
   limit = 20;
 
   @IsOptional()
