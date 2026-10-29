@@ -23,6 +23,7 @@ export class RefundNotificationController {
     @Param('notificationId', ParseUUIDPipe) notificationId: string,
     @Body() _body: EmptyBodyDto,
   ) {
+    void _body;
     return this.service.read(user, notificationId, new Date());
   }
 

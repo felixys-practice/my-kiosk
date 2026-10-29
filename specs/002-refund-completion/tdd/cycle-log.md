@@ -1921,3 +1921,57 @@ Tests:       1 failed, 1 skipped, 2 total
 - 이전 승인된 접수·지급·멱등 응답을 US9 통합 시나리오에서 재확인했다. 기존 코드 변경 없음.
 - 전체 회귀: Test Suites: 53 passed, 53 total / Tests:       599 passed, 599 total / Time:        18.887 s; Test Suites: 14 passed, 14 total / Tests:       174 passed, 174 total / Time:        38.463 s. 리팩터링 없음.
 - 실패/기존 근거: 기준선 이전 QS-5-1 및 위 A69 기존 동작 증거 참조.
+
+- A69·U261 커밋: `471946c`.
+
+### A70 기존 US8 조회 응답의 통합 검증
+
+- 최신 조회는 기준 커밋 이전 US8에서 구현·검수했다. 새 QS-9-2는 최초 1 passed이며 새 구현의 선행 실패로 취급하지 않는다. 실제 PG 부분 지급 뒤 고객과 점주 모두의 종료 시각·확정액·실제액·미지급액·지급 상태·안전한 조치 사유를 대조한다.
+
+- A70 전체 회귀 첫 실행: 단위 596 passed·3 failed. 복구 대상 전역 탐색에 다른 시도의 ID가 섞였다. VS Code Jest watch PID 69683·69834가 동시 실행 중이었으며, 종료 요청 시 이미 종료되어 있었다. 변경된 단언 없이 단독 회귀로 재확인한다.
+
+### A70 회귀 검증 보류 (2026-10-30)
+
+- 전체 단위 재실행도 596 passed·3 failed. Jest watch PID 32084·32498가 다시 실행 중임을 확인했으므로 단독 검증으로 기록하지 않는다. 복구 전역 탐색 테스트에 다른 시도가 섞이는 현상이며 단언은 변경하지 않았다.
+- watch 종료 요청은 `PermissionRequest hook denied approval`로 자동 승인 검토에서 거절됐다. 사용자에게 자동 실행 중지 또는 설정 변경 허용을 요청한 상태다. A70은 미완료로 유지하고 커밋하지 않았다.
+- `npx tsc --noEmit` 통과. US9 대상 eslint 검사에서 미사용 _body, 테스트 require-await/unsafe-assignment, 새 A70 줄바꿈 등 4건을 확인했으며 최종 정리 때 수정해야 한다.
+- 검수 패널을 기존 US9 세션 `01a1871d-371c-79a1-bce6-429862a5561f`로 다시 시작했다. argv의 gpt-6-astra/high/read-only와 화면 `GPT-6-Astra high`를 확인했다. 정식 검수는 아직 요청하지 않았다.
+
+- 사용자 승인(2026-10-30 01:32 KST)에 따라 .vscode/settings.json에 jest.runMode={type:on-demand,runAllTestsOnStartup:false}를 추가했다. 기존 설정은 보존하며 US9 커밋에 포함하지 않는다. 변경 후 Jest watch 프로세스가 없음을 확인했다.
+
+### U250~U255 기존 구현·테스트의 재사용
+
+- 새 운영 코드를 쓰지 않고 기준 커밋 이전 테스트를 대조했다. U250~U254는 refund-result.integration.spec.ts의 고객·매장·시스템 PG 거절 수신자, 연속 조회 오류 5회, 실제액 불일치 테스트를 각각 연결했다. U255는 refund-constraints.integration.spec.ts의 null 수신자/특정 수신자 동일 사건 고유성 2개를 연결했다.
+- 단독 회귀의 실패는 복구 PROBE 1건이며 위 테스트들은 통과했다. 테스트 목록은 기존 증거 파일·테스트 이름으로 DONE을 기록했다. 새 구현의 선행 실패로 주장하지 않는다. U256 원자적 롤백은 별도 보충 검증이 남았다.
+
+- A70 보충 뮤턴트: 미지급액 계산을 0으로 바꾸고 QS-9-2를 실행했다. 실제 실패 출력:
+```text
+expect(received).toMatchObject(expected)
+
+    - Expected  - 1
+    + Received  + 1
+
+      Object {
+        "actionCode": "AMOUNT_MISMATCH",
+        "actionReason": "확정 금액과 실제 환불금 지급액이 달라 확인이 필요합니다.",
+        "amount": 10000,
+    -   "outstandingAmount": 1000,
+    +   "outstandingAmount": 0,
+        "paidAmount": 9000,
+        "payoutStatus": "ACTION_REQUIRED",
+        "refundId": "76da95ed-4971-4371-8064-c3db190128a3",
+        "terminatedAt": "2026-10-29T16:36:42.435Z",
+      }
+
+      172 |         .set('Authorization', `Bearer ${actor.token}`)
+      173 |         .expect(200);
+    > 174 |       expect(res.body.data).toMatchObject({
+          
+```
+- 원복했다. 과거 중단 fixture 774f9f18의 주문 67개와 연결 테스트 데이터만 정리 후 전체 회귀를 재실행한다.
+
+### A70
+
+기존 US8 조회 동작을 실제 PG 결과 반영과 연결해 확인했다. 새 파일의 미사용 본문·목 비동기·matcher 린트와 줄바꿈도 동작/단언 보존으로 정리했다.
+- 전체 회귀: Test Suites: 53 passed, 53 total / Tests:       599 passed, 599 total / Time:        15.305 s, estimated 16 s; Test Suites: 14 passed, 14 total / Tests:       175 passed, 175 total / Time:        16.426 s, estimated 35 s. 리팩터링 없음.
+- 실패/기존 근거: US8 선행 구현·검수 및 위 A70 최초 실행/뮤턴트 기록 참조.

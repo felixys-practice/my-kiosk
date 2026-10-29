@@ -157,6 +157,34 @@ describe('환불 상태와 수신자별 알림 (E2E)', () => {
     expect(pg.sendCalls.length).toBe(sent);
   });
 
+  it('점주와 고객은 이용 종료와 실제 지급액·미지급액·조치 사유를 함께 확인한다 (QS-9-2)', async () => {
+    const accepted = await accept();
+    await signedCallback(ctx.server, '/refund/callback', {
+      success: true,
+      paymentCancelId: accepted.paymentCancelId,
+      orderItemId: accepted.orderItemId,
+      pgTransactionId: randomUUID(),
+      amount: accepted.amount - 1000,
+    }).expect(200);
+    for (const actor of [ctx.customer, ctx.owner]) {
+      const res = await request(ctx.server)
+        .get(`/refund/${accepted.refundId}`)
+        .set('Authorization', `Bearer ${actor.token}`)
+        .expect(200);
+      expect(res.body.data).toMatchObject({
+        refundId: accepted.refundId,
+        terminatedAt: accepted.response.terminatedAt,
+        amount: accepted.amount,
+        paidAmount: accepted.amount - 1000,
+        outstandingAmount: 1000,
+        payoutStatus: 'ACTION_REQUIRED',
+        actionCode: 'AMOUNT_MISMATCH',
+        actionReason:
+          '확정 금액과 실제 환불금 지급액이 달라 확인이 필요합니다.',
+      });
+    }
+  });
+
   it('고객은 자기 환불의 고객 수신 알림만 조회한다 (QS-9-4a)', async () => {
     const own = await accept();
     const other = await accept('CUSTOMER', { buyer: ctx.otherCustomer });

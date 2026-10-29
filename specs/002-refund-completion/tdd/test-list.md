@@ -103,7 +103,7 @@ suite_baseline: green
 | A67 | Given 고객이 있을 때, When 환불 내역을 조회하면, Then 자기 환불 내역만 보인다. 다른 고객을 지정해 조회할 방법은 없다. | QS-8-4 | example | DONE | `test/refund-history.e2e-spec.ts` / QS-8-4 |
 | A68 | Given 고객지원 계정이 있을 때, When 어느 매장이나 사용자의 환불 내역을 조회하면, Then 조회된다. | QS-8-5 | example | DONE | `test/refund-history.e2e-spec.ts` / QS-8-5 |
 | A69 | Given 환불 가능한 이용권이 있을 때, When 고객 환불이나 매장 환불을 요청하면, | QS-9-1 | example | DONE | `test/refund-notifications.e2e-spec.ts` / A69 |
-| A70 | Given 환불 건이 있을 때, When 점주나 고객이 환불 내역을 조회하면, | QS-9-2 | example | PENDING | |
+| A70 | Given 환불 건이 있을 때, When 점주나 고객이 환불 내역을 조회하면, | QS-9-2 | example | DONE | `test/refund-notifications.e2e-spec.ts` / A70 |
 | A71 | Given 환불금 지급 처리 중인 고객 환불이 있을 때, When PG 취소 요청이 실패로 확정되면, Then 신청한 고객·그 매장 점주·운영자에게 미지급 알림이 남는다. | QS-9-3 | example | PENDING | |
 | A72 | Given 환불금 지급 처리 중인 매장 환불이 있을 때, When PG 취소 요청이 실패로 확정되면, Then 그 매장 점주와 운영자에게 미지급 알림이 남는다. | QS-9-3a | example | PENDING | |
 | A73 | Given 알림이 있을 때, When 점주가 자기 알림을 조회하면, Then 자기 매장의 알림만 보인다. | QS-9-4 | example | DONE | `test/refund-notifications.e2e-spec.ts` / A73 |
@@ -594,12 +594,12 @@ suite_baseline: green
 
 | id | behavior | traces | kind | state | test |
 |---|---|---|---|---|---|
-| U250 | 고객 환불의 지급 실패 알림은 고객·현재 점주·운영자에게 생긴다 | FR-037 | example | PENDING | |
-| U251 | 매장 환불의 지급 실패 알림은 점주·운영자에게 생긴다 | FR-037 | example | PENDING | |
-| U252 | 시스템 자동 취소의 지급 실패 알림은 운영자에게만 생긴다 | FR-037 | example | PENDING | |
-| U253 | QUERY_FAILED 전환 알림은 운영자에게 생긴다 | FR-037 | example | PENDING | |
-| U254 | 금액 불일치 알림은 운영자에게 생긴다 | FR-037 | example | PENDING | |
-| U255 | 같은 사건을 두 번 처리해도 알림은 1건이다 | FR-037 | example | PENDING | |
+| U250 | 고객 환불의 지급 실패 알림은 고객·현재 점주·운영자에게 생긴다 | FR-037 | example | DONE | src/refund/refund-result.integration.spec.ts / 고객 환불의 PG 거절은 고객 본인·점주·운영자 알림을 저장한다 |
+| U251 | 매장 환불의 지급 실패 알림은 점주·운영자에게 생긴다 | FR-037 | example | DONE | src/refund/refund-result.integration.spec.ts / 매장 환불의 PG 거절은 점주·운영자에게 알리고 고객에게는 알리지 않는다 |
+| U252 | 시스템 자동 취소의 지급 실패 알림은 운영자에게만 생긴다 | FR-037 | example | DONE | src/refund/refund-result.integration.spec.ts / 시스템 자동 취소 환불의 PG 거절은 운영자에게만 알린다 |
+| U253 | QUERY_FAILED 전환 알림은 운영자에게 생긴다 | FR-037 | example | DONE | src/refund/refund-result.integration.spec.ts / 연속 조회 오류 5회에서 결과 확인 실패(QUERY_FAILED)와 운영자 알림이 기록된다 |
+| U254 | 금액 불일치 알림은 운영자에게 생긴다 | FR-037 | example | DONE | src/refund/refund-result.integration.spec.ts / PG 실제액 불일치는 운영자 알림을 저장한다 |
+| U255 | 같은 사건을 두 번 처리해도 알림은 1건이다 | FR-037 | example | DONE | src/prisma/refund-constraints.integration.spec.ts / 같은 사건·수신 범위의 수신자 없는 알림 및 특정 수신자 알림 고유성 2개 |
 | U256 | 상태 전이가 롤백되면 알림도 남지 않는다 | FR-037 | example | PENDING | |
 | U257 | 공동 점주 한 명의 읽음 처리는 다른 점주의 읽음 상태를 바꾸지 않는다 | FR-039 | example | DONE | `src/refund/refund-notification.service.spec.ts` / U257 |
 | U258 | 이미 읽은 알림을 다시 읽음 처리해도 최초 readAt이 유지된다 | FR-039 | example | DONE | `src/refund/refund-notification.service.spec.ts` / U258 |

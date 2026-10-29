@@ -37,7 +37,7 @@ function receiptStore() {
     },
     refundNotificationReceipt: {
       upsert: jest.fn(
-        async (input: {
+        (input: {
           where: {
             notificationId_userId: { notificationId: string; userId: string };
           };
@@ -50,7 +50,7 @@ function receiptStore() {
             ? { ...previous, ...input.update }
             : { readAt: input.create.readAt };
           receipts.set(key, result);
-          return result;
+          return Promise.resolve(result);
         },
       ),
     },
@@ -138,6 +138,7 @@ describe('환불 알림 수신 범위', () => {
       kind: 'PG_REJECTED',
       audience: 'SHOP',
       shopId: 'shop',
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       message: expect.any(String),
       createdAt: notificationAt,
     };
