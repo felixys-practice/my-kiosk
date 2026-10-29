@@ -19,6 +19,10 @@ import { Transform } from 'class-transformer';
 const trimmed = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim() : value;
 
+/** 날짜·시각과 명시적 시간대(Z 또는 ±hh:mm)가 모두 있는 ISO 시각 */
+const isoInstantWithZone =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/;
+
 /**
  * 별도 환불금 지급 결과 등록 본문 (API 계약 §5: POST /refund/:refundId/manual-payouts/:payoutId/confirm)
  * - 증빙 누락은 서비스에서 MANUAL_PAYOUT_EVIDENCE_REQUIRED로 거절한다
@@ -29,9 +33,12 @@ export class ConfirmManualPayoutDto {
   @IsPositive()
   amount!: number;
 
-  // 실제 지급 시각(UTC ISO 문자열), 미래 불가. ISO 문자열이 아니면 날짜로 바꾸지 않아 형식 검증이 거절한다
+  // 실제 지급 시각(날짜·시각·시간대가 모두 있는 ISO 문자열, 저장은 UTC), 미래 불가.
+  // 형식이 맞지 않으면 날짜로 바꾸지 않아 형식 검증이 거절한다
   @Transform(({ value }: { value: unknown }) =>
-    typeof value === 'string' && isISO8601(value, { strict: true })
+    typeof value === 'string' &&
+    isoInstantWithZone.test(value) &&
+    isISO8601(value, { strict: true })
       ? new Date(value)
       : value,
   )

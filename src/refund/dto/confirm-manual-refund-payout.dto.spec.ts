@@ -59,4 +59,25 @@ describe('별도 환불금 지급 결과 등록 DTO(ConfirmManualPayoutDto)', ()
       ]);
     },
   );
+
+  it.each(['2026-01-01', '2026-01-01T12:30:00'])(
+    '실제 지급 시각에 시각이나 시간대가 없으면(%p) 형식 오류(400)다',
+    async (paidAt) => {
+      expect(await invalidFieldsOf({ ...validBody, paidAt })).toEqual([
+        'paidAt',
+      ]);
+    },
+  );
+
+  it('시간대가 붙은 지급 시각(+09:00)은 같은 순간의 날짜로 받는다', async () => {
+    const dto = plainToInstance(ConfirmManualPayoutDto, {
+      ...validBody,
+      paidAt: '2026-10-28T18:00:00+09:00',
+    });
+
+    expect({
+      errors: (await validate(dto)).length,
+      paidAt: dto.paidAt.toISOString(),
+    }).toEqual({ errors: 0, paidAt: '2026-10-28T09:00:00.000Z' });
+  });
 });
