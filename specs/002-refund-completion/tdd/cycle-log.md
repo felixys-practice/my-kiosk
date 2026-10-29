@@ -1440,3 +1440,16 @@ U10~U15를 마친 뒤, 관계 검증의 비교 대상 설정을 생략하면 정
 - 전체 회귀: Test Suites: 51 passed, 51 total / Tests:       583 passed, 583 total / Time:        14.724 s, estimated 15 s; Test Suites: 13 passed, 13 total / Tests:       166 passed, 166 total / Time:        16.657 s, estimated 17 s. 리팩터링 없음.
 
 - 실패 근거: 위 U247 red 참조.
+
+- U247 구현·회귀 커밋: `d45ded2`.
+
+### U249 red
+
+- `npx jest src/refund/refund-query.service.spec.ts -t U249` → 기대한 `"AND"` 상태/조치 필터 대신 `{"payment": {"order": {"userId": "customer"}}}`만 전달돼 1 failed. FAILED 시도만 있다는 이유로 미지급 Refund를 제외하지 않는 쿼리를 검증한다.
+
+### U249
+
+- 지급/결정 상태와 운영자 전용 actionRequiredOnly를 같은 조회 범위 안에서 적용한다. 실패 PG 시도를 필터 조건으로 제외하지 않고 ACTION_REQUIRED·RESERVED를 포함한다. 이전 PaymentCancel status 쿼리는 새 계약의 상태 필터로 교체했다.
+- 전체 회귀: Test Suites: 51 passed, 51 total / Tests:       584 passed, 584 total / Time:        14.455 s, estimated 15 s; Test Suites: 13 passed, 13 total / Tests:       166 passed, 166 total / Time:        16.165 s. 리팩터링 없음.
+
+- 실패 근거: 위 U249 red 참조.

@@ -1,6 +1,13 @@
-import { IsEnum, IsInt, IsOptional, Max, Min } from 'class-validator';
-import { Type } from 'class-transformer';
-import { PaymentCancelStatus } from '../refund.types';
+import {
+  IsBoolean,
+  IsEnum,
+  IsInt,
+  IsOptional,
+  Max,
+  Min,
+} from 'class-validator';
+import { Transform, Type } from 'class-transformer';
+import { RefundDecisionStatus, RefundPayoutStatus } from '@prisma/client';
 
 export class GetRefundQueryDto {
   @IsOptional()
@@ -16,6 +23,17 @@ export class GetRefundQueryDto {
   limit = 20;
 
   @IsOptional()
-  @IsEnum(PaymentCancelStatus)
-  status?: PaymentCancelStatus;
+  @IsEnum(RefundPayoutStatus)
+  payoutStatus?: RefundPayoutStatus;
+
+  @IsOptional()
+  @IsEnum(RefundDecisionStatus)
+  decisionStatus?: RefundDecisionStatus;
+
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) =>
+    value === 'true' ? true : value === 'false' ? false : value,
+  )
+  @IsBoolean()
+  actionRequiredOnly?: boolean;
 }

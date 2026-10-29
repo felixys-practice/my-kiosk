@@ -2,6 +2,7 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { RefundQueryRepository } from './refund-query.repository';
 import type { RefundQueryRow } from './refund-query.repository';
 import { RefundQueryService } from './refund-query.service';
+import { GetRefundQueryDto } from './dto/get-refund-query.dto';
 
 const at = new Date('2026-10-29T00:00:00.000Z');
 /** 조회 응답에 쓰이는 필드만 가진 저장소 경계 대역이다. 실제 DB 형식은 HTTP 테스트로 확인한다. */
@@ -34,6 +35,51 @@ function refundRow(overrides: Partial<RefundQueryRow> = {}): RefundQueryRow {
 }
 
 describe('환불 조회', () => {
+  it('U249 조치 필요 목록은 실패 시도의 미지급과 미확정 외부 지급 예약을 숨기지 않는다', async () => {
+    const row = refundRow({
+      payoutStatus: 'ACTION_REQUIRED',
+      paymentCancels: [
+        { id: 'failed', status: 'FAILED' },
+      ] as RefundQueryRow['paymentCancels'],
+    });
+    const findMany = jest.fn().mockResolvedValue({ items: [row], total: 1 });
+    const repository = {
+      findUser: jest.fn().mockResolvedValue({ id: 'customer' }),
+      findMany,
+    } as unknown as jest.Mocked<RefundQueryRepository>;
+    const query = Object.assign(new GetRefundQueryDto(), {
+      actionRequiredOnly: true,
+      payoutStatus: 'ACTION_REQUIRED',
+      decisionStatus: 'ACCEPTED',
+    });
+    const result = await new RefundQueryService(repository).byUser(
+      { userId: 'manager', role: 'MANAGER' },
+      'customer',
+      query,
+    );
+    expect(findMany).toHaveBeenCalledWith(
+      {
+        AND: [
+          { payment: { order: { userId: 'customer' } } },
+          { payoutStatus: 'ACTION_REQUIRED' },
+          { decisionStatus: 'ACCEPTED' },
+          {
+            OR: [
+              { payoutStatus: 'ACTION_REQUIRED' },
+              { manualPayouts: { some: { status: 'RESERVED' } } },
+            ],
+          },
+        ],
+      },
+      1,
+      20,
+    );
+    expect(result.items[0]).toMatchObject({
+      refundId: 'refund',
+      attemptStatus: 'FAILED',
+      outstandingAmount: 1000,
+    });
+  });
   it('U247 원본 오류·증빙·검토 사유는 운영자에게만 제공하고 고객·점주에는 조치 안내를 제공한다', async () => {
     const privateValue = '비공개 운영 원문';
     const row = refundRow({

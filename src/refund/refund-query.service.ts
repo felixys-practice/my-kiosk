@@ -66,10 +66,31 @@ export class RefundQueryService {
 
   private async list(
     actor: RefundActor,
-    where: Prisma.RefundWhereInput,
+    scope: Prisma.RefundWhereInput,
     query: GetRefundQueryDto,
   ) {
-    const rows = await this.repository.findMany(where, query.page, query.limit);
+    if (
+      query.actionRequiredOnly !== undefined &&
+      actor.role !== UserRole.MANAGER
+    )
+      throw new RefundForbiddenError();
+    const conditions: Prisma.RefundWhereInput[] = [scope];
+    if (query.payoutStatus)
+      conditions.push({ payoutStatus: query.payoutStatus });
+    if (query.decisionStatus)
+      conditions.push({ decisionStatus: query.decisionStatus });
+    if (query.actionRequiredOnly)
+      conditions.push({
+        OR: [
+          { payoutStatus: 'ACTION_REQUIRED' },
+          { manualPayouts: { some: { status: 'RESERVED' } } },
+        ],
+      });
+    const rows = await this.repository.findMany(
+      { AND: conditions },
+      query.page,
+      query.limit,
+    );
     return {
       items: rows.items.map((row) =>
         RefundResponseDto.from(row, actor.role === UserRole.MANAGER),
