@@ -1466,3 +1466,16 @@ U10~U15를 마친 뒤, 관계 검증의 비교 대상 설정을 생략하면 정
 - 전체 회귀: Test Suites: 51 passed, 51 total / Tests:       585 passed, 585 total / Time:        17.346 s; Test Suites: 13 passed, 13 total / Tests:       166 passed, 166 total / Time:        18.046 s. 리팩터링 없음.
 
 - 실패 근거: 위 U245 미허용 필드 뮤턴트 참조.
+
+- U245 구현·회귀 커밋: `a6f67b4`.
+
+### U383 red (목록 쿼리 계약 경계 추가)
+
+- `npx jest src/refund/dto/get-refund-query.dto.spec.ts -t U383` → page=0에서 `- "valid": false`, `+ "valid": true`, 1 failed. DTO 형식 규칙은 기존 U 목록의 limit 경계 외에도 계약 §9의 페이지 범위를 확인한다.
+
+### U383
+
+- page>=1을 DTO에 추가하고 정수·상태 enum·boolean 형식의 잘못된 쿼리를 거절하는지 확인했다. 새 업무 조건이 아니라 목록 계약의 누락 검증이다.
+- 전체 회귀: Test Suites: 51 passed, 51 total / Tests:       586 passed, 586 total / Time:        16.231 s, estimated 18 s; Test Suites: 13 passed, 13 total / Tests:       166 passed, 166 total / Time:        18.389 s. 리팩터링 없음.
+
+- 실패 근거: 위 U383 red 참조.

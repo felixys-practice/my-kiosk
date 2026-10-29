@@ -4,6 +4,32 @@ import { validate } from 'class-validator';
 import { GetRefundQueryDto } from './get-refund-query.dto';
 
 describe('환불 목록 쿼리', () => {
+  it('U383 페이지와 크기·상태·조치 필터의 형식 오류를 거절한다', async () => {
+    const invalidQueries = [
+      { page: '0' },
+      { page: '-1' },
+      { page: '1.5' },
+      { page: '' },
+      { page: 'abc' },
+      { limit: '1.5' },
+      { limit: '-1' },
+      { limit: ['1', '2'] },
+      { payoutStatus: 'FAILED' },
+      { decisionStatus: 'UNKNOWN' },
+      { actionRequiredOnly: 'yes' },
+      { actionRequiredOnly: ['true', 'false'] },
+    ];
+    for (const plain of invalidQueries) {
+      const errors = await validate(plainToInstance(GetRefundQueryDto, plain), {
+        whitelist: true,
+        forbidNonWhitelisted: true,
+      });
+      expect({ plain, valid: errors.length === 0 }).toEqual({
+        plain,
+        valid: false,
+      });
+    }
+  });
   it('U245 본인 목록에 다른 userId를 주입하면 미허용 필드로 거절한다', async () => {
     const errors = await validate(
       plainToInstance(GetRefundQueryDto, { userId: 'other-customer' }),
