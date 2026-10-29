@@ -531,4 +531,52 @@ describe('미지급 환불금 재처리 (E2E)', () => {
       finalAttempts: 3,
     });
   });
+
+  it('고객·점주의 별도 지급 예약·결과 등록·미지급 확인·초과 취소 검토 요청은 403 REFUND_FORBIDDEN으로 거절되고 기록이 바뀌지 않는다', async () => {
+    const refundId = await createFailedRefund();
+    const payoutId = '00000000-0000-4000-8000-000000000000';
+    const requests = [
+      {
+        path: `/refund/${refundId}/manual-payouts`,
+        body: { amount: 1, reason: '예약' },
+      },
+      {
+        path: `/refund/${refundId}/manual-payouts/${payoutId}/confirm`,
+        body: {
+          amount: 1,
+          paidAt: new Date(Date.now() - 60_000).toISOString(),
+          externalTransactionId: 'bank-1',
+          evidenceReference: '증빙',
+        },
+      },
+      {
+        path: `/refund/${refundId}/manual-payouts/${payoutId}/not-paid`,
+        body: { reason: '미지급', evidenceReference: '근거' },
+      },
+      {
+        path: `/refund/${refundId}/amount-review`,
+        body: { reason: '검토', evidenceReference: '근거' },
+      },
+    ];
+
+    const results: unknown[] = [];
+    for (const token of [ctx.customer.token, ctx.owner.token]) {
+      for (const { path, body } of requests) {
+        const res = await request(ctx.server)
+          .post(path)
+          .set('Authorization', `Bearer ${token}`)
+          .set('Idempotency-Key', `ops-${randomUUID()}`)
+          .send(body);
+        results.push([res.status, res.body.error?.code]);
+      }
+    }
+
+    const payouts = await ctx.prisma.manualRefundPayout.count({
+      where: { refundId },
+    });
+    expect({ results, payouts }).toEqual({
+      results: Array.from({ length: 8 }, () => [403, 'REFUND_FORBIDDEN']),
+      payouts: 0,
+    });
+  });
 });

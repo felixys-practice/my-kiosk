@@ -531,9 +531,9 @@ suite_baseline: green
 | U206 | 예약 금액이 미지급액과 다르면 REFUND_OUTSTANDING_AMOUNT_MISMATCH로 거절된다 | FR-045 | example | DONE | `src/refund/refund-manual-payout.policy.spec.ts` › 예약 금액이 미지급액과 다르면 REFUND_OUTSTANDING_AMOUNT_MISMATCH로 거절한다 |
 | U207 | 미확정 PG 취소 요청이 있으면 별도 지급 예약은 REFUND_PAYOUT_UNRESOLVED로 거절된다 | FR-043 | example | DONE | `src/refund/refund-manual-payout.policy.spec.ts` › 결과가 확정되지 않은 PG 취소 요청이 있으면 REFUND_PAYOUT_UNRESOLVED로 거절한다 |
 | U208 | 지급 결과 등록은 예약과 같은 금액·거래 ID·증빙이 있으면 SUCCEEDED·paidAmount·원장을 함께 저장한다 | FR-046 | example | DONE | `src/refund/refund-result.integration.spec.ts` › 별도 환불금 지급 › 지급 결과 등록은 예약과 같은 금액·거래 ID·증빙이 있으면… |
-| U209 | 지급 결과 등록의 지급 시각이 미래이면 400을 받는다 | FR-046 | example | PENDING | |
-| U210 | 외부 거래 ID 200자는 허용된다 | FR-046 | example | PENDING | |
-| U211 | 외부 거래 ID 201자는 400을 받는다 | FR-046 | example | PENDING | |
+| U209 | 지급 결과 등록의 지급 시각이 미래이면 400을 받는다 | FR-046 | example | DONE | `src/refund/dto/confirm-manual-refund-payout.dto.spec.ts` › 실제 지급 시각이 미래이면 형식 오류(400)다 |
+| U210 | 외부 거래 ID 200자는 허용된다 | FR-046 | example | DONE | `src/refund/dto/confirm-manual-refund-payout.dto.spec.ts` › 실제 지급 거래 식별자 200자는 허용된다 |
+| U211 | 외부 거래 ID 201자는 400을 받는다 | FR-046 | example | DONE | `src/refund/dto/confirm-manual-refund-payout.dto.spec.ts` › 실제 지급 거래 식별자 201자는 형식 오류(400)다 |
 | U212 | 증빙이 없으면 MANUAL_PAYOUT_EVIDENCE_REQUIRED로 거절된다 | FR-046 | example | DONE | `src/refund/refund-result.integration.spec.ts` › 별도 환불금 지급 › 지급 증빙이 없으면 MANUAL_PAYOUT_EVIDENCE_REQUIRED로… |
 | U213 | 같은 지급 결과를 다시 등록하면 최초 결과를 받고 원장은 1건이다 | FR-046 | example | DONE | `src/refund/refund-result.integration.spec.ts` › 별도 환불금 지급 › 같은 지급 결과를 다른 멱등 키로 다시 등록하면… |
 | U214 | 다른 환불의 외부 거래 ID를 쓰면 MANUAL_PAYOUT_REFERENCE_REUSED로 거절된다 | FR-046 | example | DONE | `src/refund/refund-result.integration.spec.ts` › 별도 환불금 지급 › 다른 환불의 별도 지급에서 이미 쓴 거래 ID로 등록하면… |
@@ -546,7 +546,7 @@ suite_baseline: green
 | U221 | 예약 후 3600초가 지나면 미확인 알림 1건이 생긴다 | FR-037 | example | DONE | `src/refund/refund-result.integration.spec.ts` › 별도 환불금 지급 › 별도 지급 예약 후 3600초가 지나면 운영자에게 미확인 알림 1건을… |
 | U222 | 예약 후 3599초에는 미확인 알림이 생기지 않는다 | FR-037 | example | DONE | `src/refund/refund-result.integration.spec.ts` › 별도 환불금 지급 › 별도 지급 예약 후 3599초에는 미확인 알림을 남기지 않는다 |
 | U223 | 알림 생성 뒤 탐색이 반복돼도 미확인 알림은 늘지 않는다 | FR-037 | example | DONE | `src/refund/refund-result.integration.spec.ts` › 별도 환불금 지급 › 정기 탐색이 기준 시간 뒤 반복돼도 별도 지급 미확인 알림은 1건이고… |
-| U224 | 고객·점주의 예약·결과 등록·미지급 확인·검토 요청은 403 REFUND_FORBIDDEN으로 거절된다 | FR-050 | example | PENDING | |
+| U224 | 고객·점주의 예약·결과 등록·미지급 확인·검토 요청은 403 REFUND_FORBIDDEN으로 거절된다 | FR-050 | example | DONE | `test/refund-operations.e2e-spec.ts` › 고객·점주의 별도 지급 예약·결과 등록·미지급 확인·초과 취소 검토 요청은 403… |
 
 ### `src/pg/guards/pg-signature.guard.ts`
 
