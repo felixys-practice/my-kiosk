@@ -1723,3 +1723,20 @@ Tests:       1 failed, 3 skipped, 4 total
 - 알림 목록을 수신 범위 안에서 createdAt DESC,id DESC로 정렬하고 페이지를 자른다. 읽음 행은 요청한 사용자 것만 조회한다.
 - 전체 회귀: Test Suites: 53 passed, 53 total / Tests:       592 passed, 592 total / Time:        16.199 s; Test Suites: 13 passed, 13 total / Tests:       170 passed, 170 total / Time:        17.438 s. 리팩터링 없음.
 - 실패/기존 근거: 위 U393 실제 red 참조.
+
+- U393 커밋: `4be68cb`.
+
+### U259 red
+
+- `npx jest src/refund/refund-notification.service.spec.ts -t U259`
+```text
+    Expected: ObjectContaining {"where": {"AND": [{"OR": [{"recipientUserId": null}, {"recipientUserId": "owner"}], "audience": "SHOP", "shop": {"owners": {"some": {"userId": "owner"}}}}, {"receipts": {"none": {"userId": "owner"}}}]}}
+    Received: {"include": {"receipts": {"select": {"readAt": true}, "where": {"userId": "owner"}}}, "orderBy": [{"createdAt": "desc"}, {"id": "desc"}], "skip": 0, "take": 20, "where": {"AND": [{"OR": [{"recipientUserId": null}, {"recipientUserId": "owner"}], "audience": "SHOP", "shop": {"owners": {"some": {"userId": "owner"}}}}]}}
+Tests:       1 failed, 4 skipped, 5 total
+```
+
+### U259
+
+- 다른 공동 점주의 읽음과 무관하게 요청자 본인의 Receipt가 없는 알림만 필터링한다.
+- 전체 회귀: Test Suites: 53 passed, 53 total / Tests:       593 passed, 593 total / Time:        16.034 s; Test Suites: 13 passed, 13 total / Tests:       170 passed, 170 total / Time:        15.132 s, estimated 17 s. 리팩터링 없음.
+- 실패/기존 근거: 위 U259 실제 red 참조.

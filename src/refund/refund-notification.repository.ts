@@ -16,9 +16,12 @@ export class RefundNotificationRepository {
     actor: RefundActor,
     query: GetRefundNotificationQueryDto,
   ): Promise<{ items: NotificationRow[]; total: number }> {
-    const where: Prisma.RefundNotificationWhereInput = {
-      AND: [notificationScope(actor)],
-    };
+    const conditions: Prisma.RefundNotificationWhereInput[] = [
+      notificationScope(actor),
+    ];
+    if (query.unreadOnly)
+      conditions.push({ receipts: { none: { userId: actor.userId } } });
+    const where: Prisma.RefundNotificationWhereInput = { AND: conditions };
     const [items, total] = await this.prisma.$transaction([
       this.prisma.refundNotification.findMany({
         where,

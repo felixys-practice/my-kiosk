@@ -6,6 +6,28 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { GetRefundNotificationQueryDto } from './dto/get-refund-notification-query.dto';
 
 describe('환불 알림 수신 범위', () => {
+  it('U259 미읽음 필터는 요청자에게 읽음 기록이 없는 알림만 조회한다', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const prisma = {
+      refundNotification: { findMany, count: jest.fn().mockResolvedValue(0) },
+      $transaction: (queries: Promise<unknown>[]) => Promise.all(queries),
+    } as unknown as PrismaService;
+    const actor = { userId: 'owner', role: 'OWNER' };
+    await new RefundNotificationRepository(prisma).list(
+      actor,
+      Object.assign(new GetRefundNotificationQueryDto(), { unreadOnly: true }),
+    );
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          AND: [
+            notificationScope(actor),
+            { receipts: { none: { userId: 'owner' } } },
+          ],
+        },
+      }),
+    );
+  });
   it('U393 목록은 수신 범위·정렬·페이지와 본인 읽음만 DB에서 조회한다', async () => {
     const findMany = jest.fn().mockResolvedValue([]);
     const prisma = {
