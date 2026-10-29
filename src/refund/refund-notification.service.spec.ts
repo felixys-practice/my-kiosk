@@ -29,7 +29,63 @@ function notificationRow(
   };
 }
 
+function receiptStore() {
+  const receipts = new Map<string, { readAt: Date }>();
+  const prisma = {
+    refundNotification: {
+      findFirst: jest.fn().mockResolvedValue(notificationRow()),
+    },
+    refundNotificationReceipt: {
+      upsert: jest.fn(
+        async (input: {
+          where: {
+            notificationId_userId: { notificationId: string; userId: string };
+          };
+          create: { readAt: Date };
+          update: { readAt?: Date };
+        }) => {
+          const key = `${input.where.notificationId_userId.notificationId}/${input.where.notificationId_userId.userId}`;
+          const previous = receipts.get(key);
+          const result = previous
+            ? { ...previous, ...input.update }
+            : { readAt: input.create.readAt };
+          receipts.set(key, result);
+          return result;
+        },
+      ),
+    },
+  } as unknown as PrismaService;
+  return {
+    receipts,
+    service: new RefundNotificationService(
+      new RefundNotificationRepository(prisma),
+    ),
+  };
+}
+
 describe('환불 알림 수신 범위', () => {
+  it('U257 공동 점주가 읽어도 각 사람의 읽음은 별도 기록된다', async () => {
+    const store = receiptStore();
+    const otherAt = new Date(notificationAt.getTime() + 1000);
+    const first = await store.service.read(
+      { userId: 'owner', role: 'OWNER' },
+      'notification',
+      notificationAt,
+    );
+    const second = await store.service.read(
+      { userId: 'co-owner', role: 'OWNER' },
+      'notification',
+      otherAt,
+    );
+    expect({ first, second }).toMatchObject({
+      first: { isRead: true, readAt: notificationAt },
+      second: { isRead: true, readAt: otherAt },
+    });
+    expect([...store.receipts.entries()]).toEqual([
+      ['notification/owner', { readAt: notificationAt }],
+      ['notification/co-owner', { readAt: otherAt }],
+    ]);
+  });
   it('U260 수신할 수 없는 알림은 읽음 전 조회 단계에서 찾을 수 없음으로 거절한다', async () => {
     const findVisible = jest.fn().mockResolvedValue(null);
     const service = new RefundNotificationService({

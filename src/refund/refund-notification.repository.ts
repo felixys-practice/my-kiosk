@@ -12,6 +12,14 @@ export type NotificationRow = RefundNotification & {
 export class RefundNotificationRepository {
   constructor(private readonly prisma: PrismaService) {}
 
+  recordRead(notificationId: string, userId: string, readAt: Date) {
+    return this.prisma.refundNotificationReceipt.upsert({
+      where: { notificationId_userId: { notificationId, userId } },
+      create: { notificationId, userId, readAt },
+      update: { readAt },
+    });
+  }
+
   findVisible(
     actor: RefundActor,
     notificationId: string,

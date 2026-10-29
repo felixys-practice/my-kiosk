@@ -20,6 +20,16 @@ const notificationMessages: Record<string, string> = {
 export class RefundNotificationService {
   constructor(private readonly repository: RefundNotificationRepository) {}
 
+  async read(actor: RefundActor, notificationId: string, now: Date) {
+    const row = await this.getForRead(actor, notificationId);
+    const receipt = await this.repository.recordRead(
+      notificationId,
+      actor.userId,
+      now,
+    );
+    return this.view({ ...row, receipts: [{ readAt: receipt.readAt }] });
+  }
+
   async getForRead(
     actor: RefundActor,
     notificationId: string,

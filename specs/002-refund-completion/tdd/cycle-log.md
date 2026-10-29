@@ -1835,3 +1835,28 @@ Tests:       1 failed, 8 skipped, 9 total
 - 読み음 요청 전에 알림 ID와 현재 수신 범위를 함께 조회하고, 없거나 범위 밖이면 같은 NOTIFICATION_NOT_FOUND로 거절한다.
 - 전체 회귀: Test Suites: 53 passed, 53 total / Tests:       597 passed, 597 total / Time:        15.951 s, estimated 16 s; Test Suites: 14 passed, 14 total / Tests:       171 passed, 171 total / Time:        16.847 s, estimated 17 s. 리팩터링 없음.
 - 실패/기존 근거: 위 U260 실제 red 참조.
+
+- U260 커밋: `0b17c1d`.
+
+### U257 red
+
+- `npx jest src/refund/refund-notification.service.spec.ts -t U257`
+```text
+    -   "first": Object {
+    -     "isRead": true,
+    -     "readAt": 2026-10-29T00:00:00.000Z,
+    -   },
+    -   "second": Object {
+    -     "isRead": true,
+    -     "readAt": 2026-10-29T00:00:01.000Z,
+    -   },
+    +   "first": undefined,
+    +   "second": undefined,
+Tests:       1 failed, 9 skipped, 10 total
+```
+
+### U257
+
+- 읽음 기록을 notificationId/userId 복합 키로 저장하여 공동 점주별로 분리한다. 수신 범위 확인을 먼저 수행한다.
+- 전체 회귀: Test Suites: 53 passed, 53 total / Tests:       598 passed, 598 total / Time:        15.868 s, estimated 16 s; Test Suites: 14 passed, 14 total / Tests:       171 passed, 171 total / Time:        16.05 s, estimated 17 s. 리팩터링 없음.
+- 실패/기존 근거: 위 U257 실제 red 참조.
