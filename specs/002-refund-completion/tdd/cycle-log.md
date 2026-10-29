@@ -1479,3 +1479,17 @@ U10~U15를 마친 뒤, 관계 검증의 비교 대상 설정을 생략하면 정
 - 전체 회귀: Test Suites: 51 passed, 51 total / Tests:       586 passed, 586 total / Time:        16.231 s, estimated 18 s; Test Suites: 13 passed, 13 total / Tests:       166 passed, 166 total / Time:        18.389 s. 리팩터링 없음.
 
 - 실패 근거: 위 U383 red 참조.
+
+- U383 구현·회귀 커밋: `fa0aaef`.
+
+### U384 실제 DB 페이지·필터 검증
+
+- `npx jest --config ./test/jest-e2e.json test/refund-history.e2e-spec.ts -t U384` 최초 1 passed. 같은 신청 시각의 ID 정렬을 ASC로 바꾸면 `"refundId"` 기대/실제 값이 달라 1 failed. 원복했다.
+- 실제 환불 API로 실패 3건·처리 중 1건과 외부 지급 예약을 만들고, 상태/결정 필터·actionRequiredOnly true/false·페이지 합계·비운영자 403·page=0 400을 HTTP에서 확인한다.
+
+### U384
+
+- 실제 DB에서 조회 필터와 정렬 뒤 페이지가 함께 동작하고 실패/예약 건이 유지되는지 검증했다.
+- 전체 회귀: Test Suites: 51 passed, 51 total / Tests:       586 passed, 586 total / Time:        16.974 s; Test Suites: 13 passed, 13 total / Tests:       167 passed, 167 total / Time:        21.555 s. 리팩터링 없음.
+
+- 실패 근거: 위 U384 실제 DB 뮤턴트 참조.

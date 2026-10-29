@@ -23,6 +23,115 @@ describe('환불 내역 조회 (E2E)', () => {
     await ctx.close();
   });
 
+  it('U384 운영자 목록은 실패·예약을 유지하고 상태 필터 뒤 안정된 순서로 페이지를 제공한다 (QS-8-5)', async () => {
+    const defaultSend = pgStub.defaultSend;
+    const ids: string[] = [];
+    try {
+      for (let index = 0; index < 4; index++) {
+        pgStub.defaultSend =
+          index === 3
+            ? defaultSend
+            : { result: 'NOT_SENT', reason: '목록 검증용 전송 전 실패' };
+        const issued = await ctx.issuePeriodTicket({
+          shop: ctx.otherShop,
+          owner: ctx.otherShopOwner,
+          buyer: ctx.otherCustomer,
+        });
+        const accepted = await request(ctx.server)
+          .post('/refund')
+          .set('Authorization', `Bearer ${ctx.otherCustomer.token}`)
+          .send({ ticketId: issued.ticketId, consentToTerminateTicket: true })
+          .expect(202);
+        const id = accepted.body.data.refundId as string;
+        ids.push(id);
+        await ctx.prisma.refund.update({
+          where: { id },
+          data: {
+            requestedAt: new Date(
+              `${index === 2 ? 2031 : index === 3 ? 2029 : 2030}-01-01T00:00:00.000Z`,
+            ),
+          },
+        });
+      }
+      await request(ctx.server)
+        .post(`/refund/${ids[0]}/manual-payouts`)
+        .set('Authorization', `Bearer ${ctx.manager.token}`)
+        .set('Idempotency-Key', randomUUID())
+        .send({ amount: 10000, reason: '조회 검증용 지급 예약' })
+        .expect(201);
+      const ordered = [ids[2], ...ids.slice(0, 2).sort().reverse()];
+      const path = `/refund/shop/${ctx.otherShop.id}`;
+      for (let page = 1; page <= 3; page++) {
+        const response = await request(ctx.server)
+          .get(path)
+          .set('Authorization', `Bearer ${ctx.manager.token}`)
+          .query({
+            page,
+            limit: 1,
+            actionRequiredOnly: 'true',
+            payoutStatus: 'ACTION_REQUIRED',
+            decisionStatus: 'ACCEPTED',
+          })
+          .expect(200);
+        expect(response.body.data.items).toEqual([
+          expect.objectContaining({
+            refundId: ordered[page - 1],
+            attemptStatus: 'FAILED',
+          }),
+        ]);
+        expect(response.body.data.meta).toMatchObject({
+          page,
+          limit: 1,
+          total: 3,
+          totalPages: 3,
+        });
+      }
+      const all = await request(ctx.server)
+        .get(path)
+        .set('Authorization', `Bearer ${ctx.manager.token}`)
+        .query({ actionRequiredOnly: 'false' })
+        .expect(200);
+      expect(all.body.data.items).toHaveLength(4);
+      expect(all.body.data.items).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            refundId: ids[3],
+            payoutStatus: 'PENDING',
+          }),
+        ]),
+      );
+      for (const query of [
+        { payoutStatus: 'PAID' },
+        { decisionStatus: 'LEGACY_REJECTED' },
+      ]) {
+        const empty = await request(ctx.server)
+          .get(path)
+          .set('Authorization', `Bearer ${ctx.manager.token}`)
+          .query(query)
+          .expect(200);
+        expect(empty.body.data.items).toEqual([]);
+      }
+      for (const [url, actor] of [
+        [path, ctx.otherShopOwner],
+        ['/refund/me', ctx.otherCustomer],
+      ] as const) {
+        const forbidden = await request(ctx.server)
+          .get(url)
+          .set('Authorization', `Bearer ${actor.token}`)
+          .query({ actionRequiredOnly: 'false' })
+          .expect(403);
+        expect(forbidden.body.error.code).toBe('REFUND_FORBIDDEN');
+      }
+      await request(ctx.server)
+        .get(path)
+        .set('Authorization', `Bearer ${ctx.manager.token}`)
+        .query({ page: 0 })
+        .expect(400);
+    } finally {
+      pgStub.defaultSend = defaultSend;
+    }
+  });
+
   it('U382 환불 상세는 본인·현재 공동 점주·운영자에게만 지급 이력을 제공한다 (QS-8-3)', async () => {
     const issued = await ctx.issuePeriodTicket();
     const accepted = await request(ctx.server)
