@@ -1757,3 +1757,19 @@ Tests:       1 failed, 5 skipped, 6 total
 - audience 필터는 권한 조건과 AND로 결합해 역할·소유 매장 범위를 넓히지 않는다.
 - 전체 회귀: Test Suites: 53 passed, 53 total / Tests:       594 passed, 594 total / Time:        15.978 s, estimated 16 s; Test Suites: 13 passed, 13 total / Tests:       170 passed, 170 total / Time:        15.921 s. 리팩터링 없음.
 - 실패/기존 근거: 위 U394 실제 red 참조.
+
+- U394 커밋: `77851d6`.
+
+### U395 red
+
+- `npx jest src/refund/refund-notification.service.spec.ts -t U395`
+```text
+    Received promise resolved instead of rejected
+Tests:       1 failed, 6 skipped, 7 total
+```
+
+### U395
+
+- 알림의 계산 위치를 ORM 호출 전에 검사한다. 아직 HTTP는 연결하지 않았다.
+- 전체 회귀: Test Suites: 53 passed, 53 total / Tests:       595 passed, 595 total / Time:        16.495 s; Test Suites: 13 passed, 13 total / Tests:       170 passed, 170 total / Time:        19.025 s. 리팩터링 없음.
+- 실패/기존 근거: 위 U395 실제 red 참조.

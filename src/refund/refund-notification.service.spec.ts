@@ -4,8 +4,24 @@ import {
 } from './refund-notification.repository';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { GetRefundNotificationQueryDto } from './dto/get-refund-notification-query.dto';
+import { RefundNotificationService } from './refund-notification.service';
+import { BadRequestException } from '@nestjs/common';
 
 describe('환불 알림 수신 범위', () => {
+  it('U395 계산 위치가 안전한 정수 범위를 넘으면 목록 쿼리 전에 거절한다', async () => {
+    const list = jest.fn();
+    const repository = { list } as unknown as RefundNotificationRepository;
+    await expect(
+      new RefundNotificationService(repository).list(
+        { userId: 'owner', role: 'OWNER' },
+        Object.assign(new GetRefundNotificationQueryDto(), {
+          page: Number.MAX_SAFE_INTEGER,
+          limit: 100,
+        }),
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(list).not.toHaveBeenCalled();
+  });
   it('U394 audience를 지정해도 현재 역할·매장 범위를 확장하지 않는다', async () => {
     const findMany = jest.fn().mockResolvedValue([]);
     const prisma = {
