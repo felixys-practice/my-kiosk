@@ -234,6 +234,66 @@ describe('환불 상태와 수신자별 알림 (E2E)', () => {
     }
   });
 
+  it('운영자는 결과 확인 실패·금액 불일치·시스템 자동 취소 실패 알림을 확인한다 (QS-9-5)', async () => {
+    const querying = await accept();
+    await ctx.prisma.paymentCancel.update({
+      where: { id: querying.paymentCancelId },
+      data: { inquiryFailureCount: 4 },
+    });
+    pg.respondToInquiry({ result: 'QUERY_ERROR', reason: 'PG 조회 장애' });
+    const checked = await request(ctx.server)
+      .post(`/refund/${querying.refundId}/pg-check`)
+      .set('Authorization', `Bearer ${ctx.owner.token}`)
+      .send({})
+      .expect(200);
+    expect(checked.body.data.checkStatus).toBe('CHECKED');
+    const mismatch = await accept();
+    await signedCallback(ctx.server, '/refund/callback', {
+      success: true,
+      paymentCancelId: mismatch.paymentCancelId,
+      orderItemId: mismatch.orderItemId,
+      pgTransactionId: randomUUID(),
+      amount: mismatch.amount - 1000,
+    }).expect(200);
+    const awaiting = await ctx.orderPeriodAwaitingApproval();
+    pg.respondToSend({ result: 'NOT_SENT', reason: '시스템 취소 전송 장애' });
+    await signedCallback(ctx.server, '/payments/callback', {
+      success: true,
+      pgTransactionId: awaiting.pgTransactionId,
+      amount: awaiting.amount + 1000,
+      reason: null,
+    }).expect(200);
+    const system = await ctx.prisma.refund.findFirstOrThrow({
+      where: { paymentId: awaiting.paymentId },
+    });
+    const expected = [
+      { refundId: querying.refundId, kind: 'QUERY_FAILED' },
+      { refundId: mismatch.refundId, kind: 'AMOUNT_MISMATCH' },
+      { refundId: system.id, kind: 'SEND_FAILED' },
+    ];
+    const ids = expected.map((item) => item.refundId);
+    const operator = await list(ctx.manager.token, { limit: 100 }).expect(200);
+    const related = (operator.body.data.items as { refundId: string }[]).filter(
+      (item) => ids.includes(item.refundId),
+    );
+    expect(related).toHaveLength(3);
+    expect(related).toEqual(
+      expect.arrayContaining(
+        expected.map((item) =>
+          expect.objectContaining({ ...item, audience: 'OPERATOR' }),
+        ),
+      ),
+    );
+    for (const actor of [ctx.customer, ctx.owner]) {
+      const res = await list(actor.token, { limit: 100 }).expect(200);
+      expect(
+        (res.body.data.items as { refundId: string }[]).filter((item) =>
+          ids.includes(item.refundId),
+        ),
+      ).toEqual([]);
+    }
+  });
+
   it('고객은 자기 환불의 고객 수신 알림만 조회한다 (QS-9-4a)', async () => {
     const own = await accept();
     const other = await accept('CUSTOMER', { buyer: ctx.otherCustomer });

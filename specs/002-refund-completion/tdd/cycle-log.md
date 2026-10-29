@@ -2042,3 +2042,34 @@ expect(received).toEqual(expected) // deep equality
 매장 환불 거절 알림은 점주·운영자만 수신하고 고객은 조회하지 못함을 실제 HTTP로 확인했다.
 - 전체 회귀: Test Suites: 53 passed, 53 total / Tests:       599 passed, 599 total / Time:        14.798 s, estimated 15 s; Test Suites: 14 passed, 14 total / Tests:       177 passed, 177 total / Time:        17.076 s. 리팩터링 없음.
 - 실패/기존 근거: 기존 U251 및 위 A72 최초 실행·뮤턴트 참조.
+
+- A72 커밋: `d6195b1`.
+
+### A76 기존 운영 이상 알림의 HTTP 검증
+
+- U252~U254 기존 DB 테스트의 결과와 선행 U391/A73 조회를 연결한 QS-9-5는 최초 1 passed. 실제 개별 PG 확인·서명 취소 결과·승인 금액 불일치 자동 취소 경로로 사건을 만들었다. 고객·점주의 알림에는 이 운영 사건들이 없다. 새 구현의 선행 실패가 아니다.
+- OPERATOR 저장을 생략한 뮤턴트의 실제 실패:
+```text
+expect(received).toHaveLength(expected)
+
+    Expected length: 3
+    Received length: 0
+    Received array:  []
+
+      277 |       (item) => ids.includes(item.refundId),
+      278 |     );
+    > 279 |     expect(related).toHaveLength(3);
+          |                     ^
+      280 |     expect(related).toEqual(
+      281 |       expect.arrayContaining(
+      282 |         expected.map((item) =>
+
+  
+```
+- 원복했다.
+
+### A76
+
+운영 이상 3종이 MANAGER에게만 조회되는지 실제 업무 경로와 연결해 확인했다.
+- 전체 회귀: Test Suites: 53 passed, 53 total / Tests:       599 passed, 599 total / Time:        14.34 s, estimated 15 s; Test Suites: 14 passed, 14 total / Tests:       178 passed, 178 total / Time:        16.902 s, estimated 17 s. 리팩터링 없음.
+- 실패/기존 근거: 기존 U252~U254 및 위 A76 최초 실행·뮤턴트 참조.

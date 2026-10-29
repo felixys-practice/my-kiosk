@@ -352,7 +352,7 @@
 - [X] T160 [US9] [A73] E2E: `test/refund-notifications.e2e-spec.ts`에 명세 9-4의 Given/When으로 요청하고 다음 결과를 검증한다: 자기 매장의 알림만 보인다. 테스트 이름 끝에 `(QS-9-4)`를 붙인다.
 - [X] T161 [US9] [A74] E2E: `test/refund-notifications.e2e-spec.ts`에 명세 9-4a의 Given/When으로 요청하고 다음 결과를 검증한다: 자기 환불의 알림만 보인다. 테스트 이름 끝에 `(QS-9-4a)`를 붙인다.
 - [X] T162 [US9] [A75] E2E: `test/refund-notifications.e2e-spec.ts`에 명세 9-4b의 Given/When으로 요청하고 다음 결과를 검증한다: 안 읽은 알림 조회에서 빠지고 전체 조회에는 읽음으로 남는다. 다른 사람의 알림은 읽음 처리할 수 없다. 테스트 이름 끝에 `(QS-9-4b)`를 붙인다.
-- [ ] T163 [US9] [A76] E2E: `test/refund-notifications.e2e-spec.ts`에 명세 9-5의 Given/When으로 요청하고 다음 결과를 검증한다: 그 알림이 보인다. 테스트 이름 끝에 `(QS-9-5)`를 붙인다.
+- [X] T163 [US9] [A76] E2E: `test/refund-notifications.e2e-spec.ts`에 명세 9-5의 Given/When으로 요청하고 다음 결과를 검증한다: 그 알림이 보인다. 테스트 이름 끝에 `(QS-9-5)`를 붙인다.
 
 ### 단위 테스트와 구현
 
@@ -362,7 +362,7 @@
 - [X] T167 [US9] [U259] [U260] `src/refund/refund-notification.controller.ts`, `src/refund/dto/get-refund-notification-query.dto.ts`에 GET notifications와 PATCH :notificationId/read를 연결한다. unreadOnly=false·페이지·audience 필터와 빈 본문/{}를 검증하고 요청자가 수신할 수 없는 알림은 404로 거절한다.
 - [X] T168 [US9] [U261] `src/refund/dto/refund-response.dto.ts`, `src/refund/refund.service.ts`, `src/refund/refund-store.service.ts`에서 양수 최초 접수 202·실패 시 ACCEPTED/ACTION_REQUIRED·0원 200 PAID와 최신 GET 상태를 구분한다. PG 실패를 신청 실패 502로 반환하지 않고 응답 유실 재요청은 최초 응답을 반환한다.
 
-- [ ] T188 [US9] [A69] [A70] [A71] [A72] [A73] [A74] [A75] [A76] `test/refund-notifications.e2e-spec.ts`의 사용자 스토리 9 인수 테스트 A69부터 A76까지 8개가 모두 통과하는지 실행해 확인한 뒤에만 이 스토리를 완료로 표시한다.
+- [X] T188 [US9] [A69] [A70] [A71] [A72] [A73] [A74] [A75] [A76] `test/refund-notifications.e2e-spec.ts`의 사용자 스토리 9 인수 테스트 A69부터 A76까지 8개가 모두 통과하는지 실행해 확인한 뒤에만 이 스토리를 완료로 표시한다.
 
 **검수 관문**: T156부터 T168까지의 작업과 T188 작업을 마치면 실행 규칙의 Phase 검수 절차에 따라 Codex 검수를 받는다. "통과" 판정 전에는 다음 Phase로 넘어가지 않는다.
 
