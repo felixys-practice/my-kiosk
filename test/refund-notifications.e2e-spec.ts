@@ -71,6 +71,34 @@ describe('환불 상태와 수신자별 알림 (E2E)', () => {
       .query(query);
   }
 
+  it('고객은 자기 환불의 고객 수신 알림만 조회한다 (QS-9-4a)', async () => {
+    const own = await accept();
+    const other = await accept('CUSTOMER', { buyer: ctx.otherCustomer });
+    await reject(own);
+    await reject(other);
+    const res = await list(ctx.customer.token).expect(200);
+    expect(res.body.data.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          refundId: own.refundId,
+          audience: 'CUSTOMER',
+        }),
+      ]),
+    );
+    expect(res.body.data.items).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ refundId: other.refundId }),
+      ]),
+    );
+    const outsideAudience = await list(ctx.customer.token, {
+      audience: 'OPERATOR',
+    }).expect(200);
+    expect(outsideAudience.body.data.items).toEqual([]);
+    await list(ctx.customer.token, { userId: ctx.otherCustomer.id }).expect(
+      400,
+    );
+  });
+
   it('읽은 알림은 본인의 미읽음에서만 빠지고 반복 읽음은 최초 시각을 보존하며 다른 수신자는 읽을 수 없다 (QS-9-4b)', async () => {
     const accepted = await accept();
     await reject(accepted);

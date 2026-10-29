@@ -107,7 +107,7 @@ suite_baseline: green
 | A71 | Given 환불금 지급 처리 중인 고객 환불이 있을 때, When PG 취소 요청이 실패로 확정되면, Then 신청한 고객·그 매장 점주·운영자에게 미지급 알림이 남는다. | QS-9-3 | example | PENDING | |
 | A72 | Given 환불금 지급 처리 중인 매장 환불이 있을 때, When PG 취소 요청이 실패로 확정되면, Then 그 매장 점주와 운영자에게 미지급 알림이 남는다. | QS-9-3a | example | PENDING | |
 | A73 | Given 알림이 있을 때, When 점주가 자기 알림을 조회하면, Then 자기 매장의 알림만 보인다. | QS-9-4 | example | DONE | `test/refund-notifications.e2e-spec.ts` / A73 |
-| A74 | Given 알림이 있을 때, When 고객이 자기 알림을 조회하면, Then 자기 환불의 알림만 보인다. | QS-9-4a | example | PENDING | |
+| A74 | Given 알림이 있을 때, When 고객이 자기 알림을 조회하면, Then 자기 환불의 알림만 보인다. | QS-9-4a | example | DONE | `test/refund-notifications.e2e-spec.ts` / A74 |
 | A75 | Given 안 읽은 알림이 있을 때, When 받은 사람이 그 알림을 읽음 처리하면, | QS-9-4b | example | DONE | `test/refund-notifications.e2e-spec.ts` / A75 |
 | A76 | Given PG 취소 결과 확인 실패·환불 금액 불일치·시스템 자동 취소 실패가 생겼을 때, When 운영자가 알림을 조회하면, Then 그 알림이 보인다. | QS-9-5 | example | PENDING | |
 | A77 | Given PG 취소 요청의 실패가 확정됐고 실제 환불금 지급액이 0원이며 다른 환불금 지급이 없을 때, When 운영자가 원인을 해결하고 재시도를 요청하면, Then 서버가 확정된 환불 금액의 취소 요청을 새 PG 취소 요청 식별자로 기록하고 PG에 보낸다. 실행자·사유를 기록하고 이용권·좌석은 복구하지 않는다. | QS-10-1 | example | DONE | `test/refund-operations.e2e-spec.ts` › … (QS-10-1) |

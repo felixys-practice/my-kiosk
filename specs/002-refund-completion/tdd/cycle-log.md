@@ -1894,3 +1894,16 @@ Tests:       1 failed, 1 skipped, 2 total
 - 읽음 PATCH를 빈 본문/{}로 연결했다. 현재 수신 권한·공동 점주 분리·미읽음 제외·반복 시각·권한 해제와 미허용 본문을 실제 HTTP에서 확인한다.
 - 전체 회귀: Test Suites: 53 passed, 53 total / Tests:       599 passed, 599 total / Time:        14.807 s, estimated 17 s; Test Suites: 14 passed, 14 total / Tests:       172 passed, 172 total / Time:        18.874 s. 리팩터링 없음.
 - 실패/기존 근거: 위 A75 실제 HTTP red 및 선행 단위 근거 참조.
+
+- A75 커밋: `0e99139`.
+
+### A74 단위에서 먼저 구현한 고객 범위의 HTTP 검증
+
+- 고객 범위는 U390 실제 실패 뒤 구현했고, HTTP 연결은 A73에서 실제 실패 뒤 구현했다. 새 A74 통합 테스트의 최초 실행은 1 passed이며 새 동작의 선행 실패로 취급하지 않는다.
+- `npx jest --config ./test/jest-e2e.json test/refund-notifications.e2e-spec.ts -t QS-9-4a`: 본인 주문/수신자 조건 제거 뮤턴트에서 타인 알림이 포함되어 1 failed. 원복했다.
+
+### A74
+
+- 선행 단위 U390과 HTTP 연결 A73을 통과한 고객 범위를 실제 다른 고객 데이터로 확인했다.
+- 전체 회귀: Test Suites: 53 passed, 53 total / Tests:       599 passed, 599 total / Time:        16.196 s; Test Suites: 14 passed, 14 total / Tests:       173 passed, 173 total / Time:        23.284 s. 리팩터링 없음.
+- 실패/기존 근거: U390/A73 선행 red·위 A74 HTTP 뮤턴트 참조.
