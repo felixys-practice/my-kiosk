@@ -147,7 +147,15 @@ export class RefundController {
     });
   }
 
-  // 매장의 환불 내역 (status 미지정 시 전체 상태 조회)
+  @Get('me')
+  getMyRefundHistory(
+    @CurrentUser() user: JwtValidationResult,
+    @Query() query: GetRefundQueryDto,
+  ) {
+    return this.refundQueryService.byMe(user, query);
+  }
+
+  // 현재 점주·운영자의 매장 환불 내역
   @Get('/shop/:shopId')
   async getRefundHistoryByShop(
     @CurrentUser() user: JwtValidationResult,

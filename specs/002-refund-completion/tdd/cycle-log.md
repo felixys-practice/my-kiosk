@@ -1323,3 +1323,16 @@ U10~U15를 마친 뒤, 관계 검증의 비교 대상 설정을 생략하면 정
 - 전체 회귀: Test Suites: 50 passed, 50 total / Tests:       578 passed, 578 total / Time:        14.362 s, estimated 17 s; Test Suites: 13 passed, 13 total / Tests:       162 passed, 162 total / Time:        16.968 s. 리팩터링 없음.
 
 - 실패 근거: 위 A65 범위 뮤턴트 참조.
+
+- A65 구현·회귀 커밋: `41cdd78`.
+
+### A66 red
+
+- `npx jest --config ./test/jest-e2e.json test/refund-history.e2e-spec.ts -t QS-8-3` → `expected 200 "OK", got 404 "Not Found"`; 1 failed.
+
+### A66
+
+- /refund/me는 JWT 본인 주문으로 범위를 고정한다. 명시적 응답 DTO에 환불 확정·지급 합계·미지급·초과·종료 시각·현재 PG 시도를 연결했다.
+- 전체 회귀: Test Suites: 50 passed, 50 total / Tests:       578 passed, 578 total / Time:        14.035 s, estimated 15 s; Test Suites: 13 passed, 13 total / Tests:       163 passed, 163 total / Time:        14.31 s, estimated 16 s. 리팩터링 없음.
+
+- 실패 근거: 위 A66 red 참조.

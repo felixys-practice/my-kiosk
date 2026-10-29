@@ -22,6 +22,49 @@ describe('환불 내역 조회 (E2E)', () => {
     await ctx.close();
   });
 
+  it('고객은 본인 주문의 확정 금액과 지급 상태가 담긴 환불 내역을 조회한다 (QS-8-3)', async () => {
+    const issued = await ctx.issuePeriodTicket();
+    const accepted = await request(ctx.server)
+      .post('/refund')
+      .set('Authorization', `Bearer ${ctx.customer.token}`)
+      .send({ ticketId: issued.ticketId, consentToTerminateTicket: true })
+      .expect(202);
+    const response = await request(ctx.server)
+      .get('/refund/me')
+      .set('Authorization', `Bearer ${ctx.customer.token}`)
+      .expect(200);
+    expect(response.body.data.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          refundId: accepted.body.data.refundId,
+          policyVersion: 'v0.4',
+          decisionStatus: 'ACCEPTED',
+          paymentId: issued.paymentId,
+          targetKind: 'ORDER_ITEM',
+          orderItemId: issued.orderItemId,
+          ticketId: issued.ticketId,
+          shopId: ctx.shop.id,
+          source: 'CUSTOMER',
+          amount: issued.amount,
+          paidAmount: 0,
+          outstandingAmount: issued.amount,
+          overpaidAmount: 0,
+          acceptedAt: expect.any(String),
+          terminatedAt: expect.any(String),
+          payoutStatus: 'PENDING',
+          payoutMethod: 'PG',
+          reviewRequired: false,
+          paymentCancelId: accepted.body.data.paymentCancelId,
+          attemptStatus: 'REQUESTED',
+          actionCode: null,
+          actionReason: null,
+          paidAt: null,
+        }),
+      ]),
+    );
+    expect(response.body.data.meta).toMatchObject({ page: 1, limit: 20 });
+  });
+
   it('점주는 다른 매장이나 소유 관계가 해제된 매장 내역을 조회할 수 없다 (QS-8-2)', async () => {
     const foreign = await request(ctx.server)
       .get(`/refund/shop/${ctx.otherShop.id}`)

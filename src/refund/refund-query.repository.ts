@@ -5,6 +5,12 @@ import { PrismaService } from 'src/prisma/prisma.service';
 const refundQueryInclude = {
   payment: { include: { order: true } },
   orderItem: { include: { ticket: { select: { id: true } } } },
+  paymentCancels: {
+    orderBy: [
+      { attemptNumber: { sort: 'desc', nulls: 'last' } },
+      { id: 'desc' },
+    ],
+  },
 } satisfies Prisma.RefundInclude;
 
 export type RefundQueryRow = Prisma.RefundGetPayload<{
