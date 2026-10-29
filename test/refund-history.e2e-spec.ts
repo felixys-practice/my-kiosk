@@ -23,6 +23,71 @@ describe('환불 내역 조회 (E2E)', () => {
     await ctx.close();
   });
 
+  it('U385 실제 PG 오류와 외부 지급 증빙은 운영자의 HTTP 응답에만 담긴다 (QS-8-3)', async () => {
+    const privateValue = '비공개 PG 오류와 지급 증빙';
+    const defaultSend = pgStub.defaultSend;
+    let refundId: string;
+    try {
+      pgStub.defaultSend = { result: 'NOT_SENT', reason: privateValue };
+      const issued = await ctx.issuePeriodTicket();
+      const accepted = await request(ctx.server)
+        .post('/refund')
+        .set('Authorization', `Bearer ${ctx.customer.token}`)
+        .send({ ticketId: issued.ticketId, consentToTerminateTicket: true })
+        .expect(202);
+      refundId = accepted.body.data.refundId as string;
+      const reserved = await request(ctx.server)
+        .post(`/refund/${refundId}/manual-payouts`)
+        .set('Authorization', `Bearer ${ctx.manager.token}`)
+        .set('Idempotency-Key', randomUUID())
+        .send({ amount: issued.amount, reason: privateValue })
+        .expect(201);
+      await request(ctx.server)
+        .post(
+          `/refund/${refundId}/manual-payouts/${reserved.body.data.payoutId as string}/confirm`,
+        )
+        .set('Authorization', `Bearer ${ctx.manager.token}`)
+        .set('Idempotency-Key', randomUUID())
+        .send({
+          amount: issued.amount,
+          paidAt: new Date(Date.now() - 1000).toISOString(),
+          externalTransactionId: randomUUID(),
+          evidenceReference: privateValue,
+        })
+        .expect(200);
+    } finally {
+      pgStub.defaultSend = defaultSend;
+    }
+    for (const actor of [ctx.customer, ctx.owner, ctx.coOwner]) {
+      const detail = await request(ctx.server)
+        .get(`/refund/${refundId}`)
+        .set('Authorization', `Bearer ${actor.token}`)
+        .expect(200);
+      const listPath =
+        actor === ctx.customer ? '/refund/me' : `/refund/shop/${ctx.shop.id}`;
+      const list = await request(ctx.server)
+        .get(listPath)
+        .set('Authorization', `Bearer ${actor.token}`)
+        .expect(200);
+      expect(
+        JSON.stringify({ detail: detail.body.data, list: list.body.data }),
+      ).not.toContain(privateValue);
+      expect(detail.body.data.manualPayouts).toEqual([
+        expect.objectContaining({ status: 'SUCCEEDED', amount: 10000 }),
+      ]);
+    }
+    const manager = await request(ctx.server)
+      .get(`/refund/${refundId}`)
+      .set('Authorization', `Bearer ${ctx.manager.token}`)
+      .expect(200);
+    expect(manager.body.data.attempts).toEqual([
+      expect.objectContaining({ failureReason: privateValue }),
+    ]);
+    expect(manager.body.data.manualPayouts).toEqual([
+      expect.objectContaining({ evidenceReference: privateValue }),
+    ]);
+  });
+
   it('U384 운영자 목록은 실패·예약을 유지하고 상태 필터 뒤 안정된 순서로 페이지를 제공한다 (QS-8-5)', async () => {
     const defaultSend = pgStub.defaultSend;
     const ids: string[] = [];

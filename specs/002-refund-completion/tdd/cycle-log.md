@@ -1493,3 +1493,18 @@ U10~U15를 마친 뒤, 관계 검증의 비교 대상 설정을 생략하면 정
 - 전체 회귀: Test Suites: 51 passed, 51 total / Tests:       586 passed, 586 total / Time:        16.974 s; Test Suites: 13 passed, 13 total / Tests:       167 passed, 167 total / Time:        21.555 s. 리팩터링 없음.
 
 - 실패 근거: 위 U384 실제 DB 뮤턴트 참조.
+
+- U384 구현·회귀 커밋: `5dea2f5`.
+
+### U385 운영 정보 HTTP 검증
+
+- 첫 실행은 테스트의 예약 응답 키를 `payoutId` 대신 `manualRefundPayoutId`로 읽어 confirm 경로가 400이었다. fixture 오류이며 기능 red로 세지 않는다. 기존 API 계약/테스트의 payoutId로 고친 뒤 최초 1 passed.
+- `npx jest --config ./test/jest-e2e.json test/refund-history.e2e-spec.ts -t U385`: 모든 상세에 운영자 필드를 넣는 변형에서 `Expected substring: not "비공개 PG 오류와 지급 증빙"`, 1 failed. 원복했다.
+- 실제 전송 전 실패와 외부 지급 예약·증빙 등록으로 오류/증빙을 만들었다. 고객·공동 점주 HTTP 응답에는 원문이 없고 MANAGER 상세만 포함한다. 검토 사유는 U247의 동일 응답 DTO 단위 검증에서 확인했다.
+
+### U385
+
+- 실제 지급 이력의 원문 오류와 증빙을 역할별 HTTP 응답에서 확인했다.
+- 전체 회귀: Test Suites: 51 passed, 51 total / Tests:       586 passed, 586 total / Time:        17.572 s; Test Suites: 13 passed, 13 total / Tests:       168 passed, 168 total / Time:        17.829 s, estimated 21 s. 리팩터링 없음.
+
+- 실패 근거: 위 U385 운영 정보 HTTP 뮤턴트 참조.

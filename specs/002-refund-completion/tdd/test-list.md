@@ -660,4 +660,4 @@ suite_baseline: green
 | U382 | 환불 상세는 본인·현재 공동 점주·운영자만 조회하며 PG·외부 지급 이력을 포함한다 | FR-033, FR-034, FR-036, 계약 §2·3 | example | DONE | `test/refund-history.e2e-spec.ts` / U382 |
 | U383 | 목록 페이지는 1 이상이며 정수·상태·boolean 형식 오류를 거절한다 | FR-036, 계약 §9 | example | DONE | `src/refund/dto/get-refund-query.dto.spec.ts` / U383 |
 | U384 | HTTP 목록은 상태·조치 필터를 적용한 뒤 안정된 순서로 페이지를 제공한다 | FR-036, FR-051, 계약 §9 | example | DONE | `test/refund-history.e2e-spec.ts` / U384 |
-| U385 | HTTP 상세·목록은 원본 오류·증빙·검토 사유를 MANAGER에게만 제공한다 | FR-036, 계약 §3 | example | PENDING | |
+| U385 | HTTP 상세·목록은 원본 오류·증빙·검토 사유를 MANAGER에게만 제공한다 | FR-036, 계약 §3 | example | DONE | `test/refund-history.e2e-spec.ts` / U385 |
