@@ -1453,3 +1453,16 @@ U10~U15를 마친 뒤, 관계 검증의 비교 대상 설정을 생략하면 정
 - 전체 회귀: Test Suites: 51 passed, 51 total / Tests:       584 passed, 584 total / Time:        14.455 s, estimated 15 s; Test Suites: 13 passed, 13 total / Tests:       166 passed, 166 total / Time:        16.165 s. 리팩터링 없음.
 
 - 실패 근거: 위 U249 red 참조.
+
+- U249 구현·회귀 커밋: `904848b`.
+
+### U245 미허용 필드 뮤턴트
+
+- `npx jest src/refund/dto/get-refund-query.dto.spec.ts -t U245` 최초 1 passed. userId를 허용 필드로 임시 추가하면 `Expected value: "userId"`, `Received array: []`, 1 failed. 원복했다. HTTP 400은 A67에서도 검증했다.
+
+### U245
+
+- 목록 DTO에서 userId를 허용하지 않고 /me의 JWT 범위 고정과 함께 다른 고객 지정 경로를 막는다.
+- 전체 회귀: Test Suites: 51 passed, 51 total / Tests:       585 passed, 585 total / Time:        17.346 s; Test Suites: 13 passed, 13 total / Tests:       166 passed, 166 total / Time:        18.046 s. 리팩터링 없음.
+
+- 실패 근거: 위 U245 미허용 필드 뮤턴트 참조.

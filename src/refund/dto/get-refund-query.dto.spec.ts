@@ -4,6 +4,13 @@ import { validate } from 'class-validator';
 import { GetRefundQueryDto } from './get-refund-query.dto';
 
 describe('환불 목록 쿼리', () => {
+  it('U245 본인 목록에 다른 userId를 주입하면 미허용 필드로 거절한다', async () => {
+    const errors = await validate(
+      plainToInstance(GetRefundQueryDto, { userId: 'other-customer' }),
+      { whitelist: true, forbidNonWhitelisted: true },
+    );
+    expect(errors.map((error) => error.property)).toContain('userId');
+  });
   it('U241 목록 크기 100은 허용한다', async () => {
     const query = plainToInstance(GetRefundQueryDto, { limit: '100' });
     expect({ limit: query.limit, errors: await validate(query) }).toEqual({
