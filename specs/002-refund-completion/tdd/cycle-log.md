@@ -1636,3 +1636,28 @@ Tests:       1 failed, 1 total
 - 현재 ShopOwner 매장의 SHOP 범위를 조회 조건으로 만들고, 본인 지정 수신자 또는 범위 발송만 허용한다. 아직 HTTP 경로는 연결하지 않았으며 이후 역할별 조건도 각각 선행 실패로 검증한다.
 - 전체 회귀: Test Suites: 52 passed, 52 total / Tests:       588 passed, 588 total / Time:        16.884 s, estimated 18 s; Test Suites: 13 passed, 13 total / Tests:       170 passed, 170 total / Time:        16.793 s, estimated 18 s. 리팩터링 없음.
 - 실패/기존 근거: 위 U389 실제 red 참조.
+
+- U389 커밋: `a9101ca`.
+
+### U390 red
+
+- `npx jest src/refund/refund-notification.service.spec.ts -t U390`
+```text
+    -   "audience": "CUSTOMER",
+    -   "recipientUserId": "customer",
+    -   "refund": Object {
+    -     "payment": Object {
+    -       "order": Object {
+    -         "userId": "customer",
+    -       },
+    -     },
+    +   "id": Object {
+    +     "in": Array [],
+Tests:       1 failed, 1 skipped, 2 total
+```
+
+### U390
+
+- 고객 알림은 자기 주문과 자기 수신자 ID를 함께 만족하는 CUSTOMER만 조회한다.
+- 전체 회귀: Test Suites: 52 passed, 52 total / Tests:       589 passed, 589 total / Time:        15.894 s, estimated 17 s; Test Suites: 13 passed, 13 total / Tests:       170 passed, 170 total / Time:        21.523 s. 리팩터링 없음.
+- 실패/기존 근거: 위 U390 실제 red 참조.

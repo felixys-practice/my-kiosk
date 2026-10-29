@@ -670,5 +670,5 @@ suite_baseline: green
 | ID | 동작 | 근거 | 종류 | 상태 | 테스트 |
 |---|---|---|---|---|---|
 | U389 | 점주 알림 범위는 현재 ShopOwner 매장의 SHOP 수신 범위로 제한된다 | FR-038, 계약 §9 | example | DONE | `src/refund/refund-notification.service.spec.ts` / U389 |
-| U390 | 고객 알림 범위는 본인 주문·본인 수신자의 CUSTOMER로 제한된다 | FR-039, 계약 §9 | example | PENDING | |
+| U390 | 고객 알림 범위는 본인 주문·본인 수신자의 CUSTOMER로 제한된다 | FR-039, 계약 §9 | example | DONE | `src/refund/refund-notification.service.spec.ts` / U390 |
 | U391 | 운영자 알림 범위는 본인에게 지정되거나 범위 발송된 OPERATOR로 제한된다 | FR-038, 계약 §9 | example | PENDING | |

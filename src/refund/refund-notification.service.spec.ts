@@ -1,6 +1,13 @@
 import { notificationScope } from './refund-notification.repository';
 
 describe('환불 알림 수신 범위', () => {
+  it('U390 고객은 본인 주문에 대해 본인을 수신자로 지정한 알림만 조회한다', () => {
+    expect(notificationScope({ userId: 'customer', role: 'USER' })).toEqual({
+      audience: 'CUSTOMER',
+      recipientUserId: 'customer',
+      refund: { payment: { order: { userId: 'customer' } } },
+    });
+  });
   it('U389 점주는 현재 소유 매장의 SHOP 범위 또는 자기 지정 수신 알림만 조회한다', () => {
     expect(notificationScope({ userId: 'owner', role: 'OWNER' })).toEqual({
       audience: 'SHOP',
