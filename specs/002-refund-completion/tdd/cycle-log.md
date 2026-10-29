@@ -1706,3 +1706,20 @@ Tests:       1 failed, 1 total
 - 알림 쿼리 기본값과 형식을 DTO에서 검증한다. 사용자·매장 임의 지정 필드는 허용하지 않는다.
 - 전체 회귀: Test Suites: 53 passed, 53 total / Tests:       591 passed, 591 total / Time:        15.998 s, estimated 16 s; Test Suites: 13 passed, 13 total / Tests:       170 passed, 170 total / Time:        16.849 s, estimated 18 s. 리팩터링 없음.
 - 실패/기존 근거: 위 U392 실제 red 참조.
+
+- U392 커밋: `4c88dfb`.
+
+### U393 red
+
+- `npx jest src/refund/refund-notification.service.spec.ts -t U393`
+```text
+    Expected: {"include": {"receipts": {"select": {"readAt": true}, "where": {"userId": "owner"}}}, "orderBy": [{"createdAt": "desc"}, {"id": "desc"}], "skip": 20, "take": 20, "where": {"AND": [{"OR": [{"recipientUserId": null}, {"recipientUserId": "owner"}], "audience": "SHOP", "shop": {"owners": {"some": {"userId": "owner"}}}}]}}
+    Number of calls: 0
+Tests:       1 failed, 3 skipped, 4 total
+```
+
+### U393
+
+- 알림 목록을 수신 범위 안에서 createdAt DESC,id DESC로 정렬하고 페이지를 자른다. 읽음 행은 요청한 사용자 것만 조회한다.
+- 전체 회귀: Test Suites: 53 passed, 53 total / Tests:       592 passed, 592 total / Time:        16.199 s; Test Suites: 13 passed, 13 total / Tests:       170 passed, 170 total / Time:        17.438 s. 리팩터링 없음.
+- 실패/기존 근거: 위 U393 실제 red 참조.
