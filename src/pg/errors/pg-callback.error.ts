@@ -1,4 +1,7 @@
-import { DomainUnauthorizedError } from 'src/common/errors';
+import {
+  DomainBadRequestError,
+  DomainUnauthorizedError,
+} from 'src/common/errors';
 
 /**
  * PG 콜백 서명 오류 (환불 명세 API 계약 §7·§10)
@@ -22,5 +25,15 @@ export class PgCallbackExpiredError extends DomainUnauthorizedError {
   constructor() {
     super('PG 콜백 서명 시각이 허용 범위를 벗어났습니다');
     this.name = 'PgCallbackExpiredError';
+  }
+}
+
+/** 압축 본문·query string 등 콜백 형식 위반 (400) */
+export class PgCallbackFormatInvalidError extends DomainBadRequestError {
+  readonly code = 'PG_CALLBACK_FORMAT_INVALID';
+
+  constructor() {
+    super('PG 콜백 요청 형식이 올바르지 않습니다');
+    this.name = 'PgCallbackFormatInvalidError';
   }
 }

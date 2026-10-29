@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { createHash, createHmac, timingSafeEqual } from 'crypto';
 import {
   PgCallbackExpiredError,
+  PgCallbackFormatInvalidError,
   PgCallbackUnauthorizedError,
 } from '../errors/pg-callback.error';
 
@@ -13,6 +14,7 @@ const decimalSeconds = /^\d+$/;
 type SignedRequest = {
   method: string;
   path: string;
+  originalUrl: string;
   headers: Record<string, string | string[] | undefined>;
   rawBody?: Buffer;
 };
@@ -32,9 +34,18 @@ export class PgSignatureGuard implements CanActivate {
    * @returns 서명이 맞으면 true
    * @throws PgCallbackUnauthorizedError 서명이 없거나 일치하지 않을 때(401)
    * @throws PgCallbackExpiredError 서명 시각이 허용 범위를 벗어났을 때(401)
+   * @throws PgCallbackFormatInvalidError 압축 본문·query string일 때(400)
    */
   canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest<SignedRequest>();
+    // 압축 본문과 query string은 서명 대상 규격 밖이므로 형식 오류로 거절한다
+    const encoding = request.headers['content-encoding'];
+    if (
+      (encoding !== undefined && encoding !== 'identity') ||
+      request.originalUrl.includes('?')
+    ) {
+      throw new PgCallbackFormatInvalidError();
+    }
     const timestamp = request.headers['x-pg-timestamp'];
     const signature = request.headers['x-pg-signature'];
     // 서명 시각은 십진 Unix 초여야 한다(형식이 틀리면 인증 실패)

@@ -193,4 +193,23 @@ describe('PgSignatureGuard', () => {
 
     expect(outcomeOf(contextOf({ headers }))).toBe('PG_CALLBACK_UNAUTHORIZED');
   });
+
+  it('압축된 본문(Content-Encoding)은 서명이 맞아도 PG_CALLBACK_FORMAT_INVALID로 거절된다', () => {
+    const headers: [string, string][] = [
+      ...signedHeaders(),
+      ['Content-Encoding', 'gzip'],
+    ];
+
+    expect(outcomeOf(contextOf({ headers }))).toBe(
+      'PG_CALLBACK_FORMAT_INVALID',
+    );
+  });
+
+  it('query string이 붙은 콜백은 서명이 맞아도 PG_CALLBACK_FORMAT_INVALID로 거절된다', () => {
+    expect(
+      outcomeOf(
+        contextOf({ headers: signedHeaders(), url: `${path}?retry=1` }),
+      ),
+    ).toBe('PG_CALLBACK_FORMAT_INVALID');
+  });
 });
