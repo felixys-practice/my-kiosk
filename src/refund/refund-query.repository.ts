@@ -44,6 +44,7 @@ export class RefundQueryRepository {
       this.prisma.refund.findMany({
         where,
         include: refundQueryInclude,
+        orderBy: [{ requestedAt: 'desc' }, { id: 'desc' }],
         skip: (page - 1) * limit,
         take: limit,
       }),

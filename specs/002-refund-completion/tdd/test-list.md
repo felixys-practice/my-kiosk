@@ -578,7 +578,7 @@ suite_baseline: green
 
 | id | behavior | traces | kind | state | test |
 |---|---|---|---|---|---|
-| U239 | 목록은 requestedAt 내림차순, 같으면 id 내림차순으로 정렬된다 | FR-036 | example | PENDING | |
+| U239 | 목록은 requestedAt 내림차순, 같으면 id 내림차순으로 정렬된다 | FR-036 | example | DONE | `src/refund/refund-query.service.spec.ts` / U239 |
 | U240 | page·limit을 생략하면 page=1·limit=20으로 조회된다 | FR-036 | example | DONE | `src/refund/dto/get-refund-query.dto.spec.ts` / U240 |
 | U241 | limit=100은 허용된다 | FR-036 | example | DONE | `src/refund/dto/get-refund-query.dto.spec.ts` / U241 |
 | U242 | limit=101은 400을 받는다 | FR-036 | example | DONE | `src/refund/dto/get-refund-query.dto.spec.ts` / U242 |

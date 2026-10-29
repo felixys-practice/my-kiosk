@@ -1362,3 +1362,16 @@ U10~U15를 마친 뒤, 관계 검증의 비교 대상 설정을 생략하면 정
 - 전체 회귀: Test Suites: 50 passed, 50 total / Tests:       578 passed, 578 total / Time:        13.646 s, estimated 14 s; Test Suites: 13 passed, 13 total / Tests:       165 passed, 165 total / Time:        13.1 s. 리팩터링 없음.
 
 - 실패 근거: 위 A68 운영자 범위 뮤턴트 참조.
+
+- A68 구현·회귀 커밋: `f74ba2e`.
+
+### U239 red
+
+- `npx jest src/refund/refund-query.service.spec.ts -t U239` → 기대한 `"orderBy": [{"requestedAt": "desc"}, {"id": "desc"}]`가 호출 인자에 없으며 1 failed. 페이지를 자르기 전 DB 정렬을 데이터 접근 경계에서 확인한다.
+
+### U239
+
+- requestedAt DESC,id DESC를 DB에 전달하여 정렬 뒤 페이지를 자른다. 저장소 쿼리 경계는 목으로 검증하며 실제 DB 페이지 결과는 추가 HTTP 검증에서 확인한다.
+- 전체 회귀: Test Suites: 51 passed, 51 total / Tests:       579 passed, 579 total / Time:        14.587 s; Test Suites: 13 passed, 13 total / Tests:       165 passed, 165 total / Time:        16.039 s. 리팩터링 없음.
+
+- 실패 근거: 위 U239 red 참조.
