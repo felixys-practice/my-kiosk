@@ -1860,3 +1860,20 @@ Tests:       1 failed, 9 skipped, 10 total
 - 읽음 기록을 notificationId/userId 복합 키로 저장하여 공동 점주별로 분리한다. 수신 범위 확인을 먼저 수행한다.
 - 전체 회귀: Test Suites: 53 passed, 53 total / Tests:       598 passed, 598 total / Time:        15.868 s, estimated 16 s; Test Suites: 14 passed, 14 total / Tests:       171 passed, 171 total / Time:        16.05 s, estimated 17 s. 리팩터링 없음.
 - 실패/기존 근거: 위 U257 실제 red 참조.
+
+- U257 커밋: `f188d30`.
+
+### U258 red
+
+- `npx jest src/refund/refund-notification.service.spec.ts -t U258`
+```text
+    -   "readAt": 2026-10-29T00:00:00.000Z,
+    +   "readAt": 2026-10-29T00:01:00.000Z,
+Tests:       1 failed, 10 skipped, 11 total
+```
+
+### U258
+
+- Receipt upsert의 기존 행을 갱신하지 않아 최초 readAt을 보존한다. 복합 PK는 같은 사람의 중복 기록을 막는다.
+- 전체 회귀: Test Suites: 53 passed, 53 total / Tests:       599 passed, 599 total / Time:        16.501 s; Test Suites: 14 passed, 14 total / Tests:       171 passed, 171 total / Time:        16.83 s. 리팩터링 없음.
+- 실패/기존 근거: 위 U258 실제 red 참조.

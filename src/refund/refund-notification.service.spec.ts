@@ -64,6 +64,18 @@ function receiptStore() {
 }
 
 describe('환불 알림 수신 범위', () => {
+  it('U258 같은 사람이 다시 읽으면 최초 읽음 시각을 보존한다', async () => {
+    const store = receiptStore();
+    const actor = { userId: 'owner', role: 'OWNER' };
+    await store.service.read(actor, 'notification', notificationAt);
+    const repeated = await store.service.read(
+      actor,
+      'notification',
+      new Date(notificationAt.getTime() + 60000),
+    );
+    expect(repeated).toMatchObject({ isRead: true, readAt: notificationAt });
+    expect(store.receipts.size).toBe(1);
+  });
   it('U257 공동 점주가 읽어도 각 사람의 읽음은 별도 기록된다', async () => {
     const store = receiptStore();
     const otherAt = new Date(notificationAt.getTime() + 1000);

@@ -16,7 +16,7 @@ export class RefundNotificationRepository {
     return this.prisma.refundNotificationReceipt.upsert({
       where: { notificationId_userId: { notificationId, userId } },
       create: { notificationId, userId, readAt },
-      update: { readAt },
+      update: {},
     });
   }
 
