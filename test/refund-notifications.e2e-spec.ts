@@ -185,6 +185,35 @@ describe('환불 상태와 수신자별 알림 (E2E)', () => {
     }
   });
 
+  it('고객 환불 거절은 고객·현재 점주·운영자에게 한 번씩 보인다 (QS-9-3)', async () => {
+    const accepted = await accept();
+    const payload = {
+      success: false,
+      paymentCancelId: accepted.paymentCancelId,
+      orderItemId: accepted.orderItemId,
+      pgTransactionId: randomUUID(),
+      amount: accepted.amount,
+      reason: '공개하지 않는 PG 원문',
+    };
+    await signedCallback(ctx.server, '/refund/callback', payload).expect(200);
+    await signedCallback(ctx.server, '/refund/callback', payload).expect(200);
+    for (const [actor, audience] of [
+      [ctx.customer, 'CUSTOMER'],
+      [ctx.owner, 'SHOP'],
+      [ctx.coOwner, 'SHOP'],
+      [ctx.manager, 'OPERATOR'],
+    ] as const) {
+      const res = await list(actor.token, { limit: 100 }).expect(200);
+      const related = (res.body.data.items as { refundId: string }[]).filter(
+        (item) => item.refundId === accepted.refundId,
+      );
+      expect(related).toEqual([
+        expect.objectContaining({ audience, kind: 'PG_REJECTED' }),
+      ]);
+      expect(JSON.stringify(related)).not.toContain(payload.reason);
+    }
+  });
+
   it('고객은 자기 환불의 고객 수신 알림만 조회한다 (QS-9-4a)', async () => {
     const own = await accept();
     const other = await accept('CUSTOMER', { buyer: ctx.otherCustomer });

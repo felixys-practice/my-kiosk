@@ -1975,3 +1975,38 @@ expect(received).toMatchObject(expected)
 기존 US8 조회 동작을 실제 PG 결과 반영과 연결해 확인했다. 새 파일의 미사용 본문·목 비동기·matcher 린트와 줄바꿈도 동작/단언 보존으로 정리했다.
 - 전체 회귀: Test Suites: 53 passed, 53 total / Tests:       599 passed, 599 total / Time:        15.305 s, estimated 16 s; Test Suites: 14 passed, 14 total / Tests:       175 passed, 175 total / Time:        16.426 s, estimated 35 s. 리팩터링 없음.
 - 실패/기존 근거: US8 선행 구현·검수 및 위 A70 최초 실행/뮤턴트 기록 참조.
+
+- A70 커밋: `587a42f`.
+
+### A71 기존 고객 실패 알림의 HTTP 검증
+
+- 기존 U250 실제 DB 테스트 및 선행 U390/A73으로 구현된 알림 조회를 연결했다. 새 QS-9-3 최초 실행은 1 passed. 새 구현의 선행 실패가 아니다. 같은 서명 콜백을 두 번 보내도 고객·현재 공동 점주 각각·MANAGER의 수신 범위에 사건 1건만 보이고 PG 원문은 없다.
+- CUSTOMER 저장을 생략한 뮤턴트의 실제 실패:
+```text
+expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 6
+    + Received  + 1
+
+    - Array [
+    -   ObjectContaining {
+    -     "audience": "CUSTOMER",
+    -     "kind": "PG_REJECTED",
+    -   },
+    - ]
+    + Array []
+
+      208 |         (item) => item.refundId === accepted.refundId,
+      209 |       );
+    > 210 |       expect(related).toEqual([
+          |                       ^
+      211 |         expect.objectContaining({ audience, kind: 'PG_REJECTED' }),
+      212 |    
+```
+- 뮤턴트를 원복했다.
+
+### A71
+
+기존 고객 실패 알림을 실제 조회·중복 콜백과 연결해 확인했다.
+- 전체 회귀: Test Suites: 53 passed, 53 total / Tests:       599 passed, 599 total / Time:        14.64 s, estimated 15 s; Test Suites: 14 passed, 14 total / Tests:       176 passed, 176 total / Time:        17.077 s. 리팩터링 없음.
+- 실패/기존 근거: 기존 U250 및 위 A71 최초 실행·뮤턴트 참조.
