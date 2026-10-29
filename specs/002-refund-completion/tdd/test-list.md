@@ -98,10 +98,10 @@ suite_baseline: green
 | A62 | Given 환불금 지급 처리 중인 환불이 있을 때, When 로그인한 사용자가 서명 없이 콜백을 보내면, Then 거부된다. | QS-7-3 | example | DONE | `test/refund-callback-auth.e2e-spec.ts` › … (QS-7-3) |
 | A63 | Given 결제를 요청한 주문이 있을 때, When 결제 결과 콜백에 1~3번과 같은 조건으로 요청이 오면, Then 1~3번과 같이 처리된다. | QS-7-4 | example | DONE | `test/refund-callback-auth.e2e-spec.ts` › … (QS-7-4) |
 | A64 | Given 점주가 매장을 소유하고 있을 때, When 자기 매장의 환불 내역을 조회하면, Then 조회된다. | QS-8-1 | example | DONE | `test/refund-history.e2e-spec.ts` / QS-8-1 |
-| A65 | Given 점주가 있을 때, When 자기 소유가 아닌 매장의 환불 내역을 조회하면, | QS-8-2 | example | DONE | `test/refund-history.e2e-spec.ts` / A65 |
-| A66 | Given 고객이 있을 때, When 자기 환불 내역을 조회하면, Then 조회된다. | QS-8-3 | example | DONE | `test/refund-history.e2e-spec.ts` / A66 |
-| A67 | Given 고객이 있을 때, When 환불 내역을 조회하면, Then 자기 환불 내역만 보인다. 다른 고객을 지정해 조회할 방법은 없다. | QS-8-4 | example | DONE | `test/refund-history.e2e-spec.ts` / A67 |
-| A68 | Given 고객지원 계정이 있을 때, When 어느 매장이나 사용자의 환불 내역을 조회하면, Then 조회된다. | QS-8-5 | example | DONE | `test/refund-history.e2e-spec.ts` / A68 |
+| A65 | Given 점주가 있을 때, When 자기 소유가 아닌 매장의 환불 내역을 조회하면, | QS-8-2 | example | DONE | `test/refund-history.e2e-spec.ts` / QS-8-2 |
+| A66 | Given 고객이 있을 때, When 자기 환불 내역을 조회하면, Then 조회된다. | QS-8-3 | example | DONE | `test/refund-history.e2e-spec.ts` / QS-8-3 |
+| A67 | Given 고객이 있을 때, When 환불 내역을 조회하면, Then 자기 환불 내역만 보인다. 다른 고객을 지정해 조회할 방법은 없다. | QS-8-4 | example | DONE | `test/refund-history.e2e-spec.ts` / QS-8-4 |
+| A68 | Given 고객지원 계정이 있을 때, When 어느 매장이나 사용자의 환불 내역을 조회하면, Then 조회된다. | QS-8-5 | example | DONE | `test/refund-history.e2e-spec.ts` / QS-8-5 |
 | A69 | Given 환불 가능한 이용권이 있을 때, When 고객 환불이나 매장 환불을 요청하면, | QS-9-1 | example | PENDING | |
 | A70 | Given 환불 건이 있을 때, When 점주나 고객이 환불 내역을 조회하면, | QS-9-2 | example | PENDING | |
 | A71 | Given 환불금 지급 처리 중인 고객 환불이 있을 때, When PG 취소 요청이 실패로 확정되면, Then 신청한 고객·그 매장 점주·운영자에게 미지급 알림이 남는다. | QS-9-3 | example | PENDING | |
@@ -660,5 +660,5 @@ suite_baseline: green
 | U382 | 환불 상세는 본인·현재 공동 점주·운영자만 조회하며 PG·외부 지급 이력을 포함한다 | FR-033, FR-034, FR-036, 계약 §2·3 | example | DONE | `test/refund-history.e2e-spec.ts` / U382 |
 | U383 | 목록 페이지는 1 이상이며 정수·상태·boolean 형식 오류를 거절한다 | FR-036, 계약 §9 | example | DONE | `src/refund/dto/get-refund-query.dto.spec.ts` / U383 |
 | U384 | HTTP 목록은 상태·조치 필터를 적용한 뒤 안정된 순서로 페이지를 제공한다 | FR-036, FR-051, 계약 §9 | example | DONE | `test/refund-history.e2e-spec.ts` / U384 |
-| U385 | HTTP 상세·목록은 원본 오류·증빙·검토 사유를 MANAGER에게만 제공한다 | FR-036, 계약 §3 | example | DONE | `test/refund-history.e2e-spec.ts` / U385 |
+| U385 | HTTP 상세·목록은 실제 PG 오류·외부 지급 증빙을 MANAGER에게만 제공한다 | FR-036, 계약 §3 | example | DONE | `test/refund-history.e2e-spec.ts` / U385 |
 | U386 | HTTP 조회는 역할 부족 403·없는 대상 404·권한 안 빈 목록 200을 구분한다 | FR-033, FR-034, 계약 §2·9·10 | example | DONE | `test/refund-history.e2e-spec.ts` / U386 |

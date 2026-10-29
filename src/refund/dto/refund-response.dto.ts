@@ -99,7 +99,7 @@ export class RefundResponseDto {
         ? row.actionReason
         : row.actionCode
           ? (publicActionReasons[row.actionCode] ??
-            ' 환불금 지급 상태에 대한 담당자 확인이 필요합니다.'.trim())
+            '환불금 지급 상태에 대한 담당자 확인이 필요합니다.')
           : null,
       paidAt: row.paidAt,
       ...(operator

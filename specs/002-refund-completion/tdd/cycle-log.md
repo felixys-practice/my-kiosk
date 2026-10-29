@@ -1522,3 +1522,15 @@ U10~U15를 마친 뒤, 관계 검증의 비교 대상 설정을 생략하면 정
 - 전체 회귀: Test Suites: 51 passed, 51 total / Tests:       586 passed, 586 total / Time:        17.254 s, estimated 18 s; Test Suites: 13 passed, 13 total / Tests:       169 passed, 169 total / Time:        22.644 s. 리팩터링 없음.
 
 - 실패 근거: 위 U386 HTTP 범위 뮤턴트 참조.
+
+- U386 구현·회귀 커밋: `d07c133`.
+
+## US8 구현 완료·최초 검수 준비 (2026-10-29)
+
+- 범위 완료: T147~T155·T187, A64~A68, U239~U249. 계약의 누락 검증 U382~U386(상세 범위/이력·쿼리 형식·실제 DB 페이지/필터·HTTP 정보 노출·조회 대상 존재)을 추가했다. 새 업무 결정은 만들지 않았다.
+- 마무리 정리: 테스트 대역의 비공개 `defaultSend` 직접 접근을 기존 공개 `respondToSend`/`reset`으로 교체하고, 응답 배열의 명시 타입으로 린트를 통과시켰다. 테스트 기대값·업무 동작은 변경하지 않았다. 오류 주석과 같은 문자열에 대한 불필요한 trim을 정리했다.
+- 프로젝트 설정 점검: 기존 Node/ESLint 무시 설정은 유지했다. Prettier 무시 파일이 없어 의존성·빌드 결과·커버리지·로그·잠금 파일을 제외하는 `.prettierignore`를 추가했다.
+- 최종 회귀: `npx jest --runInBand` 51 suites·586 passed(16.248s), `npx jest --config ./test/jest-e2e.json` 13 suites·169 passed(14.952s). package.json의 test/test:e2e는 같은 Jest 명령이며 전체 단위만 직렬 옵션을 추가했다.
+- 정적 검사: `./node_modules/.bin/tsc --noEmit` 오류 없음. 이번 변경의 소스·단위·E2E 10개 파일 ESLint 오류/경고 없음. `git diff --check` 통과.
+- 남은 범위: US9·최종 이관/실제 PG/운영 증빙 검증은 수행하지 않았다. 체크리스트 미완료 4개는 유지한다. 사용자 미커밋 변경은 스테이징하지 않는다.
+- 검수: 기존 US8 Astra 대화(모델 gpt-6-astra, 추론 high, 읽기 전용)에 고정 커밋 범위로 요청한다. 작업별 세션 ID는 무시 대상 `.remember/refund-review-sessions.json`에서 관리한다.

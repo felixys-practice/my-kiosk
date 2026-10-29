@@ -46,10 +46,9 @@ describe('환불 내역 조회 (E2E)', () => {
 
   it('U385 실제 PG 오류와 외부 지급 증빙은 운영자의 HTTP 응답에만 담긴다 (QS-8-3)', async () => {
     const privateValue = '비공개 PG 오류와 지급 증빙';
-    const defaultSend = pgStub.defaultSend;
     let refundId: string;
     try {
-      pgStub.defaultSend = { result: 'NOT_SENT', reason: privateValue };
+      pgStub.respondToSend({ result: 'NOT_SENT', reason: privateValue });
       const issued = await ctx.issuePeriodTicket();
       const accepted = await request(ctx.server)
         .post('/refund')
@@ -77,7 +76,7 @@ describe('환불 내역 조회 (E2E)', () => {
         })
         .expect(200);
     } finally {
-      pgStub.defaultSend = defaultSend;
+      pgStub.reset();
     }
     for (const actor of [ctx.customer, ctx.owner, ctx.coOwner]) {
       const detail = await request(ctx.server)
@@ -110,14 +109,15 @@ describe('환불 내역 조회 (E2E)', () => {
   });
 
   it('U384 운영자 목록은 실패·예약을 유지하고 상태 필터 뒤 안정된 순서로 페이지를 제공한다 (QS-8-5)', async () => {
-    const defaultSend = pgStub.defaultSend;
     const ids: string[] = [];
     try {
       for (let index = 0; index < 4; index++) {
-        pgStub.defaultSend =
-          index === 3
-            ? defaultSend
-            : { result: 'NOT_SENT', reason: '목록 검증용 전송 전 실패' };
+        if (index < 3) {
+          pgStub.respondToSend({
+            result: 'NOT_SENT',
+            reason: '목록 검증용 전송 전 실패',
+          });
+        }
         const issued = await ctx.issuePeriodTicket({
           shop: ctx.otherShop,
           owner: ctx.otherShopOwner,
@@ -214,7 +214,7 @@ describe('환불 내역 조회 (E2E)', () => {
         .query({ page: 0 })
         .expect(400);
     } finally {
-      pgStub.defaultSend = defaultSend;
+      pgStub.reset();
     }
   });
 
@@ -319,9 +319,9 @@ describe('환불 내역 조회 (E2E)', () => {
       .get('/refund/me')
       .set('Authorization', `Bearer ${ctx.customer.token}`)
       .expect(200);
-    const ids = own.body.data.items.map(
+    const ids = (own.body.data.items as { refundId: string }[]).map(
       (item: { refundId: string }) => item.refundId,
-    ) as string[];
+    );
     expect(ids).toContain(refundIds[0]);
     expect(ids).not.toContain(refundIds[1]);
     await request(ctx.server)
