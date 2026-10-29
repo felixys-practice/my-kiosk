@@ -1238,3 +1238,18 @@ U10~U15를 마친 뒤, 관계 검증의 비교 대상 설정을 생략하면 정
 
 - 범위 `31e5481..42cc1e6`. 판정 **통과**. 다음 권장 순서: US8(환불 내역 조회 권한)·US9(환불 상태와 수신자별 알림) → 최종 검증.
 
+## US8 환불 내역 조회 권한 재개 (2026-10-29)
+
+- 범위: T147~T155·T187, U239~U249·A64~A68. 기준 커밋 `1dd2d5a9d8882c6a9ca19d23f5c31066561e0266`.
+- 기준선: `npm run test` 49 suites·574 passed(20.127s), `npm run test:e2e` 12 suites·160 passed(16.95s). 공유 DB 테스트는 직렬 실행한다.
+- 사용자 미커밋 변경(.env.example·.gitignore·.vscode/settings.json·정책 이동·deferred-changes.md)은 보존한다. 최종 PG·이관·전체 인수·운영 증빙 체크 4개는 완료로 바꾸지 않고, 사용자가 지정한 US8 구현 범위만 진행한다.
+- A64 바깥 루프 red: `npx jest --config ./test/jest-e2e.json test/refund-history.e2e-spec.ts -t QS-8-1` → `expected 200 "OK", got 400 "Bad Request"`, `Tests: 1 failed, 1 total`. 기존 조회는 선택적인 상태 쿼리가 없을 때도 400이며 새 환불 식별자 기반 목록이 없다.
+
+
+### A64
+
+- 구현: 현재 점주/운영자의 매장 범위를 확인하고 Refund 기준 `{items}`를 반환한다. 3계층 연결을 첫 HTTP 동작에서 함께 추가했다(한 파일보다 큰 수직 구현 단계였음).
+- 전체 회귀: `npx jest --runInBand` 574 passed, `npx jest --config ./test/jest-e2e.json --runInBand` 161 passed. 리팩터링 없음.
+- 실행 메모: 첫 병렬 단위 실행은 복구 전역 조회에 다른 통합 테스트 데이터가 섞여 3 failed·571 passed. 코드를 바꾸지 않고 전체를 직렬 실행하면 574 passed. 이후 전체 단위는 직렬 실행하며 테스트를 제외하지 않는다.
+
+- 실패 근거: `expected 200 "OK", got 400 "Bad Request"` (앞의 A64 red 명령)

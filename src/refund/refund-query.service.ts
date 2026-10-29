@@ -1,0 +1,32 @@
+import { Injectable } from '@nestjs/common';
+import { UserRole } from '@prisma/client';
+import { RefundActor } from './refund-access.service';
+import { RefundForbiddenError, ShopNotFoundError } from './errors';
+import { RefundQueryRepository } from './refund-query.repository';
+
+/** 조회할 때마다 현재 점주 관계를 확인하고 공개 필드만 반환한다. */
+@Injectable()
+export class RefundQueryService {
+  constructor(private readonly repository: RefundQueryRepository) {}
+
+  async byShop(actor: RefundActor, shopId: string) {
+    if (actor.role !== UserRole.OWNER && actor.role !== UserRole.MANAGER) {
+      throw new RefundForbiddenError();
+    }
+    const shop = await this.repository.findShop(
+      shopId,
+      actor.role === UserRole.OWNER ? actor.userId : undefined,
+    );
+    if (!shop) throw new ShopNotFoundError(shopId);
+    const rows = await this.repository.findMany({
+      payment: { order: { shopId } },
+    });
+    return {
+      items: rows.map((row) => ({
+        refundId: row.id,
+        amount: row.amount,
+        shopId: row.payment.order.shopId,
+      })),
+    };
+  }
+}

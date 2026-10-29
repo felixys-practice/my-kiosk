@@ -29,6 +29,7 @@ import { RefundStoreService } from './refund-store.service';
 import { RefundPgCheckService } from './refund-pg-check.service';
 import { RefundAcceptanceService } from './refund-acceptance.service';
 import { RefundResultService } from './refund-result.service';
+import { RefundQueryService } from './refund-query.service';
 
 @Controller('refund')
 export class RefundController {
@@ -38,6 +39,7 @@ export class RefundController {
     private readonly refundResultService: RefundResultService,
     private readonly refundStoreService: RefundStoreService,
     private readonly refundPgCheckService: RefundPgCheckService,
+    private readonly refundQueryService: RefundQueryService,
   ) {}
 
   /**
@@ -148,10 +150,10 @@ export class RefundController {
   // 매장의 환불 내역 (status 미지정 시 전체 상태 조회)
   @Get('/shop/:shopId')
   async getRefundHistoryByShop(
-    @Param('shopId') shopId: string,
-    @Query() query?: GetRefundQueryDto,
+    @CurrentUser() user: JwtValidationResult,
+    @Param('shopId', ParseUUIDPipe) shopId: string,
   ) {
-    return this.refundService.getRefundHistoryByShop(shopId, query?.status);
+    return this.refundQueryService.byShop(user, shopId);
   }
 
   // 사용자의 환불 내역

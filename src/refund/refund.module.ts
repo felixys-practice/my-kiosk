@@ -31,6 +31,8 @@ import { RefundOperationsRepository } from './refund-operations.repository';
 import { RefundOperationsController } from './refund-operations.controller';
 import { RefundEventRepository } from './refund-event.repository';
 import { RefundLedgerRepository } from 'src/ledger/refund-ledger.repository';
+import { RefundQueryRepository } from './refund-query.repository';
+import { RefundQueryService } from './refund-query.service';
 
 @Module({
   imports: [
@@ -67,6 +69,8 @@ import { RefundLedgerRepository } from 'src/ledger/refund-ledger.repository';
     RefundSystemService,
     RefundOperationsService,
     RefundOperationsRepository,
+    RefundQueryRepository,
+    RefundQueryService,
   ],
   controllers: [
     RefundController,
