@@ -652,3 +652,9 @@ suite_baseline: green
 - 전체: `npm run test && npm run test:e2e`
 - 커버리지: `npm run test:cov`
 - 뮤테이션: 도구 없음(`mutation: null`). 헌법 III에 따라 주요 동작의 구현을 일부러 깨뜨려 테스트가 실패하는지 확인한다.
+
+### US8 구현 중 확인한 계약 동작
+
+| ID | 동작 | 근거 | 종류 | 상태 | 테스트 |
+|---|---|---|---|---|---|
+| U382 | 환불 상세는 본인·현재 공동 점주·운영자만 조회하며 PG·외부 지급 이력을 포함한다 | FR-033, FR-034, FR-036, 계약 §2·3 | example | DONE | `test/refund-history.e2e-spec.ts` / U382 |

@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
 import request from 'supertest';
+import { randomUUID } from 'crypto';
 import { REFUND_PG_GATEWAY } from '../src/pg/refund-pg.gateway';
 import {
   createRefundTestContext,
@@ -20,6 +21,60 @@ describe('환불 내역 조회 (E2E)', () => {
   });
   afterAll(async () => {
     await ctx.close();
+  });
+
+  it('U382 환불 상세는 본인·현재 공동 점주·운영자에게만 지급 이력을 제공한다 (QS-8-3)', async () => {
+    const issued = await ctx.issuePeriodTicket();
+    const accepted = await request(ctx.server)
+      .post('/refund')
+      .set('Authorization', `Bearer ${ctx.customer.token}`)
+      .send({ ticketId: issued.ticketId, consentToTerminateTicket: true })
+      .expect(202);
+    const path = `/refund/${accepted.body.data.refundId as string}`;
+    for (const actor of [ctx.customer, ctx.owner, ctx.coOwner, ctx.manager]) {
+      const response = await request(ctx.server)
+        .get(path)
+        .set('Authorization', `Bearer ${actor.token}`)
+        .expect(200);
+      expect(response.body.data).toMatchObject({
+        refundId: accepted.body.data.refundId,
+        attempts: [
+          expect.objectContaining({
+            paymentCancelId: accepted.body.data.paymentCancelId,
+            amount: issued.amount,
+            actualAmount: null,
+            status: 'REQUESTED',
+          }),
+        ],
+        manualPayouts: [],
+      });
+    }
+    for (const actor of [ctx.otherCustomer, ctx.otherShopOwner]) {
+      const response = await request(ctx.server)
+        .get(path)
+        .set('Authorization', `Bearer ${actor.token}`)
+        .expect(404);
+      expect(response.body.error.code).toBe('REFUND_NOT_FOUND');
+    }
+    await ctx.prisma.shopOwner.delete({
+      where: { shopId_userId: { shopId: ctx.shop.id, userId: ctx.coOwner.id } },
+    });
+    try {
+      const response = await request(ctx.server)
+        .get(path)
+        .set('Authorization', `Bearer ${ctx.coOwner.token}`)
+        .expect(404);
+      expect(response.body.error.code).toBe('REFUND_NOT_FOUND');
+    } finally {
+      await ctx.prisma.shopOwner.create({
+        data: { shopId: ctx.shop.id, userId: ctx.coOwner.id },
+      });
+    }
+    const missing = await request(ctx.server)
+      .get(`/refund/${randomUUID()}`)
+      .set('Authorization', `Bearer ${ctx.manager.token}`)
+      .expect(404);
+    expect(missing.body.error.code).toBe('REFUND_NOT_FOUND');
   });
 
   it('운영자는 소유 관계 없이 어느 매장과 사용자의 환불 내역이든 조회한다 (QS-8-5)', async () => {

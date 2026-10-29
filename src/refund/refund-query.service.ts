@@ -3,6 +3,7 @@ import { Prisma, UserRole } from '@prisma/client';
 import { RefundActor } from './refund-access.service';
 import {
   RefundForbiddenError,
+  RefundNotFoundError,
   ShopNotFoundError,
   RefundUserNotFoundError,
 } from './errors';
@@ -15,6 +16,18 @@ import { RefundResponseDto } from './dto/refund-response.dto';
 @Injectable()
 export class RefundQueryService {
   constructor(private readonly repository: RefundQueryRepository) {}
+
+  async detail(actor: RefundActor, refundId: string) {
+    const row = await this.repository.findById(refundId);
+    if (!row) throw new RefundNotFoundError();
+    const ownOrder = row.payment.order.userId === actor.userId;
+    const currentOwner =
+      actor.role === UserRole.OWNER &&
+      (await this.repository.findShop(row.payment.order.shopId, actor.userId));
+    if (actor.role !== UserRole.MANAGER && !ownOrder && !currentOwner)
+      throw new RefundNotFoundError();
+    return RefundResponseDto.detail(row);
+  }
 
   async byShop(
     actor: RefundActor,

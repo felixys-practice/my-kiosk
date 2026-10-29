@@ -2,6 +2,31 @@ import type { RefundQueryRow } from '../refund-query.repository';
 
 /** DB 행 전체를 직렬화하지 않고 환불 조회 계약의 필드를 명시한다. */
 export class RefundResponseDto {
+  static detail(row: RefundQueryRow) {
+    return {
+      ...this.from(row),
+      attempts: row.paymentCancels.map((attempt) => ({
+        paymentCancelId: attempt.id,
+        attemptNumber: attempt.attemptNumber,
+        amount: attempt.amount,
+        actualAmount: attempt.actualAmount,
+        status: attempt.status,
+        failureCode: attempt.failureCode,
+        requestedAt: attempt.requestedAt,
+        cancelledAt: attempt.cancelledAt,
+        failedAt: attempt.failedAt,
+      })),
+      manualPayouts: row.manualPayouts.map((payout) => ({
+        manualRefundPayoutId: payout.id,
+        status: payout.status,
+        amount: payout.amount,
+        reservedAt: payout.reservedAt,
+        confirmedAt: payout.confirmedAt,
+        paidAt: payout.paidAt,
+      })),
+    };
+  }
+
   static from(row: RefundQueryRow) {
     const latest = row.paymentCancels[0];
     return {

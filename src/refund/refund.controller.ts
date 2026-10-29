@@ -172,4 +172,13 @@ export class RefundController {
   ) {
     return this.refundQueryService.byUser(user, userId, query);
   }
+
+  // 고정 조회 경로 뒤에 선언하여 /me 등을 환불 식별자로 해석하지 않는다.
+  @Get(':refundId')
+  getRefundDetail(
+    @CurrentUser() user: JwtValidationResult,
+    @Param('refundId', ParseUUIDPipe) refundId: string,
+  ) {
+    return this.refundQueryService.detail(user, refundId);
+  }
 }

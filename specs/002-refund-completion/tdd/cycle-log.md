@@ -1388,3 +1388,16 @@ U10~U15를 마친 뒤, 관계 검증의 비교 대상 설정을 생략하면 정
 - 전체 회귀: Test Suites: 51 passed, 51 total / Tests:       580 passed, 580 total / Time:        14.362 s, estimated 15 s; Test Suites: 13 passed, 13 total / Tests:       165 passed, 165 total / Time:        19.502 s. 리팩터링 없음.
 
 - 실패 근거: 위 U244 빈 목록 뮤턴트 참조.
+
+- U244 구현·회귀 커밋: `38c4b4b`.
+
+### U382 red (기존 상세 계약의 누락 동작 추가)
+
+- `npx jest --config ./test/jest-e2e.json test/refund-history.e2e-spec.ts -t U382` → `expected 200 "OK", got 404 "Not Found"`; 1 failed. 기존 U239~U249에는 상세 경로의 접근 범위/이력 검증이 없어 계약 §2·3을 근거로 추가했다.
+
+### U382
+
+- /refund/:refundId를 고정 경로 뒤에 연결했다. 본인 주문·현재 공동 점주·운영자에게 PG/외부 지급 이력을 반환하고, 다른 사람·해제된 점주·없는 환불은 같은 404로 거절한다.
+- 전체 회귀: Test Suites: 51 passed, 51 total / Tests:       580 passed, 580 total / Time:        13.801 s, estimated 15 s; Test Suites: 13 passed, 13 total / Tests:       166 passed, 166 total / Time:        12.497 s, estimated 19 s. 리팩터링 없음.
+
+- 실패 근거: 위 U382 red 참조.

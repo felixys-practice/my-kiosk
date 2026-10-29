@@ -11,6 +11,7 @@ const refundQueryInclude = {
       { id: 'desc' },
     ],
   },
+  manualPayouts: { orderBy: [{ reservedAt: 'desc' }, { id: 'desc' }] },
 } satisfies Prisma.RefundInclude;
 
 export type RefundQueryRow = Prisma.RefundGetPayload<{
@@ -21,6 +22,13 @@ export type RefundQueryRow = Prisma.RefundGetPayload<{
 @Injectable()
 export class RefundQueryRepository {
   constructor(private readonly prisma: PrismaService) {}
+
+  findById(refundId: string): Promise<RefundQueryRow | null> {
+    return this.prisma.refund.findUnique({
+      where: { id: refundId },
+      include: refundQueryInclude,
+    });
+  }
 
   findUser(userId: string) {
     return this.prisma.user.findUnique({
