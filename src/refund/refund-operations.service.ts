@@ -16,6 +16,7 @@ import { RefundRepository } from './refund.repository';
 import { RefundOperationsRepository } from './refund-operations.repository';
 import { RefundLedgerRepository } from 'src/ledger/refund-ledger.repository';
 import { RefundEventRepository } from './refund-event.repository';
+import { TransactionLoggerService } from 'src/logger/transaction-logger.service';
 import { hasUnresolvedPayout } from './refund-retry.policy';
 import {
   evaluateManualReservation,
@@ -114,6 +115,7 @@ export class RefundOperationsService {
     private readonly ledgerRepository: RefundLedgerRepository,
     private readonly eventRepository: RefundEventRepository,
     private readonly configService: ConfigService,
+    private readonly txLogger: TransactionLoggerService,
   ) {}
 
   /**
@@ -453,16 +455,43 @@ export class RefundOperationsService {
       );
     // 예약은 그대로 두고(시간 초과만으로 풀지 않는다) 예약 ID 기반 사건 키로 한 번만 알린다
     for (const reservation of reservations) {
-      await this.refundRepository.runInTransaction((tx) =>
-        this.eventRepository.recordNotification(tx, {
-          refundId: reservation.refundId,
-          manualRefundPayoutId: reservation.payoutId,
-          kind: manualConfirmationAlertKind,
-          audience: RefundNotificationAudience.OPERATOR,
-          shopId: reservation.shopId,
-          eventKey: `${manualConfirmationAlertKind}:${reservation.payoutId}`,
-        }),
+      const alerted = await this.refundRepository.runInTransaction(
+        async (tx) => {
+          // 탐색 뒤 지급 결과가 등록됐을 수 있으므로 Refund → 예약 순서로 잠근 뒤 아직 예약 중인지 다시 확인한다
+          await this.lockingRepository.lockForPayout(tx, {
+            refundId: reservation.refundId,
+            paymentCancelIds: [],
+            manualRefundPayoutIds: [reservation.payoutId],
+          });
+          const status = await this.operationsRepository.findPayoutStatus(
+            tx,
+            reservation.payoutId,
+          );
+          if (status !== ManualRefundPayoutStatus.RESERVED) return false;
+          return this.eventRepository.recordNotification(tx, {
+            refundId: reservation.refundId,
+            manualRefundPayoutId: reservation.payoutId,
+            kind: manualConfirmationAlertKind,
+            audience: RefundNotificationAudience.OPERATOR,
+            shopId: reservation.shopId,
+            eventKey: `${manualConfirmationAlertKind}:${reservation.payoutId}`,
+          });
+        },
       );
+      // 새 알림이 커밋된 경우에만 거래 로그를 남긴다(FR-037)
+      if (!alerted) continue;
+      this.txLogger.logTransaction({
+        transactionId: `REFUND-${reservation.refundId}-${reservation.payoutId}`,
+        type: 'REFUND',
+        userId: reservation.customerId,
+        orderId: reservation.orderId,
+        status: manualConfirmationAlertKind,
+        metadata: {
+          refundId: reservation.refundId,
+          payoutId: reservation.payoutId,
+          reservedAt: reservation.reservedAt.toISOString(),
+        },
+      });
     }
   }
 

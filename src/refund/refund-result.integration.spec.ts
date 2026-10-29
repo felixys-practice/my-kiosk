@@ -41,6 +41,7 @@ import { RefundWorkRepository } from './refund-work.repository';
 import { RefundPgCheckService } from './refund-pg-check.service';
 import { RefundRetryService } from './refund-retry.service';
 import { RefundOperationsService } from './refund-operations.service';
+import { RefundOperationsRepository } from './refund-operations.repository';
 
 /**
  * 환불금 지급 결과 공통 처리를 실제 PostgreSQL에서 확인한다 (US4, tasks T068~T071)
@@ -3260,6 +3261,69 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
         ],
         ledgers: 1,
       });
+    });
+
+    it('장기 미확인 알림을 저장하기 직전에 지급 결과가 등록됐으면 그 예약에는 알리지 않는다', async () => {
+      const reserved = await oldReservation();
+      const repository = app.get(RefundOperationsRepository);
+      const after = new Date(
+        reserved.reservedAt.getTime() + manualConfirmAlertSeconds * 1000,
+      );
+      // 탐색이 끝난 뒤 알림을 저장하기 전에 운영자가 지급 결과를 등록한 경쟁: 알림 처리는 등록 전의 탐색 결과를 쓴다
+      const staleScan = await repository.findUnalertedReservations(
+        new Date(after.getTime() - manualConfirmAlertSeconds * 1000),
+        1000,
+        'MANUAL_CONFIRMATION_REQUIRED',
+      );
+      await confirm(reserved);
+      const scan = jest
+        .spyOn(repository, 'findUnalertedReservations')
+        .mockResolvedValueOnce(staleScan);
+
+      await app
+        .get(RefundOperationsService)
+        .alertUnconfirmedManualPayouts(
+          new Date(
+            reserved.reservedAt.getTime() + manualConfirmAlertSeconds * 1000,
+          ),
+        );
+      scan.mockRestore();
+
+      expect(await unconfirmedAlerts(reserved.payoutId)).toBe(0);
+    });
+
+    it('새 장기 미확인 알림을 저장하면 거래 로그를 한 번 남기고, 다시 탐색해도 거래 로그를 더 남기지 않는다', async () => {
+      const reserved = await oldReservation();
+      const txLog = jest.spyOn(
+        app.get(TransactionLoggerService),
+        'logTransaction',
+      );
+      const operations = app.get(RefundOperationsService);
+      const after = new Date(
+        reserved.reservedAt.getTime() + manualConfirmAlertSeconds * 1000,
+      );
+
+      await operations.alertUnconfirmedManualPayouts(after);
+      await operations.alertUnconfirmedManualPayouts(after);
+
+      const logs = txLog.mock.calls
+        .map(([log]) => log)
+        .filter(
+          (log) =>
+            log.status === 'MANUAL_CONFIRMATION_REQUIRED' &&
+            (log.metadata as { payoutId?: string } | undefined)?.payoutId ===
+              reserved.payoutId,
+        );
+      txLog.mockRestore();
+      expect(logs).toEqual([
+        expect.objectContaining({
+          type: 'REFUND',
+          metadata: expect.objectContaining({
+            refundId: reserved.refundId,
+            payoutId: reserved.payoutId,
+          }) as unknown,
+        }),
+      ]);
     });
   });
 });

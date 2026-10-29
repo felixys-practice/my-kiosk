@@ -252,7 +252,16 @@ export class RefundOperationsRepository {
     reservedBefore: Date,
     limit: number,
     alertKind: string,
-  ): Promise<{ payoutId: string; refundId: string; shopId: string }[]> {
+  ): Promise<
+    {
+      payoutId: string;
+      refundId: string;
+      shopId: string;
+      customerId: string;
+      orderId: string;
+      reservedAt: Date;
+    }[]
+  > {
     const payouts = await this.prisma.manualRefundPayout.findMany({
       where: {
         status: ManualRefundPayoutStatus.RESERVED,
@@ -264,9 +273,14 @@ export class RefundOperationsRepository {
       select: {
         id: true,
         refundId: true,
+        reservedAt: true,
         refund: {
           select: {
-            payment: { select: { order: { select: { shopId: true } } } },
+            payment: {
+              select: {
+                order: { select: { id: true, shopId: true, userId: true } },
+              },
+            },
           },
         },
       },
@@ -275,6 +289,26 @@ export class RefundOperationsRepository {
       payoutId: payout.id,
       refundId: payout.refundId,
       shopId: payout.refund.payment.order.shopId,
+      customerId: payout.refund.payment.order.userId,
+      orderId: payout.refund.payment.order.id,
+      reservedAt: payout.reservedAt,
     }));
+  }
+
+  /**
+   * 예약의 현재 상태를 읽는다(호출자가 잠근 뒤)
+   * @param tx 트랜잭션
+   * @param payoutId 예약
+   * @returns 상태, 없으면 null
+   */
+  async findPayoutStatus(
+    tx: TransactionClient,
+    payoutId: string,
+  ): Promise<ManualRefundPayoutStatus | null> {
+    const payout = await tx.manualRefundPayout.findUnique({
+      where: { id: payoutId },
+      select: { status: true },
+    });
+    return payout?.status ?? null;
   }
 }

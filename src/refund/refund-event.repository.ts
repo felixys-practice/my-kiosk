@@ -24,14 +24,16 @@ export class RefundEventRepository {
    * 사건 알림을 현재 트랜잭션에 저장한다. 이미 같은 사건 알림이 있으면 그대로 둔다
    * @param tx 사건을 반영하는 트랜잭션
    * @param input 알림 내용
+   * @returns 이번에 새로 저장했으면 true(같은 사건 알림이 이미 있으면 false)
    */
   async recordNotification(
     tx: TransactionClient,
     input: RefundNotificationInput,
-  ): Promise<void> {
-    await tx.refundNotification.createMany({
+  ): Promise<boolean> {
+    const { count } = await tx.refundNotification.createMany({
       data: [input],
       skipDuplicates: true,
     });
+    return count > 0;
   }
 }
