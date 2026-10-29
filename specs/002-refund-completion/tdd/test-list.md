@@ -286,7 +286,7 @@ suite_baseline: green
 | U376 | 별도 지급 결과 등록의 지급 시각이 ISO 시각 문자열이 아니면(숫자·불리언) 형식 오류(400)다 (US10 외부 지급 검수 2) | FR-046 | example | DONE | `src/refund/dto/confirm-manual-refund-payout.dto.spec.ts` › 실제 지급 시각이 ISO 시각 문자열이 아니면(0/false)… |
 | U377 | 장기 미확인 알림은 저장 직전에 예약을 잠그고 다시 확인해 이미 지급 결과가 등록된 예약에는 알리지 않는다 (US10 외부 지급 검수 3) | FR-037 | example | DONE | `src/refund/refund-result.integration.spec.ts` › 별도 환불금 지급 › 장기 미확인 알림을 저장하기 직전에 지급 결과가 등록됐으면… |
 | U378 | 새 장기 미확인 알림이 저장되면 거래 로그도 한 번 남긴다 (FR-037, US10 외부 지급 검수 4) | FR-037 | example | DONE | `src/refund/refund-result.integration.spec.ts` › 별도 환불금 지급 › 새 장기 미확인 알림을 저장하면 거래 로그를 한 번 남기고… |
-| U379 | 별도 지급 결과 등록의 지급 시각은 날짜·시각·명시적 시간대가 모두 있어야 하며 날짜만 있거나 시간대가 없으면 형식 오류(400)다 (계약 'UTC ISO 시각', US10 외부 지급 검수 2차) | FR-046 | example | PENDING | |
+| U379 | 별도 지급 결과 등록의 지급 시각은 날짜·시각·명시적 시간대가 모두 있어야 하며 날짜만 있거나 시간대가 없으면 형식 오류(400)다 (계약 'UTC ISO 시각', US10 외부 지급 검수 2차) | FR-046 | example | DONE | `src/refund/dto/confirm-manual-refund-payout.dto.spec.ts` › 실제 지급 시각에 시각이나 시간대가 없으면…, 시간대가 붙은 지급 시각(+09:00)은… |
 
 ### `src/refund/refund-idempotency.service.ts`
 
