@@ -1534,3 +1534,22 @@ U10~U15를 마친 뒤, 관계 검증의 비교 대상 설정을 생략하면 정
 - 정적 검사: `./node_modules/.bin/tsc --noEmit` 오류 없음. 이번 변경의 소스·단위·E2E 10개 파일 ESLint 오류/경고 없음. `git diff --check` 통과.
 - 남은 범위: US9·최종 이관/실제 PG/운영 증빙 검증은 수행하지 않았다. 체크리스트 미완료 4개는 유지한다. 사용자 미커밋 변경은 스테이징하지 않는다.
 - 검수: 기존 US8 Astra 대화(모델 gpt-6-astra, 추론 high, 읽기 전용)에 고정 커밋 범위로 요청한다. 작업별 세션 ID는 무시 대상 `.remember/refund-review-sessions.json`에서 관리한다.
+
+## US8 Astra 최초 검수 (2026-10-29 18:34 KST)
+
+- 고정 범위 `1dd2d5a9..df3ef30`, gpt-6-astra / high, 같은 US8 검수 대화. 판정 **수정 필요**.
+- P3: `page=1e308` 같은 큰 양의 정수가 DTO를 통과하여 계산된 skip이 Infinity가 된다. Prisma 검증 오류로 넘어가 계약의 BadRequestException 대신 PRISMA_VALIDATION_ERROR를 반환한다. 페이지/계산 오프셋의 표현 가능 범위 검사와 경계 테스트가 필요하다.
+- 절차 이탈: A65·A68은 A64 구현 뒤 최초 통과하고 사후 뮤턴트로 검출력을 확인했다. 이 근거는 구현 전 실패 확인을 충족한 증거가 아니다. 원래 실행 순서는 보존하며 사용자에게 이번 이탈 수용 여부를 별도로 질문했다. 코드 경계 수정은 독립적으로 진행한다.
+- 그 외 지정 범위의 권한 우회·운영 정보 노출·실패/예약 누락·금액 계산·최신 시도 선택 결함은 발견하지 못했다.
+- 검수자 직접 검증: 고정 커밋의 명세/정책/코드/기록 대조, DB 없는 하네스에서 새 단위 12개 통과, 큰 페이지의 PrismaClientValidationError 재현, diff 형식 검사. 전체 586·E2E169는 구현 담당의 실행 결과다. 검수자는 공유 DB·Redis·실제 PG·최종 이관을 재검증하거나 파일을 수정하지 않았다.
+
+### U387 red
+
+- `npx jest src/refund/dto/get-refund-query.dto.spec.ts -t U387` → page=1e308에서 `- "valid": false`, `+ "valid": true`, 1 failed. 페이지 단위의 안전한 정수 표현 범위를 검증한다.
+
+### U387
+
+- 페이지를 안전한 정수 범위까지 검증한다. 이는 환불 대상·금액 정책 변경이 아닌 요청 숫자의 표현 가능 범위 검증이다. 계산된 오프셋은 다음 U388에서 별도로 확인한다.
+- 전체 회귀: Test Suites: 51 passed, 51 total / Tests:       587 passed, 587 total / Time:        16.77 s, estimated 17 s; Test Suites: 13 passed, 13 total / Tests:       169 passed, 169 total / Time:        16.199 s. 리팩터링 없음.
+
+- 실패 근거: 위 U387 red 참조.

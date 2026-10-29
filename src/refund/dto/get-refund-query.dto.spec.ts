@@ -4,6 +4,19 @@ import { validate } from 'class-validator';
 import { GetRefundQueryDto } from './get-refund-query.dto';
 
 describe('환불 목록 쿼리', () => {
+  it('U387 표현 가능한 최대 페이지는 허용하고 안전한 정수 범위 밖 페이지는 거절한다', async () => {
+    for (const [page, valid] of [
+      ['1e308', false],
+      ['100000000000000000000', false],
+      [String(Number.MAX_SAFE_INTEGER + 1), false],
+      [String(Number.MAX_SAFE_INTEGER), true],
+    ] as const) {
+      const errors = await validate(
+        plainToInstance(GetRefundQueryDto, { page }),
+      );
+      expect({ page, valid: errors.length === 0 }).toEqual({ page, valid });
+    }
+  });
   it('U383 페이지와 크기·상태·조치 필터의 형식 오류를 거절한다', async () => {
     const invalidQueries = [
       { page: '0' },
