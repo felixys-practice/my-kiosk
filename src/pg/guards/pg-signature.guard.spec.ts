@@ -11,7 +11,7 @@ describe('PgSignatureGuard', () => {
   /** 기준 시각(Unix 초) */
   const nowSeconds = 1_800_000_000;
   /** PG가 보낸 원문 본문 */
-  const body = '{"success":true,"paymentCancelId":"pc-1","amount":5000}';
+  const body = '{"amount":5000,"paymentCancelId":"pc-1","success":true}';
 
   /** 콜백 서명 시각 오차 허용(초, 설정 기본값) */
   const maxSkewSeconds = 300;
@@ -114,6 +114,48 @@ describe('PgSignatureGuard', () => {
 
     expect(
       outcomeOf(contextOf({ headers: signedHeaders(), raw: tampered })),
+    ).toBe('PG_CALLBACK_UNAUTHORIZED');
+  });
+
+  it('키 순서·공백만 다른 본문도 원문 바이트가 다르면 PG_CALLBACK_UNAUTHORIZED로 거절된다', () => {
+    const reformatted =
+      '{"success":true, "paymentCancelId":"pc-1", "amount":5000}';
+
+    expect(
+      outcomeOf(contextOf({ headers: signedHeaders(), raw: reformatted })),
+    ).toBe('PG_CALLBACK_UNAUTHORIZED');
+  });
+
+  it('서명 헤더가 없으면 PG_CALLBACK_UNAUTHORIZED로 거절된다', () => {
+    const headers = signedHeaders().filter(
+      ([name]) => name !== 'X-PG-Signature',
+    );
+
+    expect(outcomeOf(contextOf({ headers }))).toBe('PG_CALLBACK_UNAUTHORIZED');
+  });
+
+  it('서명 헤더가 두 번 오면 같은 값이어도 PG_CALLBACK_UNAUTHORIZED로 거절된다', () => {
+    const headers = signedHeaders();
+    const signature = headers.find(([name]) => name === 'X-PG-Signature')!;
+
+    expect(outcomeOf(contextOf({ headers: [...headers, signature] }))).toBe(
+      'PG_CALLBACK_UNAUTHORIZED',
+    );
+  });
+
+  it('서명 hex가 63자리이면 PG_CALLBACK_UNAUTHORIZED로 거절된다', () => {
+    const short = sign(nowSeconds, body).slice(0, -1);
+
+    expect(
+      outcomeOf(contextOf({ headers: signedHeaders(nowSeconds, short) })),
+    ).toBe('PG_CALLBACK_UNAUTHORIZED');
+  });
+
+  it('서명 hex가 대문자이면 같은 값이어도 PG_CALLBACK_UNAUTHORIZED로 거절된다', () => {
+    const upper = `v1=${sign(nowSeconds, body).slice(3).toUpperCase()}`;
+
+    expect(
+      outcomeOf(contextOf({ headers: signedHeaders(nowSeconds, upper) })),
     ).toBe('PG_CALLBACK_UNAUTHORIZED');
   });
 });
