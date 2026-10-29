@@ -22,14 +22,7 @@ import {
   PgCallbackTargetNotFoundError,
   RefundStorageUnavailableError,
 } from './errors';
-import {
-  DomainBadRequestError,
-  DomainConflictError,
-  DomainForbiddenError,
-  DomainNotFoundError,
-  DomainServiceUnavailableError,
-  DomainUnauthorizedError,
-} from 'src/common/errors';
+import { isDomainError } from 'src/common/errors';
 import { RefundLockingRepository } from './refund-locking.repository';
 
 /** PG가 확정한 PG 취소 요청 결과 */
@@ -71,22 +64,6 @@ function contradicts(attempt: AttemptForResult, outcome: PgCancelOutcome) {
     (attempt.actualAmount !== outcome.actualAmount ||
       attempt.pgTransactionId !== outcome.pgTransactionId)
   );
-}
-
-/**
- * 응답 코드가 정해진 도메인 오류인지 확인한다
- * @param error 잡은 오류
- * @returns 도메인 오류 기본 클래스의 인스턴스면 true
- */
-function isDomainError(error: unknown): boolean {
-  return [
-    DomainBadRequestError,
-    DomainUnauthorizedError,
-    DomainForbiddenError,
-    DomainNotFoundError,
-    DomainConflictError,
-    DomainServiceUnavailableError,
-  ].some((domainError) => error instanceof domainError);
 }
 
 /**

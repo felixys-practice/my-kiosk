@@ -15,6 +15,8 @@ import { SeatHoldExpiredError } from 'src/seat-assignment/errors/seat-hold-expir
 import { SeatAssignmentService } from 'src/seat-assignment/seat-assignment.service';
 import { TransactionLoggerService } from 'src/logger/transaction-logger.service';
 import { RefundSystemService } from 'src/refund/refund-system.service';
+import { RefundStorageUnavailableError } from 'src/refund/errors';
+import { isDomainError } from 'src/common/errors';
 import type { PendingSend } from 'src/refund/refund-acceptance.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 
@@ -92,8 +94,23 @@ export class PaymentService {
    * @returns 없음
    * @throws PaymentNotFoundError 결제가 없을 때
    * @throws PaymentAlreadyClosedError 종결된 결제에 승인 성공이 왔을 때
+   * @throws RefundStorageUnavailableError 저장이 실패했을 때(503, PG가 다시 보낸다)
    */
   async callbackPayment(payload: PgPayload): Promise<void> {
+    try {
+      await this.handleCallback(payload);
+    } catch (error) {
+      // 대상·상태 오류(도메인 오류)는 그대로, 그 밖의 저장 실패는 PG가 다시 보내도록 503으로 바꾼다(환불 명세 API 계약 §7)
+      if (isDomainError(error)) throw error;
+      throw new RefundStorageUnavailableError(error);
+    }
+  }
+
+  /**
+   * PG 결제 결과 콜백 처리 본문
+   * @param payload PG 콜백 내용
+   */
+  private async handleCallback(payload: PgPayload): Promise<void> {
     const payment = await this.paymentRepository.getPaymentByPgTransactionId(
       payload.pgTransactionId,
     );
