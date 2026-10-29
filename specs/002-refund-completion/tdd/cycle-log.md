@@ -1598,3 +1598,41 @@ U10~U15를 마친 뒤, 관계 검증의 비교 대상 설정을 생략하면 정
 - 이번 최종 확인은 기록·변경 범위·diff 형식에 한정하며 테스트 재실행은 없다. 앞선 검수자 직접 검증은 DB 없는 단위 13개·추가 입력 경계이고, 전체 단위 587개·E2E170개·타입·린트 통과는 구현 담당의 실행 결과다. 실제 PG·최종 이관은 검증하지 않았다. 검수자는 파일 수정·커밋을 하지 않았다.
 - 사용자 미커밋 변경은 보존했다. 명세·업무 정책 변경 없이 US8 구현·테스트·검수 관문을 완료했다. 다음 구현 단위는 US9다.
 - speckit-implement의 after_implement 후크를 확인했다. 등록된 speckit.tdd.verify는 선택 후크로 안내했고 이번 US8 범위에서는 실행하지 않았다.
+
+## US9 환불 상태와 수신자별 알림 재개 (2026-10-29)
+
+- 범위: T156~T168·T188, U250~U261·A69~A76. 기준 커밋 `dbf6b1d76996faad29181530de841b4e49d1cc1d`. 사용자 미커밋 변경은 보존한다.
+- 기준선: `npx jest --runInBand` 51 suites·587 passed(17.677s), `npx jest --config ./test/jest-e2e.json` 13 suites·170 passed(18.107s). 공유 DB 테스트는 직렬 실행한다.
+- 기존 구현과 새 구현을 구분한다. 환불 결과의 수신자별 알림 생성·접수 응답은 이전 승인 단계의 코드와 기존 테스트 근거를 연결한다. 새 알림 조회·읽음·입력 경계는 동작별 테스트의 실제 실패를 확인한 뒤 구현하며, 기존 기능의 추가 통합 검증을 선행 실패로 기록하지 않는다.
+- 최종 PG·이관·운영 증빙 체크리스트 미완료 4개는 그대로 두고 사용자가 승인한 US9 구현을 진행한다. US8의 절차 이탈 수용은 이번 US9의 새 구현에 적용하지 않는다.
+
+### U389 red
+
+- `npx jest src/refund/refund-notification.service.spec.ts -t U389`
+```text
+    - Object {
+    -   "OR": Array [
+    -     Object {
+    -       "recipientUserId": null,
+    -     },
+    -     Object {
+    -       "recipientUserId": "owner",
+    -     },
+    -   "audience": "SHOP",
+    -   "shop": Object {
+    -     "owners": Object {
+    -       "some": Object {
+    -         "userId": "owner",
+    -       },
+    -     },
+    -   },
+    - }
+    + Object {}
+Tests:       1 failed, 1 total
+```
+
+### U389
+
+- 현재 ShopOwner 매장의 SHOP 범위를 조회 조건으로 만들고, 본인 지정 수신자 또는 범위 발송만 허용한다. 아직 HTTP 경로는 연결하지 않았으며 이후 역할별 조건도 각각 선행 실패로 검증한다.
+- 전체 회귀: Test Suites: 52 passed, 52 total / Tests:       588 passed, 588 total / Time:        16.884 s, estimated 18 s; Test Suites: 13 passed, 13 total / Tests:       170 passed, 170 total / Time:        16.793 s, estimated 18 s. 리팩터링 없음.
+- 실패/기존 근거: 위 U389 실제 red 참조.

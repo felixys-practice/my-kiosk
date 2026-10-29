@@ -664,3 +664,11 @@ suite_baseline: green
 | U386 | HTTP 조회는 역할 부족 403·없는 대상 404·권한 안 빈 목록 200을 구분한다 | FR-033, FR-034, 계약 §2·9·10 | example | DONE | `test/refund-history.e2e-spec.ts` / U386 |
 | U387 | 페이지 번호는 JavaScript 안전한 정수 표현 범위를 벗어나면 DTO에서 거절한다 | 계약 §9·10, 헌법 II, US8 검수 P3 | example | DONE | `src/refund/dto/get-refund-query.dto.spec.ts` / U387 |
 | U388 | 계산 오프셋이 안전한 정수 범위를 벗어나면 ORM 호출 전 형식 오류로 거절한다 | 계약 §9·10, 헌법 II, US8 검수 P3 | example | DONE | `test/refund-history.e2e-spec.ts` / U388 |
+
+### US9 구현 중 확인한 계약 동작
+
+| ID | 동작 | 근거 | 종류 | 상태 | 테스트 |
+|---|---|---|---|---|---|
+| U389 | 점주 알림 범위는 현재 ShopOwner 매장의 SHOP 수신 범위로 제한된다 | FR-038, 계약 §9 | example | DONE | `src/refund/refund-notification.service.spec.ts` / U389 |
+| U390 | 고객 알림 범위는 본인 주문·본인 수신자의 CUSTOMER로 제한된다 | FR-039, 계약 §9 | example | PENDING | |
+| U391 | 운영자 알림 범위는 본인에게 지정되거나 범위 발송된 OPERATOR로 제한된다 | FR-038, 계약 §9 | example | PENDING | |
