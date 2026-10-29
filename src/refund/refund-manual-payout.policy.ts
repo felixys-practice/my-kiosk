@@ -24,16 +24,20 @@ export function evaluateManualReservation(
   requestedAmount: number,
   now: Date,
 ): ManualReservationDecision {
-  // 조치 필요인 확정 환불만 예약한다(지급 완료·비확정은 처리할 것이 없다)
+  // 확정되지 않았거나 지급이 끝난 환불은 처리할 것이 없다
   if (
     state.decisionStatus !== RefundDecisionStatus.ACCEPTED ||
-    state.payoutStatus !== RefundPayoutStatus.ACTION_REQUIRED
+    state.payoutStatus === RefundPayoutStatus.PAID
   ) {
     return { allowed: false, code: 'REFUND_PAYOUT_NOT_ACTIONABLE' };
   }
-  // 확인되지 않은 지급이 있으면 예약하지 않는다(교차 지급 차단)
+  // 확인되지 않은 지급이 있으면 예약하지 않는다(교차 지급 차단, PG 재시도와 같은 판정 순서)
   if (hasUnresolvedPayout(state, now)) {
     return { allowed: false, code: 'REFUND_PAYOUT_UNRESOLVED' };
+  }
+  // 그 밖에 조치 필요가 아닌 환불은 예약할 것이 없다
+  if (state.payoutStatus !== RefundPayoutStatus.ACTION_REQUIRED) {
+    return { allowed: false, code: 'REFUND_PAYOUT_NOT_ACTIONABLE' };
   }
   // 예약 금액은 현재 미지급액(확정된 환불 금액 - 실제 지급액)과 같아야 한다
   const outstandingAmount = state.amount - state.paidAmount;

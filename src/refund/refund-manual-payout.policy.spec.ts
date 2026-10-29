@@ -95,4 +95,17 @@ describe('evaluateManualReservation', () => {
       outstandingAmount: 3000,
     });
   });
+
+  it('지급 처리 중(PENDING)이고 결과가 확정되지 않은 PG 취소 요청이 있으면 재처리 불가가 아니라 REFUND_PAYOUT_UNRESOLVED로 거절한다', () => {
+    const inProgress = stateWith({
+      payoutStatus: RefundPayoutStatus.PENDING,
+      actionCode: null,
+      attempts: [{ status: PaymentCancelStatus.REQUESTED, claimUntil: null }],
+    });
+
+    expect(evaluateManualReservation(inProgress, refundAmount, now)).toEqual({
+      allowed: false,
+      code: 'REFUND_PAYOUT_UNRESOLVED',
+    });
+  });
 });

@@ -16,6 +16,7 @@ import {
 } from './helpers/refund-test-context';
 import { RefundPgStub } from './helpers/refund-pg.stub';
 import { RefundRecoveryService } from '../src/refund/refund-recovery.service';
+import { RefundOperationsService } from '../src/refund/refund-operations.service';
 
 /**
  * 사용자 스토리 10: 점주·운영자의 미지급 환불금 재처리 (E2E)
@@ -577,6 +578,437 @@ describe('미지급 환불금 재처리 (E2E)', () => {
     expect({ results, payouts }).toEqual({
       results: Array.from({ length: 8 }, () => [403, 'REFUND_FORBIDDEN']),
       payouts: 0,
+    });
+  });
+
+  /**
+   * 운영자가 별도 환불금 지급 변경 요청을 보낸다
+   * @param path 경로(/refund 뒤)
+   * @param body 본문
+   * @param token 요청자 토큰(기본 운영자)
+   * @returns 응답
+   */
+  function operate(path: string, body: object, token = ctx.manager.token) {
+    return request(ctx.server)
+      .post(`/refund/${path}`)
+      .set('Authorization', `Bearer ${token}`)
+      .set('Idempotency-Key', `ops-${randomUUID()}`)
+      .send(body);
+  }
+
+  /**
+   * 환불의 현재 미지급액만큼 별도 지급을 예약한다
+   * @param refundId 환불
+   * @returns 예약 ID
+   */
+  async function reserve(refundId: string): Promise<string> {
+    const refund = await ctx.prisma.refund.findUniqueOrThrow({
+      where: { id: refundId },
+    });
+    const res = await operate(`${refundId}/manual-payouts`, {
+      amount: refund.amount - refund.paidAmount,
+      reason: 'PG 원인 확인 후 계좌 이체로 지급',
+    }).expect(201);
+    return res.body.data.payoutId as string;
+  }
+
+  /**
+   * 예약한 별도 지급의 실제 지급 결과를 등록한다
+   * @param refundId 환불
+   * @param payoutId 예약
+   * @param externalTransactionId 실제 지급 거래 식별자
+   * @returns 응답
+   */
+  async function confirmPayout(
+    refundId: string,
+    payoutId: string,
+    externalTransactionId = `bank-${randomUUID()}`,
+  ) {
+    const payout = await ctx.prisma.manualRefundPayout.findUniqueOrThrow({
+      where: { id: payoutId },
+    });
+    return operate(`${refundId}/manual-payouts/${payoutId}/confirm`, {
+      amount: payout.amount,
+      paidAt: new Date(Date.now() - 60_000).toISOString(),
+      externalTransactionId,
+      evidenceReference: '이체 확인증',
+    });
+  }
+
+  /**
+   * PG가 실제로 취소한 금액이 확정 금액과 다른 고객 환불을 만든다
+   * @param actualAmount PG 실제 취소액
+   * @returns 환불 ID
+   */
+  async function refundCancelledBy(actualAmount: number): Promise<string> {
+    const issued = await ctx.issuePeriodTicket();
+    pgStub.respondToSend({ result: 'ACCEPTED' });
+    const res = await request(ctx.server)
+      .post('/refund')
+      .set('Authorization', `Bearer ${ctx.customer.token}`)
+      .send({ ticketId: issued.ticketId, consentToTerminateTicket: true })
+      .expect(202);
+    const refundId = res.body.data.refundId as string;
+    const attempt = await ctx.prisma.paymentCancel.findFirstOrThrow({
+      where: { refundId },
+    });
+    await request(ctx.server)
+      .post('/refund/callback')
+      .set('Authorization', `Bearer ${ctx.customer.token}`)
+      .send({
+        success: true,
+        paymentCancelId: attempt.id,
+        pgTransactionId: `pg-cancel-${attempt.id}`,
+        orderItemId: issued.orderItemId,
+        amount: actualAmount,
+      })
+      .expect(200);
+    return refundId;
+  }
+
+  it('PG 취소 요청이 처리 중이거나 결과 확인 실패일 때 새 PG 취소 요청이나 별도 환불금 지급을 요청하면 결과 미확정 오류로 거부한다 (QS-10-2)', async () => {
+    const inProgress = await createFailedRefund();
+    const queryFailed = await createFailedRefund();
+    // 실패한 요청을 미확정 상태로 되돌려 처리 중·결과 확인 실패 상태를 만든다
+    for (const [refundId, status] of [
+      [inProgress, PaymentCancelStatus.REQUESTED],
+      [queryFailed, PaymentCancelStatus.QUERY_FAILED],
+    ] as const) {
+      await ctx.prisma.paymentCancel.updateMany({
+        where: { refundId },
+        data: { status, failureCode: null, failedAt: null },
+      });
+      await ctx.prisma.refund.update({
+        where: { id: refundId },
+        data: { payoutStatus: RefundPayoutStatus.PENDING, actionCode: null },
+      });
+    }
+    pgStub.reset();
+
+    const results: unknown[] = [];
+    for (const refundId of [inProgress, queryFailed]) {
+      const refund = await ctx.prisma.refund.findUniqueOrThrow({
+        where: { id: refundId },
+      });
+      const retried = await retry(refundId, `retry-${randomUUID()}`);
+      const reserved = await operate(`${refundId}/manual-payouts`, {
+        amount: refund.amount,
+        reason: '계좌 이체',
+      });
+      results.push([retried.body.error?.code, reserved.body.error?.code]);
+    }
+
+    expect(results).toEqual([
+      ['REFUND_PAYOUT_UNRESOLVED', 'REFUND_PAYOUT_UNRESOLVED'],
+      ['REFUND_PAYOUT_UNRESOLVED', 'REFUND_PAYOUT_UNRESOLVED'],
+    ]);
+  });
+
+  it('모든 PG 취소 요청 결과가 확정되고 조치 필요·미지급액이 남았을 때 운영자가 별도 환불금 지급을 예약하면 미지급액과 같은 금액을 예약하고 다른 PG 취소 요청·별도 지급을 차단하며 지급 완료가 아니다 (QS-10-3)', async () => {
+    const refundId = await createFailedRefund();
+    const refund = await ctx.prisma.refund.findUniqueOrThrow({
+      where: { id: refundId },
+    });
+    pgStub.reset();
+
+    const reserved = await operate(`${refundId}/manual-payouts`, {
+      amount: refund.amount,
+      reason: '계좌 이체로 지급',
+    });
+    const retried = await retry(refundId, `retry-${randomUUID()}`);
+    const second = await operate(`${refundId}/manual-payouts`, {
+      amount: refund.amount,
+      reason: '중복 예약',
+    });
+
+    const after = await ctx.prisma.refund.findUniqueOrThrow({
+      where: { id: refundId },
+    });
+    expect({
+      reserved: [
+        reserved.status,
+        reserved.body.data?.status,
+        reserved.body.data?.amount,
+      ],
+      blocked: [retried.body.error?.code, second.body.error?.code],
+      refund: [after.payoutStatus, after.payoutMethod, after.paidAmount],
+      sends: pgStub.sendCalls.length,
+    }).toEqual({
+      reserved: [201, 'RESERVED', refund.amount],
+      blocked: ['REFUND_PAYOUT_UNRESOLVED', 'REFUND_PAYOUT_UNRESOLVED'],
+      refund: [RefundPayoutStatus.ACTION_REQUIRED, 'MANUAL', 0],
+      sends: 0,
+    });
+  });
+
+  it('예약한 별도 환불금 지급을 실제 지급 뒤 거래 식별자·지급 시각·예약과 같은 금액·증빙으로 등록하면 지급과 실제 금액 원장을 함께 한 번만 기록하고 지급 완료가 된다 (QS-10-4)', async () => {
+    const refundId = await createFailedRefund();
+    const payoutId = await reserve(refundId);
+
+    const res = await confirmPayout(refundId, payoutId);
+
+    const refund = await ctx.prisma.refund.findUniqueOrThrow({
+      where: { id: refundId },
+      include: { ledgers: true, manualPayouts: true },
+    });
+    expect({
+      status: res.status,
+      body: res.body.data.payoutStatus,
+      payout: refund.manualPayouts.map((payout) => payout.status),
+      ledgers: refund.ledgers.map((ledger) => [
+        ledger.amount,
+        ledger.manualRefundPayoutId,
+      ]),
+      refund: [refund.payoutStatus, refund.paidAmount],
+    }).toEqual({
+      status: 200,
+      body: RefundPayoutStatus.PAID,
+      payout: [ManualRefundPayoutStatus.SUCCEEDED],
+      ledgers: [[-refund.amount, payoutId]],
+      refund: [RefundPayoutStatus.PAID, refund.amount],
+    });
+  });
+
+  it('별도 환불금 지급 예약 뒤 확인 지연 알림 기준에 도달하면 예약을 유지하고 운영자에게 확인을 요구하며 시간 초과만으로 다른 지급을 허용하지 않는다 (QS-10-5)', async () => {
+    const refundId = await createFailedRefund();
+    const payoutId = await reserve(refundId);
+
+    await ctx.app
+      .get(RefundOperationsService)
+      .alertUnconfirmedManualPayouts(new Date(Date.now() + 3_601_000));
+    const retried = await retry(refundId, `retry-${randomUUID()}`);
+
+    const payout = await ctx.prisma.manualRefundPayout.findUniqueOrThrow({
+      where: { id: payoutId },
+      include: { notifications: true },
+    });
+    expect({
+      status: payout.status,
+      alerts: payout.notifications.map((n) => [n.kind, n.audience]),
+      retried: retried.body.error?.code,
+    }).toEqual({
+      status: ManualRefundPayoutStatus.RESERVED,
+      alerts: [
+        ['MANUAL_CONFIRMATION_REQUIRED', RefundNotificationAudience.OPERATOR],
+      ],
+      retried: 'REFUND_PAYOUT_UNRESOLVED',
+    });
+  });
+
+  it('이미 기록한 별도 환불금 지급을 같은 내용으로 다시 등록하면 기존 결과를 돌려주고 지급액·원장을 더하지 않으며, 다른 환불에서 같은 거래 식별자를 쓰면 거부한다 (QS-10-6)', async () => {
+    const refundId = await createFailedRefund();
+    const otherRefundId = await createFailedRefund();
+    const payoutId = await reserve(refundId);
+    const otherPayoutId = await reserve(otherRefundId);
+    const externalTransactionId = `bank-${randomUUID()}`;
+    const first = await confirmPayout(
+      refundId,
+      payoutId,
+      externalTransactionId,
+    );
+
+    const repeated = await confirmPayout(
+      refundId,
+      payoutId,
+      externalTransactionId,
+    );
+    const reused = await confirmPayout(
+      otherRefundId,
+      otherPayoutId,
+      externalTransactionId,
+    );
+
+    const refund = await ctx.prisma.refund.findUniqueOrThrow({
+      where: { id: refundId },
+      include: { ledgers: true },
+    });
+    expect({
+      repeated: [repeated.status, repeated.body.data],
+      reused: [reused.status, reused.body.error?.code],
+      paidAmount: refund.paidAmount,
+      ledgers: refund.ledgers.length,
+    }).toEqual({
+      repeated: [200, first.body.data],
+      reused: [409, 'MANUAL_PAYOUT_REFERENCE_REUSED'],
+      paidAmount: refund.amount,
+      ledgers: 1,
+    });
+  });
+
+  it('PG가 확정 금액보다 적게 취소했을 때 운영자는 부족액만 예약·지급하고, 두 지급은 각각 실제 금액으로 원장에 남으며 부족액 증빙 확정으로 부족 지급 검토도 마치고 지급 완료가 된다 (QS-10-7)', async () => {
+    const shortfall = 3000;
+    const issuedAmount = 10000;
+    const refundId = await refundCancelledBy(issuedAmount - shortfall);
+
+    const tooMuch = await operate(`${refundId}/manual-payouts`, {
+      amount: issuedAmount,
+      reason: '전액 다시 지급',
+    });
+    const payoutId = await reserve(refundId);
+    await confirmPayout(refundId, payoutId);
+
+    const refund = await ctx.prisma.refund.findUniqueOrThrow({
+      where: { id: refundId },
+      include: { ledgers: true, manualPayouts: true },
+    });
+    expect({
+      tooMuch: [tooMuch.status, tooMuch.body.error?.code],
+      reservedAmount: refund.manualPayouts.map((payout) => payout.amount),
+      ledgers: refund.ledgers
+        .map((ledger) => ledger.amount)
+        .sort((a, b) => a - b),
+      refund: [refund.payoutStatus, refund.paidAmount, refund.reviewRequired],
+    }).toEqual({
+      tooMuch: [400, 'REFUND_OUTSTANDING_AMOUNT_MISMATCH'],
+      reservedAmount: [shortfall],
+      ledgers: [-(issuedAmount - shortfall), -shortfall],
+      refund: [RefundPayoutStatus.PAID, issuedAmount, false],
+    });
+  });
+
+  it('PG가 확정 금액보다 많이 취소했을 때 운영자가 증빙과 사유로 검토를 마치면 실제액·초과액·검토 기록을 유지하고 지급 완료로 표시하며 추가 지급이나 확정 금액 변경은 없다 (QS-10-8)', async () => {
+    const issuedAmount = 10000;
+    const overpaid = issuedAmount + 2000;
+    const refundId = await refundCancelledBy(overpaid);
+
+    const res = await operate(`${refundId}/amount-review`, {
+      reason: 'PG 초과 취소 확인, 회수는 후속 처리',
+      evidenceReference: 'PG 정산 내역',
+    });
+
+    const refund = await ctx.prisma.refund.findUniqueOrThrow({
+      where: { id: refundId },
+      include: { ledgers: true, manualPayouts: true },
+    });
+    expect({
+      status: res.status,
+      refund: [
+        refund.payoutStatus,
+        refund.amount,
+        refund.paidAmount,
+        refund.reviewRequired,
+      ],
+      reviewed: refund.reviewedById,
+      ledgers: refund.ledgers.map((ledger) => ledger.amount),
+      payouts: refund.manualPayouts.length,
+    }).toEqual({
+      status: 200,
+      refund: [RefundPayoutStatus.PAID, issuedAmount, overpaid, false],
+      reviewed: ctx.manager.id,
+      ledgers: [-overpaid],
+      payouts: 0,
+    });
+  });
+
+  /**
+   * 고객과 점주가 같은 운영 변경을 요청한 결과(상태·코드)를 모은다
+   * @param path 경로(/refund 뒤)
+   * @param body 본문
+   * @returns 고객·점주 응답 상태와 코드
+   */
+  async function customerAndOwner(path: string, body: object) {
+    const results: unknown[] = [];
+    for (const token of [ctx.customer.token, ctx.owner.token]) {
+      const res = await operate(path, body, token);
+      results.push([res.status, res.body.error?.code]);
+    }
+    return results;
+  }
+
+  /** 고객·점주 모두 권한 오류 */
+  const bothForbidden = [
+    [403, 'REFUND_FORBIDDEN'],
+    [403, 'REFUND_FORBIDDEN'],
+  ];
+
+  it('고객이나 점주가 PG 외 수단으로 지급할 환불금의 예약을 요청하면 권한 오류로 거부된다 (QS-10-9)', async () => {
+    const refundId = await createFailedRefund();
+
+    expect(
+      await customerAndOwner(`${refundId}/manual-payouts`, {
+        amount: 10000,
+        reason: '예약',
+      }),
+    ).toEqual(bothForbidden);
+  });
+
+  it('고객이나 점주가 PG 외 수단으로 실제 지급한 환불금의 증빙 등록이나 미지급 확인을 요청하면 권한 오류로 거부된다 (QS-10-9a)', async () => {
+    const refundId = await createFailedRefund();
+    const payoutId = await reserve(refundId);
+
+    const confirmed = await customerAndOwner(
+      `${refundId}/manual-payouts/${payoutId}/confirm`,
+      {
+        amount: 10000,
+        paidAt: new Date(Date.now() - 60_000).toISOString(),
+        externalTransactionId: `bank-${randomUUID()}`,
+        evidenceReference: '증빙',
+      },
+    );
+    const notPaid = await customerAndOwner(
+      `${refundId}/manual-payouts/${payoutId}/not-paid`,
+      { reason: '미지급', evidenceReference: '근거' },
+    );
+
+    const payout = await ctx.prisma.manualRefundPayout.findUniqueOrThrow({
+      where: { id: payoutId },
+    });
+    expect({ confirmed, notPaid, status: payout.status }).toEqual({
+      confirmed: bothForbidden,
+      notPaid: bothForbidden,
+      status: ManualRefundPayoutStatus.RESERVED,
+    });
+  });
+
+  it('고객이나 점주가 PG 초과 취소에 대한 운영자 검토 결과 등록을 요청하면 권한 오류로 거부된다 (QS-10-9b)', async () => {
+    const refundId = await refundCancelledBy(12000);
+
+    expect(
+      await customerAndOwner(`${refundId}/amount-review`, {
+        reason: '검토',
+        evidenceReference: '근거',
+      }),
+    ).toEqual(bothForbidden);
+  });
+
+  it('별도 환불금 지급이 예약됐을 때 운영자가 실제로 지급하지 않았음을 증빙과 사유로 확인하면 예약을 실패로 종료하고 조치 필요로 남기며, 지급 여부가 불명확(근거 없음)하면 종료할 수 없다 (QS-10-10)', async () => {
+    const unclearRefundId = await createFailedRefund();
+    const unclearPayoutId = await reserve(unclearRefundId);
+    const refundId = await createFailedRefund();
+    const payoutId = await reserve(refundId);
+
+    const unclear = await operate(
+      `${unclearRefundId}/manual-payouts/${unclearPayoutId}/not-paid`,
+      { reason: '확인 중' },
+    );
+    const closed = await operate(
+      `${refundId}/manual-payouts/${payoutId}/not-paid`,
+      { reason: '은행 이체 미실행 확인', evidenceReference: '출금 내역 없음' },
+    );
+
+    const payouts = await ctx.prisma.manualRefundPayout.findMany({
+      where: { id: { in: [unclearPayoutId, payoutId] } },
+    });
+    const refund = await ctx.prisma.refund.findUniqueOrThrow({
+      where: { id: refundId },
+    });
+    const statusOf = (id: string) => payouts.find((p) => p.id === id)?.status;
+    expect({
+      unclear: [
+        unclear.status,
+        unclear.body.error?.code,
+        statusOf(unclearPayoutId),
+      ],
+      closed: [closed.status, statusOf(payoutId)],
+      refund: [refund.payoutStatus, refund.paidAmount],
+    }).toEqual({
+      unclear: [
+        400,
+        'MANUAL_PAYOUT_EVIDENCE_REQUIRED',
+        ManualRefundPayoutStatus.RESERVED,
+      ],
+      closed: [200, ManualRefundPayoutStatus.FAILED],
+      refund: [RefundPayoutStatus.ACTION_REQUIRED, 0],
     });
   });
 });
