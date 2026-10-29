@@ -1336,3 +1336,16 @@ U10~U15를 마친 뒤, 관계 검증의 비교 대상 설정을 생략하면 정
 - 전체 회귀: Test Suites: 50 passed, 50 total / Tests:       578 passed, 578 total / Time:        14.035 s, estimated 15 s; Test Suites: 13 passed, 13 total / Tests:       163 passed, 163 total / Time:        14.31 s, estimated 16 s. 리팩터링 없음.
 
 - 실패 근거: 위 A66 red 참조.
+
+- A66 구현·회귀 커밋: `d743285`.
+
+### A67 red
+
+- `npx jest --config ./test/jest-e2e.json test/refund-history.e2e-spec.ts -t QS-8-4` → `expected 403 "Forbidden", got 200 "OK"`; 1 failed. 본인 목록 분리와 userId 쿼리 400은 먼저 통과했으나 기존 user 경로가 다른 고객 조회를 허용했다.
+
+### A67
+
+- USER의 user/:userId 조회를 403으로 차단하고 MANAGER 조회는 사용자 존재를 확인한 뒤 주문 범위로 제한했다. /me의 본인 분리와 미허용 userId 쿼리 거절도 HTTP로 확인했다.
+- 전체 회귀: Test Suites: 50 passed, 50 total / Tests:       578 passed, 578 total / Time:        13.543 s, estimated 14 s; Test Suites: 13 passed, 13 total / Tests:       164 passed, 164 total / Time:        13.04 s, estimated 14 s. 리팩터링 없음.
+
+- 실패 근거: 위 A67 red 참조.

@@ -323,7 +323,7 @@
 - [X] T147 [US8] [A64] E2E: `test/refund-history.e2e-spec.ts`에 명세 8-1의 Given/When으로 요청하고 다음 결과를 검증한다: 조회된다. 테스트 이름 끝에 `(QS-8-1)`를 붙인다.
 - [X] T148 [US8] [A65] E2E: `test/refund-history.e2e-spec.ts`에 명세 8-2의 Given/When으로 요청하고 다음 결과를 검증한다: 해당 매장을 찾을 수 없다는 응답을 받고 내역은 보이지 않는다. 테스트 이름 끝에 `(QS-8-2)`를 붙인다.
 - [X] T149 [US8] [A66] E2E: `test/refund-history.e2e-spec.ts`에 명세 8-3의 Given/When으로 요청하고 다음 결과를 검증한다: 조회된다. 테스트 이름 끝에 `(QS-8-3)`를 붙인다.
-- [ ] T150 [US8] [A67] E2E: `test/refund-history.e2e-spec.ts`에 명세 8-4의 Given/When으로 요청하고 다음 결과를 검증한다: 자기 환불 내역만 보인다. 다른 고객을 지정해 조회할 방법은 없다. 테스트 이름 끝에 `(QS-8-4)`를 붙인다.
+- [X] T150 [US8] [A67] E2E: `test/refund-history.e2e-spec.ts`에 명세 8-4의 Given/When으로 요청하고 다음 결과를 검증한다: 자기 환불 내역만 보인다. 다른 고객을 지정해 조회할 방법은 없다. 테스트 이름 끝에 `(QS-8-4)`를 붙인다.
 - [ ] T151 [US8] [A68] E2E: `test/refund-history.e2e-spec.ts`에 명세 8-5의 Given/When으로 요청하고 다음 결과를 검증한다: 조회된다. 테스트 이름 끝에 `(QS-8-5)`를 붙인다.
 
 ### 단위 테스트와 구현

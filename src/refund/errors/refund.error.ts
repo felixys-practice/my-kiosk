@@ -52,6 +52,16 @@ export class ShopNotFoundError extends DomainNotFoundError {
 }
 
 /** 이용 종료와 환불 금액에 대한 동의 누락 (400) */
+export class RefundUserNotFoundError extends DomainNotFoundError {
+  readonly code = 'USER_NOT_FOUND';
+
+  constructor() {
+    super('사용자를 찾을 수 없습니다');
+    this.name = 'RefundUserNotFoundError';
+  }
+}
+
+/** 이용 종료와 환불 금액에 대한 동의 누락 (400) */
 export class RefundTerminationConsentRequiredError extends DomainBadRequestError {
   readonly code = 'REFUND_TERMINATION_CONSENT_REQUIRED';
 

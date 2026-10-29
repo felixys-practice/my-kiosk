@@ -1,7 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma, UserRole } from '@prisma/client';
 import { RefundActor } from './refund-access.service';
-import { RefundForbiddenError, ShopNotFoundError } from './errors';
+import {
+  RefundForbiddenError,
+  ShopNotFoundError,
+  RefundUserNotFoundError,
+} from './errors';
 import { RefundQueryRepository } from './refund-query.repository';
 import { GetRefundQueryDto } from './dto/get-refund-query.dto';
 import { PaginationUtil } from 'src/common/pagination/pagination.util';
@@ -30,6 +34,17 @@ export class RefundQueryService {
 
   byMe(actor: RefundActor, query = new GetRefundQueryDto()) {
     return this.list({ payment: { order: { userId: actor.userId } } }, query);
+  }
+
+  async byUser(
+    actor: RefundActor,
+    userId: string,
+    query = new GetRefundQueryDto(),
+  ) {
+    if (actor.role !== UserRole.MANAGER) throw new RefundForbiddenError();
+    if (!(await this.repository.findUser(userId)))
+      throw new RefundUserNotFoundError();
+    return this.list({ payment: { order: { userId } } }, query);
   }
 
   private async list(where: Prisma.RefundWhereInput, query: GetRefundQueryDto) {

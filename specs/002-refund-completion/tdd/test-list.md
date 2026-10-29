@@ -100,7 +100,7 @@ suite_baseline: green
 | A64 | Given 점주가 매장을 소유하고 있을 때, When 자기 매장의 환불 내역을 조회하면, Then 조회된다. | QS-8-1 | example | DONE | `test/refund-history.e2e-spec.ts` / QS-8-1 |
 | A65 | Given 점주가 있을 때, When 자기 소유가 아닌 매장의 환불 내역을 조회하면, | QS-8-2 | example | DONE | `test/refund-history.e2e-spec.ts` / A65 |
 | A66 | Given 고객이 있을 때, When 자기 환불 내역을 조회하면, Then 조회된다. | QS-8-3 | example | DONE | `test/refund-history.e2e-spec.ts` / A66 |
-| A67 | Given 고객이 있을 때, When 환불 내역을 조회하면, Then 자기 환불 내역만 보인다. 다른 고객을 지정해 조회할 방법은 없다. | QS-8-4 | example | PENDING | |
+| A67 | Given 고객이 있을 때, When 환불 내역을 조회하면, Then 자기 환불 내역만 보인다. 다른 고객을 지정해 조회할 방법은 없다. | QS-8-4 | example | DONE | `test/refund-history.e2e-spec.ts` / A67 |
 | A68 | Given 고객지원 계정이 있을 때, When 어느 매장이나 사용자의 환불 내역을 조회하면, Then 조회된다. | QS-8-5 | example | PENDING | |
 | A69 | Given 환불 가능한 이용권이 있을 때, When 고객 환불이나 매장 환불을 요청하면, | QS-9-1 | example | PENDING | |
 | A70 | Given 환불 건이 있을 때, When 점주나 고객이 환불 내역을 조회하면, | QS-9-2 | example | PENDING | |

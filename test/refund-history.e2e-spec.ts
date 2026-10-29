@@ -22,6 +22,38 @@ describe('환불 내역 조회 (E2E)', () => {
     await ctx.close();
   });
 
+  it('고객은 자기 내역만 보며 쿼리나 사용자 경로로 다른 고객을 지정할 수 없다 (QS-8-4)', async () => {
+    const refundIds: string[] = [];
+    for (const buyer of [ctx.customer, ctx.otherCustomer]) {
+      const issued = await ctx.issuePeriodTicket({ buyer });
+      const accepted = await request(ctx.server)
+        .post('/refund')
+        .set('Authorization', `Bearer ${buyer.token}`)
+        .send({ ticketId: issued.ticketId, consentToTerminateTicket: true })
+        .expect(202);
+      refundIds.push(accepted.body.data.refundId as string);
+    }
+    const own = await request(ctx.server)
+      .get('/refund/me')
+      .set('Authorization', `Bearer ${ctx.customer.token}`)
+      .expect(200);
+    const ids = own.body.data.items.map(
+      (item: { refundId: string }) => item.refundId,
+    ) as string[];
+    expect(ids).toContain(refundIds[0]);
+    expect(ids).not.toContain(refundIds[1]);
+    await request(ctx.server)
+      .get('/refund/me')
+      .query({ userId: ctx.otherCustomer.id })
+      .set('Authorization', `Bearer ${ctx.customer.token}`)
+      .expect(400);
+    const forbidden = await request(ctx.server)
+      .get(`/refund/user/${ctx.otherCustomer.id}`)
+      .set('Authorization', `Bearer ${ctx.customer.token}`)
+      .expect(403);
+    expect(forbidden.body.error.code).toBe('REFUND_FORBIDDEN');
+  });
+
   it('고객은 본인 주문의 확정 금액과 지급 상태가 담긴 환불 내역을 조회한다 (QS-8-3)', async () => {
     const issued = await ctx.issuePeriodTicket();
     const accepted = await request(ctx.server)

@@ -22,6 +22,13 @@ export type RefundQueryRow = Prisma.RefundGetPayload<{
 export class RefundQueryRepository {
   constructor(private readonly prisma: PrismaService) {}
 
+  findUser(userId: string) {
+    return this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true },
+    });
+  }
+
   findShop(shopId: string, ownerId?: string) {
     return this.prisma.shop.findFirst({
       where: {

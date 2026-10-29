@@ -17,7 +17,6 @@ import { PgSignatureGuard } from 'src/pg/guards/pg-signature.guard';
 import type { Response } from 'express';
 import { CurrentUser } from 'src/auth/decorators/current-user.decorator';
 import type { JwtValidationResult } from 'src/auth/interfaces/jwt-payload.interface';
-import { RefundService } from './refund.service';
 import {
   GetRefundQueryDto,
   RefundDto,
@@ -34,7 +33,6 @@ import { RefundQueryService } from './refund-query.service';
 @Controller('refund')
 export class RefundController {
   constructor(
-    private readonly refundService: RefundService,
     private readonly refundAcceptanceService: RefundAcceptanceService,
     private readonly refundResultService: RefundResultService,
     private readonly refundStoreService: RefundStoreService,
@@ -168,9 +166,10 @@ export class RefundController {
   // 사용자의 환불 내역
   @Get('/user/:userId')
   async getRefundHistoryByUser(
-    @Param('userId') userId: string,
-    @Query() query?: GetRefundQueryDto,
+    @CurrentUser() user: JwtValidationResult,
+    @Param('userId', ParseUUIDPipe) userId: string,
+    @Query() query: GetRefundQueryDto,
   ) {
-    return this.refundService.getRefundHistoryByUser(userId, query?.status);
+    return this.refundQueryService.byUser(user, userId, query);
   }
 }
