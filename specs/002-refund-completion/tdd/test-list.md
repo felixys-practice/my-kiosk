@@ -105,7 +105,7 @@ suite_baseline: green
 | A69 | Given 환불 가능한 이용권이 있을 때, When 고객 환불이나 매장 환불을 요청하면, | QS-9-1 | example | DONE | `test/refund-notifications.e2e-spec.ts` / A69 |
 | A70 | Given 환불 건이 있을 때, When 점주나 고객이 환불 내역을 조회하면, | QS-9-2 | example | DONE | `test/refund-notifications.e2e-spec.ts` / A70 |
 | A71 | Given 환불금 지급 처리 중인 고객 환불이 있을 때, When PG 취소 요청이 실패로 확정되면, Then 신청한 고객·그 매장 점주·운영자에게 미지급 알림이 남는다. | QS-9-3 | example | DONE | `test/refund-notifications.e2e-spec.ts` / A71 |
-| A72 | Given 환불금 지급 처리 중인 매장 환불이 있을 때, When PG 취소 요청이 실패로 확정되면, Then 그 매장 점주와 운영자에게 미지급 알림이 남는다. | QS-9-3a | example | PENDING | |
+| A72 | Given 환불금 지급 처리 중인 매장 환불이 있을 때, When PG 취소 요청이 실패로 확정되면, Then 그 매장 점주와 운영자에게 미지급 알림이 남는다. | QS-9-3a | example | DONE | `test/refund-notifications.e2e-spec.ts` / A72 |
 | A73 | Given 알림이 있을 때, When 점주가 자기 알림을 조회하면, Then 자기 매장의 알림만 보인다. | QS-9-4 | example | DONE | `test/refund-notifications.e2e-spec.ts` / A73 |
 | A74 | Given 알림이 있을 때, When 고객이 자기 알림을 조회하면, Then 자기 환불의 알림만 보인다. | QS-9-4a | example | DONE | `test/refund-notifications.e2e-spec.ts` / A74 |
 | A75 | Given 안 읽은 알림이 있을 때, When 받은 사람이 그 알림을 읽음 처리하면, | QS-9-4b | example | DONE | `test/refund-notifications.e2e-spec.ts` / A75 |

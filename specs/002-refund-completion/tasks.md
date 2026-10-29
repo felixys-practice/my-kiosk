@@ -348,7 +348,7 @@
 - [X] T156 [US9] [A69] E2E: `test/refund-notifications.e2e-spec.ts`에 명세 9-1의 Given/When으로 요청하고 다음 결과를 검증한다: 이용 종료 완료와 환불금 지급 상태가 구분된다. 양수의 최초 접수는 환불금 지급 처리 중, 보내기 전 실패·PG 거절은 이용 종료 완료·환불금 지급 조치 필요, 0원은 환불금 지급 완료로 응답한다. 테스트 이름 끝에 `(QS-9-1)`를 붙인다.
 - [X] T157 [US9] [A70] E2E: `test/refund-notifications.e2e-spec.ts`에 명세 9-2의 Given/When으로 요청하고 다음 결과를 검증한다: 이용 종료 시각·확정된 환불 금액·실제 환불금 지급액·미지급액·환불금 지급 상태·조치 사유가 보인다. 테스트 이름 끝에 `(QS-9-2)`를 붙인다.
 - [X] T158 [US9] [A71] E2E: `test/refund-notifications.e2e-spec.ts`에 명세 9-3의 Given/When으로 요청하고 다음 결과를 검증한다: 신청한 고객·그 매장 점주·운영자에게 미지급 알림이 남는다. 테스트 이름 끝에 `(QS-9-3)`를 붙인다.
-- [ ] T159 [US9] [A72] E2E: `test/refund-notifications.e2e-spec.ts`에 명세 9-3a의 Given/When으로 요청하고 다음 결과를 검증한다: 그 매장 점주와 운영자에게 미지급 알림이 남는다. 테스트 이름 끝에 `(QS-9-3a)`를 붙인다.
+- [X] T159 [US9] [A72] E2E: `test/refund-notifications.e2e-spec.ts`에 명세 9-3a의 Given/When으로 요청하고 다음 결과를 검증한다: 그 매장 점주와 운영자에게 미지급 알림이 남는다. 테스트 이름 끝에 `(QS-9-3a)`를 붙인다.
 - [X] T160 [US9] [A73] E2E: `test/refund-notifications.e2e-spec.ts`에 명세 9-4의 Given/When으로 요청하고 다음 결과를 검증한다: 자기 매장의 알림만 보인다. 테스트 이름 끝에 `(QS-9-4)`를 붙인다.
 - [X] T161 [US9] [A74] E2E: `test/refund-notifications.e2e-spec.ts`에 명세 9-4a의 Given/When으로 요청하고 다음 결과를 검증한다: 자기 환불의 알림만 보인다. 테스트 이름 끝에 `(QS-9-4a)`를 붙인다.
 - [X] T162 [US9] [A75] E2E: `test/refund-notifications.e2e-spec.ts`에 명세 9-4b의 Given/When으로 요청하고 다음 결과를 검증한다: 안 읽은 알림 조회에서 빠지고 전체 조회에는 읽음으로 남는다. 다른 사람의 알림은 읽음 처리할 수 없다. 테스트 이름 끝에 `(QS-9-4b)`를 붙인다.

@@ -214,6 +214,26 @@ describe('환불 상태와 수신자별 알림 (E2E)', () => {
     }
   });
 
+  it('매장 환불 거절은 점주·운영자에게 보이고 고객에게는 보이지 않는다 (QS-9-3a)', async () => {
+    const accepted = await accept('STORE');
+    await reject(accepted);
+    for (const [actor, audience] of [
+      [ctx.owner, 'SHOP'],
+      [ctx.manager, 'OPERATOR'],
+      [ctx.customer, null],
+    ] as const) {
+      const res = await list(actor.token, { limit: 100 }).expect(200);
+      const related = (res.body.data.items as { refundId: string }[]).filter(
+        (item) => item.refundId === accepted.refundId,
+      );
+      expect(related).toEqual(
+        audience
+          ? [expect.objectContaining({ audience, kind: 'PG_REJECTED' })]
+          : [],
+      );
+    }
+  });
+
   it('고객은 자기 환불의 고객 수신 알림만 조회한다 (QS-9-4a)', async () => {
     const own = await accept();
     const other = await accept('CUSTOMER', { buyer: ctx.otherCustomer });

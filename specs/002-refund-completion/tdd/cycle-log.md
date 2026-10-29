@@ -2010,3 +2010,35 @@ expect(received).toEqual(expected) // deep equality
 기존 고객 실패 알림을 실제 조회·중복 콜백과 연결해 확인했다.
 - 전체 회귀: Test Suites: 53 passed, 53 total / Tests:       599 passed, 599 total / Time:        14.64 s, estimated 15 s; Test Suites: 14 passed, 14 total / Tests:       176 passed, 176 total / Time:        17.077 s. 리팩터링 없음.
 - 실패/기존 근거: 기존 U250 및 위 A71 최초 실행·뮤턴트 참조.
+
+- A71 커밋: `a76ed3a`.
+
+### A72 기존 매장 실패 알림의 HTTP 검증
+
+- U251 기존 DB 테스트의 동작과 선행 조회 구현을 연결한 QS-9-3a는 최초 1 passed. 새 구현의 선행 실패가 아니다.
+- 고객 수신자 제한을 지운 뮤턴트의 실제 실패:
+```text
+expect(received).toEqual(expected) // deep equality
+
+    - Expected  -  1
+    + Received  + 15
+
+    - Array []
+    + Array [
+    +   Object {
+    +     "audience": "CUSTOMER",
+    +     "createdAt": "2026-10-29T16:39:09.246Z",
+    +     "isRead": false,
+    +     "kind": "PG_REJECTED",
+    +     "manualRefundPayoutId": null,
+    +     "message": "환불금 지급 요청이 거절되어 확인이 필요합니다.",
+    +     "notificationId": "5c332a1b-cc2b-45df-863d-a7510946d57c",
+    +     "paymentCancelId": "2d98391b-b504-4d8b-8384-
+```
+- 원복했다.
+
+### A72
+
+매장 환불 거절 알림은 점주·운영자만 수신하고 고객은 조회하지 못함을 실제 HTTP로 확인했다.
+- 전체 회귀: Test Suites: 53 passed, 53 total / Tests:       599 passed, 599 total / Time:        14.798 s, estimated 15 s; Test Suites: 14 passed, 14 total / Tests:       177 passed, 177 total / Time:        17.076 s. 리팩터링 없음.
+- 실패/기존 근거: 기존 U251 및 위 A72 최초 실행·뮤턴트 참조.
