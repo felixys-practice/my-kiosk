@@ -280,6 +280,7 @@ describe('환불 상태와 수신자별 알림 (E2E)', () => {
     expect(related).toEqual(
       expect.arrayContaining(
         expected.map((item) =>
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-return
           expect.objectContaining({ ...item, audience: 'OPERATOR' }),
         ),
       ),

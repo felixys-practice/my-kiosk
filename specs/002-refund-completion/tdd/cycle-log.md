@@ -2113,3 +2113,12 @@ expect(received).toMatchObject(expected)
 상태 전이 실패 때 알림·환불·시도가 실제 DB에서 함께 롤백됨을 확인했다.
 - 전체 회귀: Test Suites: 53 passed, 53 total / Tests:       600 passed, 600 total / Time:        17.14 s; Test Suites: 14 passed, 14 total / Tests:       178 passed, 178 total / Time:        23.929 s. 리팩터링 없음.
 - 실패/기존 근거: 위 U256 최초 실행·트랜잭션 제거 뮤턴트 참조.
+
+- U256 커밋: `8515d35`.
+
+### US9 최종 정리와 검수 범위
+
+- U260 기록의 '読み음'은 '읽음'을 뜻한다. U256 보충 검증 제목은 바로 다음 정정 문장에 쓴 '기존 트랜잭션의 보충 검증'이다. 과거 기록은 삭제/교체하지 않는다.
+- T164의 지급 확인 지연은 기존 refund-operations.e2e-spec.ts QS-10-5의 운영자 알림과 refund-result.integration.spec.ts의 장기 미확인 중복·경쟁·거래 로그 테스트를 재사용했다. 명세/수신 정책 변경 없음.
+- 테스트의 app.get 제네릭과 matcher 타입 린트, 알림 404 주석을 정리했다. 업무 동작/단언 변경 없음.
+- tasks.md의 US9 외 별도 표현 교정이 이전 사이클의 전체 파일 staging에 섞여 있었다. 검수 최종 diff는 기준 커밋의 US9 외 문장으로 되돌려 분리하고, 작업 파일에는 사용자가 교정한 문장들을 그대로 복원한다. 별도 교정을 없애거나 새 정책을 정하는 작업이 아니다. 이후 커밋에서 사용자 문장을 다시 포함하지 않도록 파일 범위를 확인한다.
