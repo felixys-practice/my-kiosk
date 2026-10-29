@@ -678,7 +678,9 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
   it('U256 결과 저장 도중 실패하면 이미 기록한 알림과 지급 상태를 함께 롤백한다', async () => {
     const pending = await createPendingRefund();
     const events = app.get<RefundEventRepository>(RefundEventRepository);
-    const original = events.recordNotification.bind(events);
+    const original = events.recordNotification.bind(
+      events,
+    ) as RefundEventRepository['recordNotification'];
     let insideCount = 0;
     const failure = new Error('알림 저장 뒤 후속 처리 실패');
     const spy = jest
