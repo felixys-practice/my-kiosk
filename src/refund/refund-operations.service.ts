@@ -282,7 +282,10 @@ export class RefundOperationsService {
             manualRefundPayoutId: payoutId,
           });
           const paidAmount = refund.paidAmount + payout.amount;
-          const settled = paidAmount === refund.amount;
+          // PG 결과 모순은 이 지급과 별개로 운영자 확인이 남아 있으므로 지급 완료·검토 완료로 바꾸지 않는다
+          const settled =
+            paidAmount === refund.amount &&
+            refund.actionCode !== 'PG_RESULT_CONFLICT';
           // 부족액 지급으로 미지급액이 0이 되면 이 증빙으로 부족 지급 검토도 함께 마친다(API 계약 §5 confirm)
           await this.operationsRepository.applyManualPaid(tx, refundId, {
             paidAmount,

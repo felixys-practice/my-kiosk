@@ -3224,5 +3224,42 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
         status: payout.status,
       }).toEqual({ alerts: 1, status: ManualRefundPayoutStatus.RESERVED });
     });
+
+    it('예약 뒤 PG 결과 모순이 생긴 환불은 별도 지급 결과를 등록해도 지급액·원장만 반영하고 모순 표시·검토 필요·조치 필요를 유지한다', async () => {
+      const reserved = await reservedPayout();
+      // 예약 뒤 늦은 PG 통보로 결과 모순이 기록된 상태
+      await prisma.refund.update({
+        where: { id: reserved.refundId },
+        data: { actionCode: 'PG_RESULT_CONFLICT', reviewRequired: true },
+      });
+
+      await confirm(reserved);
+
+      const refund = await prisma.refund.findUniqueOrThrow({
+        where: { id: reserved.refundId },
+      });
+      const ledgers = await prisma.ledger.count({
+        where: { refundId: reserved.refundId },
+      });
+      expect({
+        refund: [
+          refund.paidAmount,
+          refund.payoutStatus,
+          refund.actionCode,
+          refund.reviewRequired,
+          refund.reviewedById,
+        ],
+        ledgers,
+      }).toEqual({
+        refund: [
+          refundAmount,
+          RefundPayoutStatus.ACTION_REQUIRED,
+          'PG_RESULT_CONFLICT',
+          true,
+          null,
+        ],
+        ledgers: 1,
+      });
+    });
   });
 });

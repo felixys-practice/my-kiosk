@@ -82,6 +82,7 @@ export class RefundOperationsRepository {
         paidAmount: true,
         payoutStatus: true,
         reviewRequired: true,
+        actionCode: true,
         payment: { select: { order: { select: { id: true, shopId: true } } } },
       },
     });
@@ -90,6 +91,7 @@ export class RefundOperationsRepository {
       paidAmount: refund.paidAmount,
       payoutStatus: refund.payoutStatus,
       reviewRequired: refund.reviewRequired,
+      actionCode: refund.actionCode,
       orderId: refund.payment.order.id,
       shopId: refund.payment.order.shopId,
     };

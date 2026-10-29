@@ -282,6 +282,10 @@ suite_baseline: green
 | U372 | 환불에 속하지 않는 별도 지급 예약 ID로 결과 등록·미지급 확인을 요청하면 404 MANUAL_PAYOUT_NOT_FOUND다 (계약 §10, US10 진행 중 추가) | FR-046 | example | DONE | `src/refund/refund-result.integration.spec.ts` › 별도 환불금 지급 › 환불에 속하지 않는 별도 지급 예약 ID로 결과를 등록하면… |
 | U373 | 이미 실패로 종료된 예약의 결과 등록은 409 MANUAL_PAYOUT_STATE_CONFLICT다 (계약 §10, US10 진행 중 추가) | FR-046 | example | DONE | `src/refund/refund-result.integration.spec.ts` › 별도 환불금 지급 › 이미 실패로 종료된 예약의 결과 등록은… |
 | U374 | 결과 등록 금액이 예약 금액과 다르면 400 REFUND_OUTSTANDING_AMOUNT_MISMATCH다 (계약 §5 '예약과 같은 금액', US10 진행 중 추가) | FR-046 | example | DONE | `src/refund/refund-result.integration.spec.ts` › 별도 환불금 지급 › 결과 등록 금액이 예약 금액과 다르면… |
+| U375 | 예약 뒤 PG 결과 모순(PG_RESULT_CONFLICT)이 생긴 환불은 별도 지급 결과를 등록해도 지급액·원장만 반영하고 모순 표시·검토 필요·조치 필요를 유지한다 (US10 외부 지급 검수 1) | FR-046 | example | PENDING | |
+| U376 | 별도 지급 결과 등록의 지급 시각이 ISO 시각 문자열이 아니면(숫자·불리언) 형식 오류(400)다 (US10 외부 지급 검수 2) | FR-046 | example | PENDING | |
+| U377 | 장기 미확인 알림은 저장 직전에 예약을 잠그고 다시 확인해 이미 지급 결과가 등록된 예약에는 알리지 않는다 (US10 외부 지급 검수 3) | FR-037 | example | PENDING | |
+| U378 | 새 장기 미확인 알림이 저장되면 거래 로그도 한 번 남긴다 (FR-037, US10 외부 지급 검수 4) | FR-037 | example | PENDING | |
 
 ### `src/refund/refund-idempotency.service.ts`
 
