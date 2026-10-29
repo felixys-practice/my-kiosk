@@ -1401,3 +1401,16 @@ U10~U15를 마친 뒤, 관계 검증의 비교 대상 설정을 생략하면 정
 - 전체 회귀: Test Suites: 51 passed, 51 total / Tests:       580 passed, 580 total / Time:        13.801 s, estimated 15 s; Test Suites: 13 passed, 13 total / Tests:       166 passed, 166 total / Time:        12.497 s, estimated 19 s. 리팩터링 없음.
 
 - 실패 근거: 위 U382 red 참조.
+
+- U382 구현·회귀 커밋: `889b3f7`.
+
+### U246 금액 뮤턴트
+
+- `npx jest src/refund/refund-query.service.spec.ts -t U246` 최초 1 passed(A66 금액 응답 구현). 실제 지급액을 빼지 않는 변형에서 `- "outstandingAmount": 300`, `+ "outstandingAmount": 1000`, 1 failed. 원복했다. 0·일부·초과 지급을 같은 계산 규칙으로 검증한다.
+
+### U246
+
+- 확정액에서 실제 지급 합계를 뺀 미지급액과 반대 방향의 초과액을 모두 0 이상으로 표시한다.
+- 전체 회귀: Test Suites: 51 passed, 51 total / Tests:       581 passed, 581 total / Time:        16.486 s; Test Suites: 13 passed, 13 total / Tests:       166 passed, 166 total / Time:        18.915 s. 리팩터링 없음.
+
+- 실패 근거: 위 U246 금액 뮤턴트 참조.

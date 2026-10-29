@@ -585,7 +585,7 @@ suite_baseline: green
 | U243 | limit=0은 400을 받는다 | FR-036 | example | DONE | `src/refund/dto/get-refund-query.dto.spec.ts` / U243 |
 | U244 | 권한 범위 안에 환불이 없으면 200과 빈 목록을 받는다 | FR-033 | example | DONE | `src/refund/refund-query.service.spec.ts` / U244 |
 | U245 | 고객이 userId를 지정하면 미허용 필드로 400을 받는다 | FR-034 | example | PENDING | |
-| U246 | 미지급액은 확정 금액에서 실제 지급액을 뺀 값으로 표시된다 | FR-036 | example | PENDING | |
+| U246 | 미지급액은 확정 금액에서 실제 지급액을 뺀 값으로 표시된다 | FR-036 | example | DONE | `src/refund/refund-query.service.spec.ts` / U246 |
 | U247 | 운영 오류 원문과 증빙은 MANAGER 응답에만 담긴다 | FR-036 | example | PENDING | |
 | U248 | 과거 승인 대기 이관 이력은 신규 이용 종료와 구분되는 LEGACY 상태로 표시된다 | FR-007a | example | PENDING | |
 | U249 | actionRequiredOnly 필터는 FAILED 시도의 미지급 환불을 계속 포함한다 | FR-051 | example | PENDING | |
