@@ -23,6 +23,26 @@ describe('환불 내역 조회 (E2E)', () => {
     await ctx.close();
   });
 
+  it('U388 큰 페이지·계산 위치는 입력 오류로 거절하고 표현 가능한 경계는 허용한다 (QS-8-3)', async () => {
+    for (const query of [
+      { page: '1e308' },
+      { page: String(Number.MAX_SAFE_INTEGER), limit: '100' },
+    ]) {
+      const response = await request(ctx.server)
+        .get('/refund/me')
+        .query(query)
+        .set('Authorization', `Bearer ${ctx.customer.token}`)
+        .expect(400);
+      expect(response.body.error.code).toBe('BadRequestException');
+    }
+    const boundary = await request(ctx.server)
+      .get('/refund/me')
+      .query({ page: String(Number.MAX_SAFE_INTEGER), limit: '1' })
+      .set('Authorization', `Bearer ${ctx.customer.token}`)
+      .expect(200);
+    expect(boundary.body.data.items).toEqual([]);
+  });
+
   it('U386 역할 부족과 없는 조회 대상을 구분하고 권한 안 빈 목록은 허용한다 (QS-8-5)', async () => {
     for (const [path, actor, status, code] of [
       [`/refund/shop/${ctx.shop.id}`, ctx.customer, 403, 'REFUND_FORBIDDEN'],

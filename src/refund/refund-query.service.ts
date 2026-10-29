@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { Prisma, UserRole } from '@prisma/client';
 import { RefundActor } from './refund-access.service';
 import {
@@ -69,6 +69,11 @@ export class RefundQueryService {
     scope: Prisma.RefundWhereInput,
     query: GetRefundQueryDto,
   ) {
+    if (!Number.isSafeInteger((query.page - 1) * query.limit)) {
+      throw new BadRequestException(
+        '페이지와 크기로 계산한 조회 위치를 처리할 수 없습니다',
+      );
+    }
     if (
       query.actionRequiredOnly !== undefined &&
       actor.role !== UserRole.MANAGER

@@ -1553,3 +1553,16 @@ U10~U15를 마친 뒤, 관계 검증의 비교 대상 설정을 생략하면 정
 - 전체 회귀: Test Suites: 51 passed, 51 total / Tests:       587 passed, 587 total / Time:        16.77 s, estimated 17 s; Test Suites: 13 passed, 13 total / Tests:       169 passed, 169 total / Time:        16.199 s. 리팩터링 없음.
 
 - 실패 근거: 위 U387 red 참조.
+
+- U387 구현·회귀 커밋: `a432203`.
+
+### U388 red
+
+- `npx jest --config ./test/jest-e2e.json test/refund-history.e2e-spec.ts -t U388` → page=Number.MAX_SAFE_INTEGER·limit=100에서 `expected 400 "Bad Request", got 200 "OK"`, 1 failed. U387의 페이지 숫자 검증과 별도로 곱셈 결과가 안전하게 표현되지 않는 위치를 검사한다. page=1e308의 일반 BadRequestException은 먼저 확인했다.
+
+### U388
+
+- ORM을 호출하기 전에 계산된 skip이 안전한 정수인지 검사하여 일반 BadRequestException으로 거절한다. 페이지 최대 안전 정수·limit=1은 실제 HTTP에서 빈 목록 200임을 확인했다.
+- 전체 회귀: Test Suites: 51 passed, 51 total / Tests:       587 passed, 587 total / Time:        15.408 s, estimated 17 s; Test Suites: 13 passed, 13 total / Tests:       170 passed, 170 total / Time:        16.895 s. 리팩터링 없음.
+
+- 실패 근거: 위 U388 red 참조.
