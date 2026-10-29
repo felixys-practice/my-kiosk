@@ -1773,3 +1773,31 @@ Tests:       1 failed, 6 skipped, 7 total
 - 알림의 계산 위치를 ORM 호출 전에 검사한다. 아직 HTTP는 연결하지 않았다.
 - 전체 회귀: Test Suites: 53 passed, 53 total / Tests:       595 passed, 595 total / Time:        16.495 s; Test Suites: 13 passed, 13 total / Tests:       170 passed, 170 total / Time:        19.025 s. 리팩터링 없음.
 - 실패/기존 근거: 위 U395 실제 red 참조.
+
+- U395 커밋: `3d89593`.
+
+### U396 red
+
+- `npx jest src/refund/refund-notification.service.spec.ts -t U396`
+```text
+    -       "isRead": false,
+    -       "message": Any<String>,
+    -       "notificationId": "notification",
+    -       "readAt": null,
+    -       "isRead": true,
+    -       "message": Any<String>,
+    -       "notificationId": "read",
+    -       "readAt": 2026-10-29T00:00:00.000Z,
+    -   "meta": Object {
+    -     "limit": 20,
+    -     "page": 1,
+    -     "total": 2,
+    -   },
+Tests:       1 failed, 7 skipped, 8 total
+```
+
+### U396
+
+- 내부 eventKey·수신자 데이터·다른 사람 Receipt를 반환하지 않고, 공개 사건 정보와 안전한 메시지·본인의 isRead/readAt만 응답한다.
+- 전체 회귀: Test Suites: 53 passed, 53 total / Tests:       596 passed, 596 total / Time:        16.297 s, estimated 17 s; Test Suites: 13 passed, 13 total / Tests:       170 passed, 170 total / Time:        17.898 s, estimated 19 s. 리팩터링 없음.
+- 실패/기존 근거: 위 U396 실제 red 참조.

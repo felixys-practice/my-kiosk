@@ -6,8 +6,77 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { GetRefundNotificationQueryDto } from './dto/get-refund-notification-query.dto';
 import { RefundNotificationService } from './refund-notification.service';
 import { BadRequestException } from '@nestjs/common';
+import type { NotificationRow } from './refund-notification.repository';
+
+const notificationAt = new Date('2026-10-29T00:00:00.000Z');
+function notificationRow(
+  overrides: Partial<NotificationRow> = {},
+): NotificationRow {
+  return {
+    id: 'notification',
+    refundId: 'refund',
+    paymentCancelId: 'attempt',
+    manualRefundPayoutId: null,
+    kind: 'PG_REJECTED',
+    audience: 'SHOP',
+    shopId: 'shop',
+    recipientUserId: null,
+    eventKey: '내부 사건 키',
+    createdAt: notificationAt,
+    receipts: [],
+    ...overrides,
+  };
+}
 
 describe('환불 알림 수신 범위', () => {
+  it('U396 알림은 공개 사건 필드와 본인의 읽음만 응답하고 내부 사건 키를 노출하지 않는다', async () => {
+    const repository = {
+      list: jest
+        .fn()
+        .mockResolvedValue({
+          items: [
+            notificationRow(),
+            notificationRow({
+              id: 'read',
+              receipts: [{ readAt: notificationAt }],
+            }),
+          ],
+          total: 2,
+        }),
+    } as unknown as RefundNotificationRepository;
+    const result = await new RefundNotificationService(repository).list({
+      userId: 'owner',
+      role: 'OWNER',
+    });
+    const publicBase = {
+      refundId: 'refund',
+      paymentCancelId: 'attempt',
+      manualRefundPayoutId: null,
+      kind: 'PG_REJECTED',
+      audience: 'SHOP',
+      shopId: 'shop',
+      message: expect.any(String),
+      createdAt: notificationAt,
+    };
+    expect(result).toMatchObject({
+      items: [
+        {
+          ...publicBase,
+          notificationId: 'notification',
+          isRead: false,
+          readAt: null,
+        },
+        {
+          ...publicBase,
+          notificationId: 'read',
+          isRead: true,
+          readAt: notificationAt,
+        },
+      ],
+      meta: { page: 1, limit: 20, total: 2 },
+    });
+    expect(JSON.stringify(result)).not.toContain('내부 사건 키');
+  });
   it('U395 계산 위치가 안전한 정수 범위를 넘으면 목록 쿼리 전에 거절한다', async () => {
     const list = jest.fn();
     const repository = { list } as unknown as RefundNotificationRepository;
