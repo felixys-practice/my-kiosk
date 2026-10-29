@@ -351,7 +351,7 @@
 - [ ] T159 [US9] [A72] E2E: `test/refund-notifications.e2e-spec.ts`에 명세 9-3a의 Given/When으로 요청하고 다음 결과를 검증한다: 그 매장 점주와 운영자에게 미지급 알림이 남는다. 테스트 이름 끝에 `(QS-9-3a)`를 붙인다.
 - [X] T160 [US9] [A73] E2E: `test/refund-notifications.e2e-spec.ts`에 명세 9-4의 Given/When으로 요청하고 다음 결과를 검증한다: 자기 매장의 알림만 보인다. 테스트 이름 끝에 `(QS-9-4)`를 붙인다.
 - [ ] T161 [US9] [A74] E2E: `test/refund-notifications.e2e-spec.ts`에 명세 9-4a의 Given/When으로 요청하고 다음 결과를 검증한다: 자기 환불의 알림만 보인다. 테스트 이름 끝에 `(QS-9-4a)`를 붙인다.
-- [ ] T162 [US9] [A75] E2E: `test/refund-notifications.e2e-spec.ts`에 명세 9-4b의 Given/When으로 요청하고 다음 결과를 검증한다: 안 읽은 알림 조회에서 빠지고 전체 조회에는 읽음으로 남는다. 다른 사람의 알림은 읽음 처리할 수 없다. 테스트 이름 끝에 `(QS-9-4b)`를 붙인다.
+- [X] T162 [US9] [A75] E2E: `test/refund-notifications.e2e-spec.ts`에 명세 9-4b의 Given/When으로 요청하고 다음 결과를 검증한다: 안 읽은 알림 조회에서 빠지고 전체 조회에는 읽음으로 남는다. 다른 사람의 알림은 읽음 처리할 수 없다. 테스트 이름 끝에 `(QS-9-4b)`를 붙인다.
 - [ ] T163 [US9] [A76] E2E: `test/refund-notifications.e2e-spec.ts`에 명세 9-5의 Given/When으로 요청하고 다음 결과를 검증한다: 그 알림이 보인다. 테스트 이름 끝에 `(QS-9-5)`를 붙인다.
 
 ### 단위 테스트와 구현

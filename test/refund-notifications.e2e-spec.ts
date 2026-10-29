@@ -71,6 +71,95 @@ describe('환불 상태와 수신자별 알림 (E2E)', () => {
       .query(query);
   }
 
+  it('읽은 알림은 본인의 미읽음에서만 빠지고 반복 읽음은 최초 시각을 보존하며 다른 수신자는 읽을 수 없다 (QS-9-4b)', async () => {
+    const accepted = await accept();
+    await reject(accepted);
+    const initial = await list(ctx.owner.token).expect(200);
+    const notification = (
+      initial.body.data.items as { notificationId: string; refundId: string }[]
+    ).find((item) => item.refundId === accepted.refundId);
+    expect(notification).toBeDefined();
+    const id = notification!.notificationId;
+    const path = `/refund/notifications/${id}/read`;
+    const first = await request(ctx.server)
+      .patch(path)
+      .set('Authorization', `Bearer ${ctx.owner.token}`)
+      .send({})
+      .expect(200);
+    expect(first.body.data).toMatchObject({
+      notificationId: id,
+      isRead: true,
+      readAt: expect.any(String),
+    });
+    const repeated = await request(ctx.server)
+      .patch(path)
+      .set('Authorization', `Bearer ${ctx.owner.token}`)
+      .expect(200);
+    expect(repeated.body.data.readAt).toBe(first.body.data.readAt);
+    const unread = await list(ctx.owner.token, { unreadOnly: true }).expect(
+      200,
+    );
+    expect(unread.body.data.items).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ notificationId: id })]),
+    );
+    const coOwner = await list(ctx.coOwner.token, { unreadOnly: true }).expect(
+      200,
+    );
+    expect(coOwner.body.data.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          notificationId: id,
+          isRead: false,
+          readAt: null,
+        }),
+      ]),
+    );
+    const all = await list(ctx.owner.token).expect(200);
+    expect(all.body.data.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          notificationId: id,
+          isRead: true,
+          readAt: first.body.data.readAt,
+        }),
+      ]),
+    );
+    for (const actor of [ctx.otherShopOwner, ctx.otherCustomer, ctx.manager]) {
+      const forbidden = await request(ctx.server)
+        .patch(path)
+        .set('Authorization', `Bearer ${actor.token}`)
+        .send({})
+        .expect(404);
+      expect(forbidden.body.error.code).toBe('NOTIFICATION_NOT_FOUND');
+    }
+    await request(ctx.server)
+      .patch(path)
+      .set('Authorization', `Bearer ${ctx.owner.token}`)
+      .send({ userId: ctx.otherCustomer.id })
+      .expect(400);
+    const missing = await request(ctx.server)
+      .patch(`/refund/notifications/${randomUUID()}/read`)
+      .set('Authorization', `Bearer ${ctx.owner.token}`)
+      .send({})
+      .expect(404);
+    expect(missing.body.error.code).toBe('NOTIFICATION_NOT_FOUND');
+    await ctx.prisma.shopOwner.delete({
+      where: { shopId_userId: { shopId: ctx.shop.id, userId: ctx.coOwner.id } },
+    });
+    try {
+      const removed = await request(ctx.server)
+        .patch(path)
+        .set('Authorization', `Bearer ${ctx.coOwner.token}`)
+        .send({})
+        .expect(404);
+      expect(removed.body.error.code).toBe('NOTIFICATION_NOT_FOUND');
+    } finally {
+      await ctx.prisma.shopOwner.create({
+        data: { shopId: ctx.shop.id, userId: ctx.coOwner.id },
+      });
+    }
+  });
+
   it('점주는 현재 자기 매장의 알림만 조회한다 (QS-9-4)', async () => {
     const own = await accept();
     const other = await accept('CUSTOMER', {

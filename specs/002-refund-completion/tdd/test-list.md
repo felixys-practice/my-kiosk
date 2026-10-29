@@ -108,7 +108,7 @@ suite_baseline: green
 | A72 | Given 환불금 지급 처리 중인 매장 환불이 있을 때, When PG 취소 요청이 실패로 확정되면, Then 그 매장 점주와 운영자에게 미지급 알림이 남는다. | QS-9-3a | example | PENDING | |
 | A73 | Given 알림이 있을 때, When 점주가 자기 알림을 조회하면, Then 자기 매장의 알림만 보인다. | QS-9-4 | example | DONE | `test/refund-notifications.e2e-spec.ts` / A73 |
 | A74 | Given 알림이 있을 때, When 고객이 자기 알림을 조회하면, Then 자기 환불의 알림만 보인다. | QS-9-4a | example | PENDING | |
-| A75 | Given 안 읽은 알림이 있을 때, When 받은 사람이 그 알림을 읽음 처리하면, | QS-9-4b | example | PENDING | |
+| A75 | Given 안 읽은 알림이 있을 때, When 받은 사람이 그 알림을 읽음 처리하면, | QS-9-4b | example | DONE | `test/refund-notifications.e2e-spec.ts` / A75 |
 | A76 | Given PG 취소 결과 확인 실패·환불 금액 불일치·시스템 자동 취소 실패가 생겼을 때, When 운영자가 알림을 조회하면, Then 그 알림이 보인다. | QS-9-5 | example | PENDING | |
 | A77 | Given PG 취소 요청의 실패가 확정됐고 실제 환불금 지급액이 0원이며 다른 환불금 지급이 없을 때, When 운영자가 원인을 해결하고 재시도를 요청하면, Then 서버가 확정된 환불 금액의 취소 요청을 새 PG 취소 요청 식별자로 기록하고 PG에 보낸다. 실행자·사유를 기록하고 이용권·좌석은 복구하지 않는다. | QS-10-1 | example | DONE | `test/refund-operations.e2e-spec.ts` › … (QS-10-1) |
 | A78 | Given 자기 매장 환불의 최근 PG 취소 요청이 한도 소진·전송 전 실패·PG 거절로 이미 실패했고 실제 환불금 지급액이 0원이고 다른 미확정 지급이 없으며 지급 방식이 PG이고 활성 별도 지급 예약이 없을 때, When 점주가 PG 처리 결과를 개별 확인해 미접수 또는 거절 확정이 확인되면, Then 서버가 별도 버튼이나 사유 입력 없이 확정된 환불 금액의 취소 요청을 새 PG 취소 요청 식별자로 기록해 즉시 보낸다. 이전 실패 기록과 이용 종료는 유지하고 점주·시각·개별 확인에 따른 재시도임을 기록한다. 조회 오류이면 보내지 않고 기존 실패를 보존한다. 처리 중·취소 성공처럼 기존 실패와 모순되면 운영자에게 알리고 추가 지급을 차단한다. | QS-10-1a | example | DONE | `test/refund-operations.e2e-spec.ts` › … (QS-10-1a) |
