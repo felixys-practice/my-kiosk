@@ -1282,3 +1282,16 @@ U10~U15를 마친 뒤, 관계 검증의 비교 대상 설정을 생략하면 정
 - 전체 회귀: Test Suites: 50 passed, 50 total / Tests:       576 passed, 576 total / Time:        16.099 s, estimated 20 s; Test Suites: 13 passed, 13 total / Tests:       161 passed, 161 total / Time:        16.259 s, estimated 21 s. 리팩터링 없음.
 
 - 실패 근거: 위 U242 red 참조.
+
+- U242 구현·회귀 커밋: `f3214fb`.
+
+### U243 red
+
+- `npx jest src/refund/dto/get-refund-query.dto.spec.ts -t U243` → `Expected value: "limit"`, `Received array: []`; 1 failed.
+
+### U243
+
+- limit 최솟값을 1로 검증한다.
+- 전체 회귀: Test Suites: 50 passed, 50 total / Tests:       577 passed, 577 total / Time:        15.979 s, estimated 16 s; Test Suites: 13 passed, 13 total / Tests:       161 passed, 161 total / Time:        17.118 s. 리팩터링 없음.
+
+- 실패 근거: 위 U243 red 참조.
