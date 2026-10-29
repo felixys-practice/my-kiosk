@@ -33,6 +33,9 @@ import { RefundEventRepository } from './refund-event.repository';
 import { RefundLedgerRepository } from 'src/ledger/refund-ledger.repository';
 import { RefundQueryRepository } from './refund-query.repository';
 import { RefundQueryService } from './refund-query.service';
+import { RefundNotificationRepository } from './refund-notification.repository';
+import { RefundNotificationService } from './refund-notification.service';
+import { RefundNotificationController } from './refund-notification.controller';
 
 @Module({
   imports: [
@@ -71,8 +74,11 @@ import { RefundQueryService } from './refund-query.service';
     RefundOperationsRepository,
     RefundQueryRepository,
     RefundQueryService,
+    RefundNotificationRepository,
+    RefundNotificationService,
   ],
   controllers: [
+    RefundNotificationController,
     RefundController,
     RefundRecoveryController,
     RefundOperationsController,

@@ -1801,3 +1801,20 @@ Tests:       1 failed, 7 skipped, 8 total
 - 내부 eventKey·수신자 데이터·다른 사람 Receipt를 반환하지 않고, 공개 사건 정보와 안전한 메시지·본인의 isRead/readAt만 응답한다.
 - 전체 회귀: Test Suites: 53 passed, 53 total / Tests:       596 passed, 596 total / Time:        16.297 s, estimated 17 s; Test Suites: 13 passed, 13 total / Tests:       170 passed, 170 total / Time:        17.898 s, estimated 19 s. 리팩터링 없음.
 - 실패/기존 근거: 위 U396 실제 red 참조.
+
+- U396 커밋: `f6df615`.
+
+### A73 HTTP 연결 red
+
+- `npx jest --config ./test/jest-e2e.json test/refund-notifications.e2e-spec.ts -t QS-9-4`
+```text
+    expected 200 "OK", got 400 "Bad Request"
+Tests:       1 failed, 1 total
+```
+- 신규 수신 범위·조회·입력·응답 동작은 U389~U396·U259에서 각각 선행 실패로 구현했다. 이제 실제 HTTP 연결을 검증한다.
+
+### A73
+
+- 고정 알림 경로를 동적 환불 ID보다 먼저 등록했다. 실제 PG 거절 사건으로 현재 소유 매장 알림만 조회되는지 HTTP로 확인했다.
+- 전체 회귀: Test Suites: 53 passed, 53 total / Tests:       596 passed, 596 total / Time:        15.539 s, estimated 16 s; Test Suites: 14 passed, 14 total / Tests:       171 passed, 171 total / Time:        17.834 s, estimated 18 s. 리팩터링 없음.
+- 실패/기존 근거: 위 A73 실제 HTTP red 및 선행 단위 근거 참조.
