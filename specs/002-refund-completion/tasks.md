@@ -345,7 +345,7 @@
 
 ### HTTP 인수 테스트
 
-- [ ] T156 [US9] [A69] E2E: `test/refund-notifications.e2e-spec.ts`에 명세 9-1의 Given/When으로 요청하고 다음 결과를 검증한다: 이용 종료 완료와 환불금 지급 상태가 구분된다. 양수의 최초 접수는 환불금 지급 처리 중, 보내기 전 실패·PG 거절은 이용 종료 완료·환불금 지급 조치 필요, 0원은 환불금 지급 완료로 응답한다. 테스트 이름 끝에 `(QS-9-1)`를 붙인다.
+- [X] T156 [US9] [A69] E2E: `test/refund-notifications.e2e-spec.ts`에 명세 9-1의 Given/When으로 요청하고 다음 결과를 검증한다: 이용 종료 완료와 환불금 지급 상태가 구분된다. 양수의 최초 접수는 환불금 지급 처리 중, 보내기 전 실패·PG 거절은 이용 종료 완료·환불금 지급 조치 필요, 0원은 환불금 지급 완료로 응답한다. 테스트 이름 끝에 `(QS-9-1)`를 붙인다.
 - [ ] T157 [US9] [A70] E2E: `test/refund-notifications.e2e-spec.ts`에 명세 9-2의 Given/When으로 요청하고 다음 결과를 검증한다: 이용 종료 시각·확정된 환불 금액·실제 환불금 지급액·미지급액·환불금 지급 상태·조치 사유가 보인다. 테스트 이름 끝에 `(QS-9-2)`를 붙인다.
 - [ ] T158 [US9] [A71] E2E: `test/refund-notifications.e2e-spec.ts`에 명세 9-3의 Given/When으로 요청하고 다음 결과를 검증한다: 신청한 고객·그 매장 점주·운영자에게 미지급 알림이 남는다. 테스트 이름 끝에 `(QS-9-3)`를 붙인다.
 - [ ] T159 [US9] [A72] E2E: `test/refund-notifications.e2e-spec.ts`에 명세 9-3a의 Given/When으로 요청하고 다음 결과를 검증한다: 그 매장 점주와 운영자에게 미지급 알림이 남는다. 테스트 이름 끝에 `(QS-9-3a)`를 붙인다.
@@ -360,7 +360,7 @@
 - [ ] T165 [US9] [U250] [U251] [U252] [U253] [U254] [U255] [U256] `src/refund/refund-event.repository.ts`에 상태 전이와 같은 트랜잭션에서 알림을 생성한다. CUSTOMER 실패는 고객·현재 점주·MANAGER, STORE는 현재 점주·MANAGER, SYSTEM과 운영 이상은 MANAGER로 구분한다. 동일 사건 고유성은 null 수신자에도 중복을 막도록 DB 제약을 검증한다.
 - [X] T166 [US9] [U257] [U258] `src/refund/refund-notification.repository.ts`, `src/refund/refund-notification.service.ts`에 현재 수신 범위 조회와 사용자별 Receipt를 구현한다. 최초 readAt을 보존하고 다른 수신자의 읽음이나 공동 점주의 읽음을 함께 바꾸지 않는다.
 - [X] T167 [US9] [U259] [U260] `src/refund/refund-notification.controller.ts`, `src/refund/dto/get-refund-notification-query.dto.ts`에 GET notifications와 PATCH :notificationId/read를 연결한다. unreadOnly=false·페이지·audience 필터와 빈 본문/{}를 검증하고 요청자가 수신할 수 없는 알림은 404로 거절한다.
-- [ ] T168 [US9] [U261] `src/refund/dto/refund-response.dto.ts`, `src/refund/refund.service.ts`, `src/refund/refund-store.service.ts`에서 양수 최초 접수 202·실패 시 ACCEPTED/ACTION_REQUIRED·0원 200 PAID와 최신 GET 상태를 구분한다. PG 실패를 신청 실패 502로 반환하지 않고 응답 유실 재요청은 최초 응답을 반환한다.
+- [X] T168 [US9] [U261] `src/refund/dto/refund-response.dto.ts`, `src/refund/refund.service.ts`, `src/refund/refund-store.service.ts`에서 양수 최초 접수 202·실패 시 ACCEPTED/ACTION_REQUIRED·0원 200 PAID와 최신 GET 상태를 구분한다. PG 실패를 신청 실패 502로 반환하지 않고 응답 유실 재요청은 최초 응답을 반환한다.
 
 - [ ] T188 [US9] [A69] [A70] [A71] [A72] [A73] [A74] [A75] [A76] `test/refund-notifications.e2e-spec.ts`의 사용자 스토리 9 인수 테스트 A69부터 A76까지 8개가 모두 통과하는지 실행해 확인한 뒤에만 이 스토리를 완료로 표시한다.
 

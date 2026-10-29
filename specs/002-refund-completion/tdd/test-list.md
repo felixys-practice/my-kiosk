@@ -102,7 +102,7 @@ suite_baseline: green
 | A66 | Given 고객이 있을 때, When 자기 환불 내역을 조회하면, Then 조회된다. | QS-8-3 | example | DONE | `test/refund-history.e2e-spec.ts` / QS-8-3 |
 | A67 | Given 고객이 있을 때, When 환불 내역을 조회하면, Then 자기 환불 내역만 보인다. 다른 고객을 지정해 조회할 방법은 없다. | QS-8-4 | example | DONE | `test/refund-history.e2e-spec.ts` / QS-8-4 |
 | A68 | Given 고객지원 계정이 있을 때, When 어느 매장이나 사용자의 환불 내역을 조회하면, Then 조회된다. | QS-8-5 | example | DONE | `test/refund-history.e2e-spec.ts` / QS-8-5 |
-| A69 | Given 환불 가능한 이용권이 있을 때, When 고객 환불이나 매장 환불을 요청하면, | QS-9-1 | example | PENDING | |
+| A69 | Given 환불 가능한 이용권이 있을 때, When 고객 환불이나 매장 환불을 요청하면, | QS-9-1 | example | DONE | `test/refund-notifications.e2e-spec.ts` / A69 |
 | A70 | Given 환불 건이 있을 때, When 점주나 고객이 환불 내역을 조회하면, | QS-9-2 | example | PENDING | |
 | A71 | Given 환불금 지급 처리 중인 고객 환불이 있을 때, When PG 취소 요청이 실패로 확정되면, Then 신청한 고객·그 매장 점주·운영자에게 미지급 알림이 남는다. | QS-9-3 | example | PENDING | |
 | A72 | Given 환불금 지급 처리 중인 매장 환불이 있을 때, When PG 취소 요청이 실패로 확정되면, Then 그 매장 점주와 운영자에게 미지급 알림이 남는다. | QS-9-3a | example | PENDING | |
@@ -605,7 +605,7 @@ suite_baseline: green
 | U258 | 이미 읽은 알림을 다시 읽음 처리해도 최초 readAt이 유지된다 | FR-039 | example | DONE | `src/refund/refund-notification.service.spec.ts` / U258 |
 | U259 | unreadOnly=true 조회는 안 읽은 알림만 돌려준다 | FR-039 | example | DONE | `src/refund/refund-notification.service.spec.ts` / U259 |
 | U260 | 받을 수 없는 알림의 읽음 처리는 404 NOTIFICATION_NOT_FOUND로 거절된다 | FR-039 | example | DONE | `src/refund/refund-notification.service.spec.ts` / U260 |
-| U261 | PG 실패가 있어도 접수 응답은 502가 아니라 202와 ACCEPTED·ACTION_REQUIRED 상태다 | FR-035 | example | PENDING | |
+| U261 | PG 실패가 있어도 접수 응답은 502가 아니라 202와 ACCEPTED·ACTION_REQUIRED 상태다 | FR-035 | example | DONE | `test/refund-notifications.e2e-spec.ts` / U261 |
 
 ### `scripts/refund/check-legacy-refunds.ts, scripts/refund/migrate-legacy-refunds.ts`
 

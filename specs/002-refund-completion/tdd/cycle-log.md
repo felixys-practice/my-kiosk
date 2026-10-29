@@ -1907,3 +1907,17 @@ Tests:       1 failed, 1 skipped, 2 total
 - 선행 단위 U390과 HTTP 연결 A73을 통과한 고객 범위를 실제 다른 고객 데이터로 확인했다.
 - 전체 회귀: Test Suites: 53 passed, 53 total / Tests:       599 passed, 599 total / Time:        16.196 s; Test Suites: 14 passed, 14 total / Tests:       173 passed, 173 total / Time:        23.284 s. 리팩터링 없음.
 - 실패/기존 근거: U390/A73 선행 red·위 A74 HTTP 뮤턴트 참조.
+
+- A74 커밋: `6c39e3a`.
+
+### A69·U261 기존 승인 기능의 HTTP 통합 검증
+
+- 접수 응답은 기준 커밋 이전의 US1·US2·US5에서 구현했다. 기존 `test/refund-recovery.e2e-spec.ts`의 QS-5-1은 202·ACCEPTED/ACTION_REQUIRED·종료 시각을 검증한다.
+- `npx jest --config ./test/jest-e2e.json test/refund-notifications.e2e-spec.ts -t QS-9-1` → 최초 1 passed. 새 US9 구현의 선행 실패가 아닌 기존 동작의 추가 통합 검증이다. 새 운영 코드는 추가하지 않았다.
+- 고객/매장 ACCEPTED·NOT_SENT·REJECTED, 0원 200 PAID·PG 미호출, 외부 지급 완료 후에도 같은 키의 최초 202 응답 재생과 최신 GET의 PAID를 구분했다.
+
+### A69·U261
+
+- 이전 승인된 접수·지급·멱등 응답을 US9 통합 시나리오에서 재확인했다. 기존 코드 변경 없음.
+- 전체 회귀: Test Suites: 53 passed, 53 total / Tests:       599 passed, 599 total / Time:        18.887 s; Test Suites: 14 passed, 14 total / Tests:       174 passed, 174 total / Time:        38.463 s. 리팩터링 없음.
+- 실패/기존 근거: 기준선 이전 QS-5-1 및 위 A69 기존 동작 증거 참조.

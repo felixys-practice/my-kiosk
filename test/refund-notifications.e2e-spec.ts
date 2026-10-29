@@ -28,6 +28,7 @@ describe('환불 상태와 수신자별 알림 (E2E)', () => {
   async function accept(
     source: 'CUSTOMER' | 'STORE' = 'CUSTOMER',
     options: IssueTicketOptions = {},
+    key?: string,
   ) {
     const issued = await ctx.issuePeriodTicket(options);
     const actor =
@@ -38,9 +39,11 @@ describe('환불 상태와 수신자별 알림 (E2E)', () => {
       source === 'CUSTOMER'
         ? '/refund'
         : `/refund/shop/${(options.shop ?? ctx.shop).id}`;
-    const res = await request(ctx.server)
+    const call = request(ctx.server)
       .post(path)
-      .set('Authorization', `Bearer ${actor.token}`)
+      .set('Authorization', `Bearer ${actor.token}`);
+    if (key) call.set('Idempotency-Key', key);
+    const res = await call
       .send({
         ticketId: issued.ticketId,
         consentToTerminateTicket: true,
@@ -70,6 +73,89 @@ describe('환불 상태와 수신자별 알림 (E2E)', () => {
       .set('Authorization', `Bearer ${token}`)
       .query(query);
   }
+
+  it('고객·매장 접수는 이용 종료와 지급 상태를 구분하고 같은 키는 최초 응답을 유지한다 (QS-9-1)', async () => {
+    for (const source of ['CUSTOMER', 'STORE'] as const) {
+      for (const send of [
+        { result: 'ACCEPTED' },
+        { result: 'NOT_SENT', reason: '전송 전 실패' },
+        { result: 'REJECTED', reason: 'PG 거절' },
+      ] as const) {
+        pg.respondToSend(send);
+        const key = randomUUID();
+        const accepted = await accept(source, {}, key);
+        expect(accepted.response).toMatchObject({
+          decisionStatus: 'ACCEPTED',
+          amount: accepted.amount,
+          terminatedAt: expect.any(String),
+          payoutStatus:
+            send.result === 'ACCEPTED' ? 'PENDING' : 'ACTION_REQUIRED',
+        });
+        if (source === 'CUSTOMER' && send.result === 'NOT_SENT') {
+          const reserved = await request(ctx.server)
+            .post(`/refund/${accepted.refundId}/manual-payouts`)
+            .set('Authorization', `Bearer ${ctx.manager.token}`)
+            .set('Idempotency-Key', randomUUID())
+            .send({ amount: accepted.amount, reason: '외부 지급' })
+            .expect(201);
+          await request(ctx.server)
+            .post(
+              `/refund/${accepted.refundId}/manual-payouts/${reserved.body.data.payoutId as string}/confirm`,
+            )
+            .set('Authorization', `Bearer ${ctx.manager.token}`)
+            .set('Idempotency-Key', randomUUID())
+            .send({
+              amount: accepted.amount,
+              paidAt: new Date(Date.now() - 1000).toISOString(),
+              externalTransactionId: randomUUID(),
+              evidenceReference: '지급 증빙',
+            })
+            .expect(200);
+          const latest = await request(ctx.server)
+            .get(`/refund/${accepted.refundId}`)
+            .set('Authorization', `Bearer ${ctx.customer.token}`)
+            .expect(200);
+          expect(latest.body.data.payoutStatus).toBe('PAID');
+          const sent = pg.sendCalls.length;
+          const replay = await request(ctx.server)
+            .post('/refund')
+            .set('Authorization', `Bearer ${ctx.customer.token}`)
+            .set('Idempotency-Key', key)
+            .send({
+              ticketId: accepted.ticketId,
+              consentToTerminateTicket: true,
+            })
+            .expect(202);
+          expect(replay.body.data).toEqual(accepted.response);
+          expect(pg.sendCalls.length).toBe(sent);
+        }
+      }
+    }
+    const issued = await ctx.issuePeriodTicket();
+    await ctx.prisma.ticket.update({
+      where: { id: issued.ticketId },
+      data: { activationDeadline: new Date(Date.now() - 1000) },
+    });
+    const sent = pg.sendCalls.length;
+    const zero = await request(ctx.server)
+      .post(`/refund/shop/${ctx.shop.id}`)
+      .set('Authorization', `Bearer ${ctx.owner.token}`)
+      .send({
+        ticketId: issued.ticketId,
+        amount: 0,
+        reason: '기한 초과 후 이용 종료',
+        consentToTerminateTicket: true,
+      })
+      .expect(200);
+    expect(zero.body.data).toMatchObject({
+      decisionStatus: 'ACCEPTED',
+      payoutStatus: 'PAID',
+      amount: 0,
+      paymentCancelId: null,
+      terminatedAt: expect.any(String),
+    });
+    expect(pg.sendCalls.length).toBe(sent);
+  });
 
   it('고객은 자기 환불의 고객 수신 알림만 조회한다 (QS-9-4a)', async () => {
     const own = await accept();
