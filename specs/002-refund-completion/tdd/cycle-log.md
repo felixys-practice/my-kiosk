@@ -1661,3 +1661,27 @@ Tests:       1 failed, 1 skipped, 2 total
 - 고객 알림은 자기 주문과 자기 수신자 ID를 함께 만족하는 CUSTOMER만 조회한다.
 - 전체 회귀: Test Suites: 52 passed, 52 total / Tests:       589 passed, 589 total / Time:        15.894 s, estimated 17 s; Test Suites: 13 passed, 13 total / Tests:       170 passed, 170 total / Time:        21.523 s. 리팩터링 없음.
 - 실패/기존 근거: 위 U390 실제 red 참조.
+
+- U390 커밋: `acad802`.
+
+### U391 red
+
+- `npx jest src/refund/refund-notification.service.spec.ts -t U391`
+```text
+    -   "OR": Array [
+    -     Object {
+    -       "recipientUserId": null,
+    -     },
+    -     Object {
+    -       "recipientUserId": "manager",
+    +   "id": Object {
+    +     "in": Array [],
+    -   "audience": "OPERATOR",
+Tests:       1 failed, 2 skipped, 3 total
+```
+
+### U391
+
+- 운영자에게는 OPERATOR 알림 중 범위 발송 또는 본인 지정 수신자만 노출한다.
+- 전체 회귀: Test Suites: 52 passed, 52 total / Tests:       590 passed, 590 total / Time:        15.762 s, estimated 16 s; Test Suites: 13 passed, 13 total / Tests:       170 passed, 170 total / Time:        18.359 s, estimated 21 s. 리팩터링 없음.
+- 실패/기존 근거: 위 U391 실제 red 참조.

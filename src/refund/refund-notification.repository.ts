@@ -4,6 +4,11 @@ import type { RefundActor } from './refund-access.service';
 export function notificationScope(
   actor: RefundActor,
 ): Prisma.RefundNotificationWhereInput {
+  if (actor.role === 'MANAGER')
+    return {
+      audience: 'OPERATOR',
+      OR: [{ recipientUserId: null }, { recipientUserId: actor.userId }],
+    };
   if (actor.role === 'USER')
     return {
       audience: 'CUSTOMER',
