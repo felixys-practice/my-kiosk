@@ -14,3 +14,13 @@ export class PgCallbackUnauthorizedError extends DomainUnauthorizedError {
     this.name = 'PgCallbackUnauthorizedError';
   }
 }
+
+/** 서명 시각이 허용 범위(±300초)를 벗어남 (401) */
+export class PgCallbackExpiredError extends DomainUnauthorizedError {
+  readonly code = 'PG_CALLBACK_EXPIRED';
+
+  constructor() {
+    super('PG 콜백 서명 시각이 허용 범위를 벗어났습니다');
+    this.name = 'PgCallbackExpiredError';
+  }
+}

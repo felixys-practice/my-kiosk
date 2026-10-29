@@ -158,4 +158,39 @@ describe('PgSignatureGuard', () => {
       outcomeOf(contextOf({ headers: signedHeaders(nowSeconds, upper) })),
     ).toBe('PG_CALLBACK_UNAUTHORIZED');
   });
+
+  it('서명 시각이 300초 전이면 통과한다', () => {
+    const timestamp = nowSeconds - maxSkewSeconds;
+
+    expect(outcomeOf(contextOf({ headers: signedHeaders(timestamp) }))).toBe(
+      'PASS',
+    );
+  });
+
+  it('서명 시각이 301초 전이면 PG_CALLBACK_EXPIRED로 거절된다', () => {
+    const timestamp = nowSeconds - maxSkewSeconds - 1;
+
+    expect(outcomeOf(contextOf({ headers: signedHeaders(timestamp) }))).toBe(
+      'PG_CALLBACK_EXPIRED',
+    );
+  });
+
+  it('서명 시각이 301초 뒤이면 PG_CALLBACK_EXPIRED로 거절된다', () => {
+    const timestamp = nowSeconds + maxSkewSeconds + 1;
+
+    expect(outcomeOf(contextOf({ headers: signedHeaders(timestamp) }))).toBe(
+      'PG_CALLBACK_EXPIRED',
+    );
+  });
+
+  it('서명 시각이 십진 Unix 초가 아니면 그 값으로 서명했더라도 PG_CALLBACK_UNAUTHORIZED로 거절된다', () => {
+    const malformed = 'abc';
+    const headers: [string, string][] = [
+      ['Content-Type', 'application/json'],
+      ['X-PG-Timestamp', malformed],
+      ['X-PG-Signature', sign(malformed as unknown as number, body)],
+    ];
+
+    expect(outcomeOf(contextOf({ headers }))).toBe('PG_CALLBACK_UNAUTHORIZED');
+  });
 });

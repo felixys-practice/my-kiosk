@@ -1,7 +1,13 @@
 import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHash, createHmac, timingSafeEqual } from 'crypto';
-import { PgCallbackUnauthorizedError } from '../errors/pg-callback.error';
+import {
+  PgCallbackExpiredError,
+  PgCallbackUnauthorizedError,
+} from '../errors/pg-callback.error';
+
+/** 십진 Unix 초 */
+const decimalSeconds = /^\d+$/;
 
 /** 서명 검증에 쓰는 요청 정보(rawBody는 NestFactory의 rawBody:true로 확보한 파싱 전 바이트) */
 type SignedRequest = {
@@ -25,13 +31,27 @@ export class PgSignatureGuard implements CanActivate {
    * @param context 실행 컨텍스트
    * @returns 서명이 맞으면 true
    * @throws PgCallbackUnauthorizedError 서명이 없거나 일치하지 않을 때(401)
+   * @throws PgCallbackExpiredError 서명 시각이 허용 범위를 벗어났을 때(401)
    */
   canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest<SignedRequest>();
     const timestamp = request.headers['x-pg-timestamp'];
     const signature = request.headers['x-pg-signature'];
-    if (typeof timestamp !== 'string' || typeof signature !== 'string') {
+    // 서명 시각은 십진 Unix 초여야 한다(형식이 틀리면 인증 실패)
+    if (
+      typeof timestamp !== 'string' ||
+      typeof signature !== 'string' ||
+      !decimalSeconds.test(timestamp)
+    ) {
       throw new PgCallbackUnauthorizedError();
+    }
+
+    // 서버 시각과 서명 시각의 차이가 허용 범위(기본 300초)를 넘으면 이미 처리한 통보라도 거절한다
+    const maxSkewSeconds = this.configService.get<number>(
+      'pgCallback.maxSkewSeconds',
+    )!;
+    if (Math.abs(Date.now() / 1000 - Number(timestamp)) > maxSkewSeconds) {
+      throw new PgCallbackExpiredError();
     }
 
     // 파싱 전 원문 바이트로 계산한 서명과 상수 시간으로 비교한다(JSON 재직렬화 바디를 쓰지 않는다)
