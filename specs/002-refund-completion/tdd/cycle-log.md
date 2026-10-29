@@ -1566,3 +1566,13 @@ U10~U15를 마친 뒤, 관계 검증의 비교 대상 설정을 생략하면 정
 - 전체 회귀: Test Suites: 51 passed, 51 total / Tests:       587 passed, 587 total / Time:        15.408 s, estimated 17 s; Test Suites: 13 passed, 13 total / Tests:       170 passed, 170 total / Time:        16.895 s. 리팩터링 없음.
 
 - 실패 근거: 위 U388 red 참조.
+
+- U388 구현·회귀 커밋: `59299ef`.
+
+## US8 검수 수정 완료·재검수 준비 (2026-10-29)
+
+- P3 수정: `a432203`(U387 페이지의 안전한 정수 표현 범위), `59299ef`(U388 ORM 호출 전 계산된 오프셋의 안전한 정수 확인). 큰 페이지/표현 불가 위치는 400 BadRequestException, 표현 가능한 페이지 경계는 빈 목록 200임을 실제 HTTP에서 확인했다.
+- 회귀: `npx jest --runInBand` 51 suites·587 passed(15.408s), `npx jest --config ./test/jest-e2e.json` 13 suites·170 passed(16.895s). 각 수정은 새 테스트의 실제 실패 확인 뒤 별도 커밋했다.
+- 정적 검사: tsc --noEmit, 수정 4개 파일 ESLint 오류/경고 없음. 환불 대상·확정액·지급 정책은 변경하지 않았다.
+- A65·A68 절차 이탈의 사용자 수용 여부는 대기 중이다. 사후 뮤턴트를 선행 실패로 취급하지 않으며 원래 기록과 커밋 순서를 보존한다. 코드 결함 해결 여부와 절차 수용 여부를 구분해 재검수를 요청한다.
+- 검수 패널 설정: 모델 변경 안내 처리 뒤 Sol로 전환된 상태를 발견했다. 검수 발화를 추가로 요청하기 전에 /model 화면에서 Astra와 high를 이 세션에만 다시 지정했고 `Model changed to gpt-6-astra high for this session only`와 패널의 GPT-6-Astra high 표시를 확인했다. 재검수는 같은 US8 세션에서 진행한다.
