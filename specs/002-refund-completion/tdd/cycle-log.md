@@ -1295,3 +1295,17 @@ U10~U15를 마친 뒤, 관계 검증의 비교 대상 설정을 생략하면 정
 - 전체 회귀: Test Suites: 50 passed, 50 total / Tests:       577 passed, 577 total / Time:        15.979 s, estimated 16 s; Test Suites: 13 passed, 13 total / Tests:       161 passed, 161 total / Time:        17.118 s. 리팩터링 없음.
 
 - 실패 근거: 위 U243 red 참조.
+
+- U243 구현·회귀 커밋: `2a46bc7`.
+
+### U241 경계 뮤턴트
+
+- 최초 `npx jest src/refund/dto/get-refund-query.dto.spec.ts -t U241`는 1 passed(앞선 U242 상한 구현이 이미 허용).
+- `@Max(100)`을 일시적으로 99로 바꾸자 같은 명령에서 `"max": "limit must not be greater than 99"`, 1 failed. 100으로 원복했다.
+
+### U241
+
+- 허용 최대값 100의 변환·검증을 경계 테스트로 고정했다. 운영 구현 변경 없음.
+- 전체 회귀: Test Suites: 50 passed, 50 total / Tests:       578 passed, 578 total / Time:        16.488 s; Test Suites: 13 passed, 13 total / Tests:       161 passed, 161 total / Time:        16.653 s, estimated 17 s. 리팩터링 없음.
+
+- 실패 근거: 위 U241 경계 뮤턴트 참조.

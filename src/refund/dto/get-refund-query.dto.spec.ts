@@ -4,6 +4,13 @@ import { validate } from 'class-validator';
 import { GetRefundQueryDto } from './get-refund-query.dto';
 
 describe('환불 목록 쿼리', () => {
+  it('U241 목록 크기 100은 허용한다', async () => {
+    const query = plainToInstance(GetRefundQueryDto, { limit: '100' });
+    expect({ limit: query.limit, errors: await validate(query) }).toEqual({
+      limit: 100,
+      errors: [],
+    });
+  });
   it('U243 목록 크기 0은 허용하지 않는다', async () => {
     const errors = await validate(
       plainToInstance(GetRefundQueryDto, { limit: '0' }),
