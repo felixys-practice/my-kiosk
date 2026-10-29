@@ -600,7 +600,7 @@ suite_baseline: green
 | U253 | QUERY_FAILED 전환 알림은 운영자에게 생긴다 | FR-037 | example | DONE | src/refund/refund-result.integration.spec.ts / 연속 조회 오류 5회에서 결과 확인 실패(QUERY_FAILED)와 운영자 알림이 기록된다 |
 | U254 | 금액 불일치 알림은 운영자에게 생긴다 | FR-037 | example | DONE | src/refund/refund-result.integration.spec.ts / PG 실제액 불일치는 운영자 알림을 저장한다 |
 | U255 | 같은 사건을 두 번 처리해도 알림은 1건이다 | FR-037 | example | DONE | src/prisma/refund-constraints.integration.spec.ts / 같은 사건·수신 범위의 수신자 없는 알림 및 특정 수신자 알림 고유성 2개 |
-| U256 | 상태 전이가 롤백되면 알림도 남지 않는다 | FR-037 | example | PENDING | |
+| U256 | 상태 전이가 롤백되면 알림도 남지 않는다 | FR-037 | example | DONE | `src/refund/refund-result.integration.spec.ts` / U256 |
 | U257 | 공동 점주 한 명의 읽음 처리는 다른 점주의 읽음 상태를 바꾸지 않는다 | FR-039 | example | DONE | `src/refund/refund-notification.service.spec.ts` / U257 |
 | U258 | 이미 읽은 알림을 다시 읽음 처리해도 최초 readAt이 유지된다 | FR-039 | example | DONE | `src/refund/refund-notification.service.spec.ts` / U258 |
 | U259 | unreadOnly=true 조회는 안 읽은 알림만 돌려준다 | FR-039 | example | DONE | `src/refund/refund-notification.service.spec.ts` / U259 |

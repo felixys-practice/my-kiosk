@@ -42,6 +42,7 @@ import { RefundPgCheckService } from './refund-pg-check.service';
 import { RefundRetryService } from './refund-retry.service';
 import { RefundOperationsService } from './refund-operations.service';
 import { RefundOperationsRepository } from './refund-operations.repository';
+import { RefundEventRepository } from './refund-event.repository';
 
 /**
  * 환불금 지급 결과 공통 처리를 실제 PostgreSQL에서 확인한다 (US4, tasks T068~T071)
@@ -671,6 +672,44 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       paidAt: null,
       paidAmount: refundAmount,
       reviewRequired: true,
+    });
+  });
+
+  it('U256 결과 저장 도중 실패하면 이미 기록한 알림과 지급 상태를 함께 롤백한다', async () => {
+    const pending = await createPendingRefund();
+    const events = app.get(RefundEventRepository);
+    const original = events.recordNotification.bind(events);
+    let insideCount = 0;
+    const failure = new Error('알림 저장 뒤 후속 처리 실패');
+    const spy = jest
+      .spyOn(events, 'recordNotification')
+      .mockImplementation(async (tx, input) => {
+        await original(tx, input);
+        insideCount = await tx.refundNotification.count({
+          where: { refundId: pending.refundId },
+        });
+        throw failure;
+      });
+    try {
+      await expect(
+        service.applyPgResult({
+          paymentCancelId: pending.paymentCancelId,
+          outcome: { kind: 'FAILED', reason: 'PG 거절' },
+        }),
+      ).rejects.toThrow(failure);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(insideCount).toBe(1);
+    const refund = await prisma.refund.findUniqueOrThrow({
+      where: { id: pending.refundId },
+      include: { paymentCancels: true, notifications: true },
+    });
+    expect(refund).toMatchObject({
+      payoutStatus: RefundPayoutStatus.PENDING,
+      paidAmount: 0,
+      notifications: [],
+      paymentCancels: [{ status: PaymentCancelStatus.REQUESTED }],
     });
   });
 

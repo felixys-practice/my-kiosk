@@ -2073,3 +2073,43 @@ expect(received).toHaveLength(expected)
 운영 이상 3종이 MANAGER에게만 조회되는지 실제 업무 경로와 연결해 확인했다.
 - 전체 회귀: Test Suites: 53 passed, 53 total / Tests:       599 passed, 599 total / Time:        14.34 s, estimated 15 s; Test Suites: 14 passed, 14 total / Tests:       178 passed, 178 total / Time:        16.902 s, estimated 17 s. 리팩터링 없음.
 - 실패/기존 근거: 기존 U252~U254 및 위 A76 최초 실행·뮤턴트 참조.
+
+- A76 커밋: `c705d80`.
+
+### U256 既存トランザクションの補充検証
+
+- 정정: 위 제목은 '기존 트랜잭션의 보충 검증'을 뜻한다. 기준 커밋 이전 공통 결과 처리는 같은 트랜잭션에서 알림을 저장한다. 새 U256 첫 실행은 1 passed이며 새 구현의 선행 실패로 취급하지 않는다.
+- 실제 DB에서 알림 1건을 저장·조회한 직후 예외를 내면 트랜잭션 밖에는 알림 0건, 환불 PENDING, 시도 REQUESTED가 유지된다. 저장 단계까지 도달했음을 확인해 알림을 전혀 쓰지 않는 구현이 통과하지 못하게 했다.
+- 트랜잭션을 없애고 Prisma 기본 클라이언트로 각각 커밋한 뮤턴트의 실제 실패:
+```text
+expect(received).toMatchObject(expected)
+
+    - Expected  -  3
+    + Received  + 16
+
+      Object {
+    -   "notifications": Array [],
+    +   "notifications": Array [
+    +     Object {
+    +       "audience": "OPERATOR",
+    +       "createdAt": 2026-10-29T16:41:49.037Z,
+    +       "eventKey": "PG_REJECTED:d958b7e0-0c60-424f-a33e-4b416d6a61d2",
+    +       "id": "24c158f9-75e6-49e3-a13a-e19f354ed925",
+    +       "kind": "PG_REJECTED",
+    +       "manualRefundPayoutId": null,
+    +       "paymentCancelId": "d958b7e0-0c60-424f-a33e-4b416d6a61d2",
+    +       "recipientUserId": null,
+    +       "refundId": "5fe20848-d2c1-4b3c-b75f-c5e227815a27",
+    +       "shopId": "8a6c58c6-7022-41a1-bc1c-4f92a20701dd",
+    +     },
+    +   ],
+        "paidAmount": 0,
+        "paymentCancels": Array 
+```
+- 원복했다.
+
+### U256
+
+상태 전이 실패 때 알림·환불·시도가 실제 DB에서 함께 롤백됨을 확인했다.
+- 전체 회귀: Test Suites: 53 passed, 53 total / Tests:       600 passed, 600 total / Time:        17.14 s; Test Suites: 14 passed, 14 total / Tests:       178 passed, 178 total / Time:        23.929 s. 리팩터링 없음.
+- 실패/기존 근거: 위 U256 최초 실행·트랜잭션 제거 뮤턴트 참조.
