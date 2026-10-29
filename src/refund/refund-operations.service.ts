@@ -1,5 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { ManualRefundPayoutStatus, Prisma } from '@prisma/client';
+import { ConfigService } from '@nestjs/config';
+import {
+  ManualRefundPayoutStatus,
+  Prisma,
+  RefundNotificationAudience,
+} from '@prisma/client';
 import { TransactionClient } from 'src/prisma/prisma.service';
 import { RefundAccessService, RefundActor } from './refund-access.service';
 import {
@@ -10,6 +15,7 @@ import { RefundLockingRepository } from './refund-locking.repository';
 import { RefundRepository } from './refund.repository';
 import { RefundOperationsRepository } from './refund-operations.repository';
 import { RefundLedgerRepository } from 'src/ledger/refund-ledger.repository';
+import { RefundEventRepository } from './refund-event.repository';
 import { hasUnresolvedPayout } from './refund-retry.policy';
 import {
   evaluateManualReservation,
@@ -27,6 +33,9 @@ import {
   RefundPayoutNotActionableError,
   RefundPayoutUnresolvedError,
 } from './errors';
+
+/** 별도 지급 장기 미확인 알림 종류(API 계약 §10 actionCode와 같은 이름) */
+const manualConfirmationAlertKind = 'MANUAL_CONFIRMATION_REQUIRED';
 
 /** 별도 환불금 지급 예약 요청 */
 export type ManualReservationCommand = {
@@ -103,6 +112,8 @@ export class RefundOperationsService {
     private readonly refundRepository: RefundRepository,
     private readonly operationsRepository: RefundOperationsRepository,
     private readonly ledgerRepository: RefundLedgerRepository,
+    private readonly eventRepository: RefundEventRepository,
+    private readonly configService: ConfigService,
   ) {}
 
   /**
@@ -421,6 +432,35 @@ export class RefundOperationsService {
         };
       },
     );
+  }
+
+  /**
+   * 예약 뒤 확인 기준 시간이 지나도 결과가 없는 별도 지급마다 운영자 미확인 알림을 한 번 남긴다
+   * @param now 탐색 시각
+   */
+  async alertUnconfirmedManualPayouts(now: Date): Promise<void> {
+    const alertSeconds = this.configService.get<number>(
+      'refund.manualConfirmAlertSeconds',
+    )!;
+    const reservations =
+      await this.operationsRepository.findUnalertedReservations(
+        new Date(now.getTime() - alertSeconds * 1000),
+        this.configService.get<number>('refund.recoveryBatchSize')!,
+        manualConfirmationAlertKind,
+      );
+    // 예약은 그대로 두고(시간 초과만으로 풀지 않는다) 예약 ID 기반 사건 키로 한 번만 알린다
+    for (const reservation of reservations) {
+      await this.refundRepository.runInTransaction((tx) =>
+        this.eventRepository.recordNotification(tx, {
+          refundId: reservation.refundId,
+          manualRefundPayoutId: reservation.payoutId,
+          kind: manualConfirmationAlertKind,
+          audience: RefundNotificationAudience.OPERATOR,
+          shopId: reservation.shopId,
+          eventKey: `${manualConfirmationAlertKind}:${reservation.payoutId}`,
+        }),
+      );
+    }
   }
 
   /**

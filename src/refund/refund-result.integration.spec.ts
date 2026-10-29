@@ -2713,6 +2713,8 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
   });
 
   describe('별도 환불금 지급', () => {
+    /** 장기 미확인 알림 테스트마다 겹치지 않게 내려가는 예약 연도 */
+    let manualAlertYear = 1975;
     const reserveReason = 'PG 원인 확인 후 계좌 이체로 지급';
 
     it('별도 지급 예약은 미지급액과 같은 금액을 RESERVED로 저장하고 환불 지급 방식을 MANUAL로 바꾼다', async () => {
@@ -3133,6 +3135,94 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       );
 
       expect(rejected).toBe('REFUND_AMOUNT_REVIEW_INCOMPLETE');
+    });
+
+    /** 별도 지급 장기 미확인 알림 기준(초, 설정 기본값) */
+    const manualConfirmAlertSeconds = 3600;
+
+    /**
+     * 예약 시각을 과거로 옮긴 별도 지급 예약을 만든다(다른 테스트의 예약과 겹치지 않는 시각)
+     * @returns 환불·예약 ID와 예약 시각
+     */
+    async function oldReservation() {
+      const reserved = await reservedPayout();
+      const reservedAt = new Date(Date.UTC(manualAlertYear--, 0, 1));
+      await prisma.manualRefundPayout.update({
+        where: { id: reserved.payoutId },
+        data: { reservedAt },
+      });
+      return { ...reserved, reservedAt };
+    }
+
+    /**
+     * 예약의 장기 미확인 알림 수를 센다
+     * @param payoutId 예약
+     * @returns 알림 수
+     */
+    function unconfirmedAlerts(payoutId: string) {
+      return prisma.refundNotification.count({
+        where: {
+          manualRefundPayoutId: payoutId,
+          kind: 'MANUAL_CONFIRMATION_REQUIRED',
+          audience: RefundNotificationAudience.OPERATOR,
+        },
+      });
+    }
+
+    it('별도 지급 예약 후 3600초가 지나면 운영자에게 미확인 알림 1건을 남기고 예약은 유지한다', async () => {
+      const reserved = await oldReservation();
+
+      await app
+        .get(RefundOperationsService)
+        .alertUnconfirmedManualPayouts(
+          new Date(
+            reserved.reservedAt.getTime() + manualConfirmAlertSeconds * 1000,
+          ),
+        );
+
+      const payout = await prisma.manualRefundPayout.findUniqueOrThrow({
+        where: { id: reserved.payoutId },
+      });
+      expect({
+        alerts: await unconfirmedAlerts(reserved.payoutId),
+        status: payout.status,
+      }).toEqual({ alerts: 1, status: ManualRefundPayoutStatus.RESERVED });
+    });
+
+    it('별도 지급 예약 후 3599초에는 미확인 알림을 남기지 않는다', async () => {
+      const reserved = await oldReservation();
+
+      await app
+        .get(RefundOperationsService)
+        .alertUnconfirmedManualPayouts(
+          new Date(
+            reserved.reservedAt.getTime() +
+              (manualConfirmAlertSeconds - 1) * 1000,
+          ),
+        );
+
+      expect(await unconfirmedAlerts(reserved.payoutId)).toBe(0);
+    });
+
+    it('정기 탐색이 기준 시간 뒤 반복돼도 별도 지급 미확인 알림은 1건이고 예약은 유지된다', async () => {
+      const reserved = await oldReservation();
+      // 같은 시각 이전에 조회 예정인 다른 테스트 데이터가 있어도 조회가 끝나도록 처리 중으로 응답한다
+      pgGateway.inquireCancel.mockResolvedValue({ result: 'IN_PROGRESS' });
+      const after = new Date(
+        reserved.reservedAt.getTime() + manualConfirmAlertSeconds * 1000,
+      );
+      const recovery = app.get(RefundRecoveryService);
+
+      await recovery.sweep(after);
+      await recovery.sweep(new Date(after.getTime() + 600_000));
+
+      const payout = await prisma.manualRefundPayout.findUniqueOrThrow({
+        where: { id: reserved.payoutId },
+      });
+      expect({
+        alerts: await unconfirmedAlerts(reserved.payoutId),
+        status: payout.status,
+      }).toEqual({ alerts: 1, status: ManualRefundPayoutStatus.RESERVED });
     });
   });
 });

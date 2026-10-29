@@ -14,6 +14,7 @@ import { RefundDispatchService } from './refund-dispatch.service';
 import { RefundResultService } from './refund-result.service';
 import { inquiryBackoffSeconds } from './refund-recovery.policy';
 import { RefundWorkRepository } from './refund-work.repository';
+import { RefundOperationsService } from './refund-operations.service';
 import { TransactionLoggerService } from 'src/logger/transaction-logger.service';
 import { refundRecoveryQueueName } from './refund-recovery.scheduler';
 import { InjectQueue } from '@nestjs/bullmq';
@@ -46,12 +47,13 @@ export class RefundRecoveryService {
     private readonly configService: ConfigService,
     private readonly txLogger: TransactionLoggerService,
     private readonly workRepository: RefundWorkRepository,
+    private readonly operationsService: RefundOperationsService,
     @InjectQueue(refundRecoveryQueueName) private readonly recoveryQueue: Queue,
     @Inject(REFUND_PG_GATEWAY) private readonly pgGateway: RefundPgGateway,
   ) {}
 
   /**
-   * DB에서 조회 예정 시각이 지난 PG 취소 요청을 찾아 조회한다(정기 탐색)
+   * DB에서 조회 예정 시각이 지난 PG 취소 요청을 찾아 조회하고, 오래 확인되지 않은 별도 지급을 알린다(정기 탐색)
    * @param now 탐색 시각
    */
   async sweep(now: Date): Promise<void> {
@@ -66,6 +68,10 @@ export class RefundRecoveryService {
       const itemNow = new Date(now.getTime() + (Date.now() - startedAt));
       await this.inquireAttempt(paymentCancelId, itemNow);
     }
+    // 예약 뒤 확인 기준 시간이 지난 별도 지급마다 운영자 미확인 알림을 한 번 남긴다(data-model §9)
+    await this.operationsService.alertUnconfirmedManualPayouts(
+      new Date(now.getTime() + (Date.now() - startedAt)),
+    );
   }
 
   /**

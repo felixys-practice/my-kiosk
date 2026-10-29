@@ -4,7 +4,7 @@ import {
   RefundPayoutMethod,
   RefundPayoutStatus,
 } from '@prisma/client';
-import { TransactionClient } from 'src/prisma/prisma.service';
+import { PrismaService, TransactionClient } from 'src/prisma/prisma.service';
 
 /**
  * 별도 환불금 지급 저장소 (data-model §5)
@@ -12,6 +12,8 @@ import { TransactionClient } from 'src/prisma/prisma.service';
  */
 @Injectable()
 export class RefundOperationsRepository {
+  constructor(private readonly prisma: PrismaService) {}
+
   /**
    * 별도 환불금 지급 예약을 저장하고 환불 지급 방식을 MANUAL로 고정한다
    * - 환불은 조치 필요 그대로다(예약은 지급 완료가 아니다)
@@ -235,5 +237,42 @@ export class RefundOperationsRepository {
         actionCode: null,
       },
     });
+  }
+
+  /**
+   * 예약 뒤 기준 시각까지 결과가 없고 아직 미확인 알림을 남기지 않은 별도 지급을 찾는다
+   * @param reservedBefore 이 시각 이전에 예약된 것만
+   * @param limit 한 번에 처리할 최대 건수
+   * @param alertKind 미확인 알림 종류
+   * @returns 예약·환불·매장
+   */
+  async findUnalertedReservations(
+    reservedBefore: Date,
+    limit: number,
+    alertKind: string,
+  ): Promise<{ payoutId: string; refundId: string; shopId: string }[]> {
+    const payouts = await this.prisma.manualRefundPayout.findMany({
+      where: {
+        status: ManualRefundPayoutStatus.RESERVED,
+        reservedAt: { lte: reservedBefore },
+        notifications: { none: { kind: alertKind } },
+      },
+      orderBy: { reservedAt: 'asc' },
+      take: limit,
+      select: {
+        id: true,
+        refundId: true,
+        refund: {
+          select: {
+            payment: { select: { order: { select: { shopId: true } } } },
+          },
+        },
+      },
+    });
+    return payouts.map((payout) => ({
+      payoutId: payout.id,
+      refundId: payout.refundId,
+      shopId: payout.refund.payment.order.shopId,
+    }));
   }
 }

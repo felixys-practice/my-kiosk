@@ -6,6 +6,7 @@ import { TransactionClient } from 'src/prisma/prisma.service';
 export type RefundNotificationInput = {
   refundId: string;
   paymentCancelId?: string; // 관련 PG 취소 요청
+  manualRefundPayoutId?: string; // 관련 별도 환불금 지급
   kind: string; // 알림 종류
   audience: RefundNotificationAudience;
   shopId: string; // 원래 주문의 매장

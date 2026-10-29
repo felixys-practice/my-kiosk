@@ -279,9 +279,9 @@ suite_baseline: green
 | U369 | 시스템 자동 취소(SYSTEM) 환불의 PG 취소 요청 실패·조치 필요 알림은 운영자(MANAGER)에게만 저장한다 (계약 §9, US6 검수 2) | FR-028 | example | DONE | `src/refund/refund-result.integration.spec.ts` › 시스템 자동 취소 환불의 PG 거절은 운영자에게만 알린다; QS-5-12 수신자 확인 |
 | U370 | 결제 승인 콜백의 금액이 원 단위 정수가 아니면 형식 오류(400)다 (US6 검수 3) | FR-030 | example | DONE | `src/payment/dto/pg-callback.dto.spec.ts` › 승인 금액이 원 단위 정수가 아니면(1000.5) 형식 오류(400)다 |
 | U371 | 결제 승인 콜백은 200으로 수신 확인한다 (계약 §2·§7, US6 검수 1, 기존 E2E 기대값 변경 — 사용자 결정) | FR-030 | example | DONE | `test/refund-payment-mismatch.e2e-spec.ts` 등 결제 콜백 `.expect(200)` |
-| U372 | 환불에 속하지 않는 별도 지급 예약 ID로 결과 등록·미지급 확인을 요청하면 404 MANUAL_PAYOUT_NOT_FOUND다 (계약 §10, US10 진행 중 추가) | FR-046 | example | PENDING | |
-| U373 | 이미 실패로 종료된 예약의 결과 등록은 409 MANUAL_PAYOUT_STATE_CONFLICT다 (계약 §10, US10 진행 중 추가) | FR-046 | example | PENDING | |
-| U374 | 결과 등록 금액이 예약 금액과 다르면 400 REFUND_OUTSTANDING_AMOUNT_MISMATCH다 (계약 §5 '예약과 같은 금액', US10 진행 중 추가) | FR-046 | example | PENDING | |
+| U372 | 환불에 속하지 않는 별도 지급 예약 ID로 결과 등록·미지급 확인을 요청하면 404 MANUAL_PAYOUT_NOT_FOUND다 (계약 §10, US10 진행 중 추가) | FR-046 | example | DONE | `src/refund/refund-result.integration.spec.ts` › 별도 환불금 지급 › 환불에 속하지 않는 별도 지급 예약 ID로 결과를 등록하면… |
+| U373 | 이미 실패로 종료된 예약의 결과 등록은 409 MANUAL_PAYOUT_STATE_CONFLICT다 (계약 §10, US10 진행 중 추가) | FR-046 | example | DONE | `src/refund/refund-result.integration.spec.ts` › 별도 환불금 지급 › 이미 실패로 종료된 예약의 결과 등록은… |
+| U374 | 결과 등록 금액이 예약 금액과 다르면 400 REFUND_OUTSTANDING_AMOUNT_MISMATCH다 (계약 §5 '예약과 같은 금액', US10 진행 중 추가) | FR-046 | example | DONE | `src/refund/refund-result.integration.spec.ts` › 별도 환불금 지급 › 결과 등록 금액이 예약 금액과 다르면… |
 
 ### `src/refund/refund-idempotency.service.ts`
 
@@ -527,25 +527,25 @@ suite_baseline: green
 | U202 | 오류 문자열만 있어 실행 여부가 불명확한 거절은 거절 확정으로 보지 않아 새 요청을 만들지 않는다 | FR-057 | example | DONE | `src/pg/pg.service.spec.ts` › 실패 상태 없이 오류 문자열만 있는 조회 응답은 거절 확정이 아니라 QUERY_ERROR로 분류된다 (서비스 처리는 U199) |
 | U203 | 지급 방식이 MANUAL인 환불은 개별 확인으로 새 요청을 만들지 않는다 | FR-057 | example | DONE | `src/refund/refund-result.integration.spec.ts` › 실패가 확정된 요청의 개별 확인 › 지급 방식이 별도 지급(MANUAL)인 환불은… |
 | U204 | 개별 확인으로 만든 새 요청은 lastInquiryAt을 승계하고 개별 확인 재시도임을 기록한다 | FR-057 | example | DONE | `src/refund/refund-result.integration.spec.ts` › 실패가 확정된 요청의 개별 확인 › 개별 확인으로 만든 새 요청은 실패한 요청의 최근 조회 시각을 승계하고… |
-| U205 | 별도 지급 예약은 미지급액과 같은 금액을 RESERVED·MANUAL로 저장한다 | FR-045 | example | PENDING | |
-| U206 | 예약 금액이 미지급액과 다르면 REFUND_OUTSTANDING_AMOUNT_MISMATCH로 거절된다 | FR-045 | example | PENDING | |
-| U207 | 미확정 PG 취소 요청이 있으면 별도 지급 예약은 REFUND_PAYOUT_UNRESOLVED로 거절된다 | FR-043 | example | PENDING | |
-| U208 | 지급 결과 등록은 예약과 같은 금액·거래 ID·증빙이 있으면 SUCCEEDED·paidAmount·원장을 함께 저장한다 | FR-046 | example | PENDING | |
+| U205 | 별도 지급 예약은 미지급액과 같은 금액을 RESERVED·MANUAL로 저장한다 | FR-045 | example | DONE | `src/refund/refund-result.integration.spec.ts` › 별도 환불금 지급 › 별도 지급 예약은 미지급액과 같은 금액을 RESERVED로 저장하고… |
+| U206 | 예약 금액이 미지급액과 다르면 REFUND_OUTSTANDING_AMOUNT_MISMATCH로 거절된다 | FR-045 | example | DONE | `src/refund/refund-manual-payout.policy.spec.ts` › 예약 금액이 미지급액과 다르면 REFUND_OUTSTANDING_AMOUNT_MISMATCH로 거절한다 |
+| U207 | 미확정 PG 취소 요청이 있으면 별도 지급 예약은 REFUND_PAYOUT_UNRESOLVED로 거절된다 | FR-043 | example | DONE | `src/refund/refund-manual-payout.policy.spec.ts` › 결과가 확정되지 않은 PG 취소 요청이 있으면 REFUND_PAYOUT_UNRESOLVED로 거절한다 |
+| U208 | 지급 결과 등록은 예약과 같은 금액·거래 ID·증빙이 있으면 SUCCEEDED·paidAmount·원장을 함께 저장한다 | FR-046 | example | DONE | `src/refund/refund-result.integration.spec.ts` › 별도 환불금 지급 › 지급 결과 등록은 예약과 같은 금액·거래 ID·증빙이 있으면… |
 | U209 | 지급 결과 등록의 지급 시각이 미래이면 400을 받는다 | FR-046 | example | PENDING | |
 | U210 | 외부 거래 ID 200자는 허용된다 | FR-046 | example | PENDING | |
 | U211 | 외부 거래 ID 201자는 400을 받는다 | FR-046 | example | PENDING | |
-| U212 | 증빙이 없으면 MANUAL_PAYOUT_EVIDENCE_REQUIRED로 거절된다 | FR-046 | example | PENDING | |
-| U213 | 같은 지급 결과를 다시 등록하면 최초 결과를 받고 원장은 1건이다 | FR-046 | example | PENDING | |
-| U214 | 다른 환불의 외부 거래 ID를 쓰면 MANUAL_PAYOUT_REFERENCE_REUSED로 거절된다 | FR-046 | example | PENDING | |
-| U215 | 부족액 지급 결과 등록 시 부족 지급 검토가 완료되고 Refund가 PAID가 된다 | FR-048 | example | PENDING | |
-| U216 | 미지급 확인은 증빙·사유가 있으면 예약을 FAILED로, Refund를 ACTION_REQUIRED로 바꾼다 | FR-047 | example | PENDING | |
-| U217 | 미지급 확인에 증빙이 없으면 MANUAL_PAYOUT_EVIDENCE_REQUIRED로 거절되고 예약은 유지된다 | FR-047 | example | PENDING | |
-| U218 | 시간이 지나도 예약 상태는 바뀌지 않는다 | FR-047 | example | PENDING | |
-| U219 | 초과 취소 검토 등록은 미지급액 0이면 Refund를 PAID로 바꾸고 확정 금액·실제액·원장은 그대로 둔다 | FR-049 | example | PENDING | |
-| U220 | 부족액이 남은 환불의 검토 등록은 REFUND_AMOUNT_REVIEW_INCOMPLETE로 거절된다 | FR-049 | example | PENDING | |
-| U221 | 예약 후 3600초가 지나면 미확인 알림 1건이 생긴다 | FR-037 | example | PENDING | |
-| U222 | 예약 후 3599초에는 미확인 알림이 생기지 않는다 | FR-037 | example | PENDING | |
-| U223 | 알림 생성 뒤 탐색이 반복돼도 미확인 알림은 늘지 않는다 | FR-037 | example | PENDING | |
+| U212 | 증빙이 없으면 MANUAL_PAYOUT_EVIDENCE_REQUIRED로 거절된다 | FR-046 | example | DONE | `src/refund/refund-result.integration.spec.ts` › 별도 환불금 지급 › 지급 증빙이 없으면 MANUAL_PAYOUT_EVIDENCE_REQUIRED로… |
+| U213 | 같은 지급 결과를 다시 등록하면 최초 결과를 받고 원장은 1건이다 | FR-046 | example | DONE | `src/refund/refund-result.integration.spec.ts` › 별도 환불금 지급 › 같은 지급 결과를 다른 멱등 키로 다시 등록하면… |
+| U214 | 다른 환불의 외부 거래 ID를 쓰면 MANUAL_PAYOUT_REFERENCE_REUSED로 거절된다 | FR-046 | example | DONE | `src/refund/refund-result.integration.spec.ts` › 별도 환불금 지급 › 다른 환불의 별도 지급에서 이미 쓴 거래 ID로 등록하면… |
+| U215 | 부족액 지급 결과 등록 시 부족 지급 검토가 완료되고 Refund가 PAID가 된다 | FR-048 | example | DONE | `src/refund/refund-result.integration.spec.ts` › 별도 환불금 지급 › PG가 적게 취소한 환불의 부족액 지급 결과를 등록하면… |
+| U216 | 미지급 확인은 증빙·사유가 있으면 예약을 FAILED로, Refund를 ACTION_REQUIRED로 바꾼다 | FR-047 | example | DONE | `src/refund/refund-result.integration.spec.ts` › 별도 환불금 지급 › 미지급 확인은 증빙·사유가 있으면… |
+| U217 | 미지급 확인에 증빙이 없으면 MANUAL_PAYOUT_EVIDENCE_REQUIRED로 거절되고 예약은 유지된다 | FR-047 | example | DONE | `src/refund/refund-result.integration.spec.ts` › 별도 환불금 지급 › 미지급 확인에 증빙이 없으면… |
+| U218 | 시간이 지나도 예약 상태는 바뀌지 않는다 | FR-047 | example | DONE | `src/refund/refund-result.integration.spec.ts` › 별도 환불금 지급 › 별도 지급 예약 후 3600초가 지나면…·정기 탐색이 기준 시간 뒤 반복돼도…(예약 RESERVED 유지 단언) |
+| U219 | 초과 취소 검토 등록은 미지급액 0이면 Refund를 PAID로 바꾸고 확정 금액·실제액·원장은 그대로 둔다 | FR-049 | example | DONE | `src/refund/refund-result.integration.spec.ts` › 별도 환불금 지급 › 초과 취소 검토 등록은 미지급액이 0이면… |
+| U220 | 부족액이 남은 환불의 검토 등록은 REFUND_AMOUNT_REVIEW_INCOMPLETE로 거절된다 | FR-049 | example | DONE | `src/refund/refund-result.integration.spec.ts` › 별도 환불금 지급 › 부족액이 남은 환불의 검토 등록은… |
+| U221 | 예약 후 3600초가 지나면 미확인 알림 1건이 생긴다 | FR-037 | example | DONE | `src/refund/refund-result.integration.spec.ts` › 별도 환불금 지급 › 별도 지급 예약 후 3600초가 지나면 운영자에게 미확인 알림 1건을… |
+| U222 | 예약 후 3599초에는 미확인 알림이 생기지 않는다 | FR-037 | example | DONE | `src/refund/refund-result.integration.spec.ts` › 별도 환불금 지급 › 별도 지급 예약 후 3599초에는 미확인 알림을 남기지 않는다 |
+| U223 | 알림 생성 뒤 탐색이 반복돼도 미확인 알림은 늘지 않는다 | FR-037 | example | DONE | `src/refund/refund-result.integration.spec.ts` › 별도 환불금 지급 › 정기 탐색이 기준 시간 뒤 반복돼도 별도 지급 미확인 알림은 1건이고… |
 | U224 | 고객·점주의 예약·결과 등록·미지급 확인·검토 요청은 403 REFUND_FORBIDDEN으로 거절된다 | FR-050 | example | PENDING | |
 
 ### `src/pg/guards/pg-signature.guard.ts`
