@@ -1685,3 +1685,24 @@ Tests:       1 failed, 2 skipped, 3 total
 - 운영자에게는 OPERATOR 알림 중 범위 발송 또는 본인 지정 수신자만 노출한다.
 - 전체 회귀: Test Suites: 52 passed, 52 total / Tests:       590 passed, 590 total / Time:        15.762 s, estimated 16 s; Test Suites: 13 passed, 13 total / Tests:       170 passed, 170 total / Time:        18.359 s, estimated 21 s. 리팩터링 없음.
 - 실패/기존 근거: 위 U391 실제 red 참조.
+
+- U391 커밋: `29057ca`.
+
+### U392 red
+
+- `npx jest src/refund/dto/get-refund-notification-query.dto.spec.ts -t U392`
+```text
+    -   "limit": 20,
+    -   "page": 1,
+    -   "unreadOnly": false,
+    +   "limit": undefined,
+    +   "page": undefined,
+    +   "unreadOnly": undefined,
+Tests:       1 failed, 1 total
+```
+
+### U392
+
+- 알림 쿼리 기본값과 형식을 DTO에서 검증한다. 사용자·매장 임의 지정 필드는 허용하지 않는다.
+- 전체 회귀: Test Suites: 53 passed, 53 total / Tests:       591 passed, 591 total / Time:        15.998 s, estimated 16 s; Test Suites: 13 passed, 13 total / Tests:       170 passed, 170 total / Time:        16.849 s, estimated 18 s. 리팩터링 없음.
+- 실패/기존 근거: 위 U392 실제 red 참조.
