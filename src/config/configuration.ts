@@ -111,6 +111,8 @@ export default () => {
 
     // PG 콜백 서명 검증 설정
     pgCallback: {
+      // 콜백 서명 공유 비밀값(최소 32자, 검증 스키마에서 필수). 로그에 남기지 않는다
+      secret: process.env.PG_CALLBACK_SECRET!,
       // 콜백 서명 시각 오차 허용(초)
       maxSkewSeconds: refundEnv.PG_CALLBACK_MAX_SKEW_SECONDS,
     },
