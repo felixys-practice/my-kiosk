@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
 import request from 'supertest';
+import { signedCallback } from './helpers/pg-callback';
 import {
   ManualRefundPayoutStatus,
   PaymentCancelFailureCode,
@@ -871,16 +872,12 @@ describe('PG 결과 조회·재전송·장애 복구 (E2E)', () => {
     const awaiting = await ctx.orderPeriodAwaitingApproval();
     const approvedAmount = awaiting.amount - 1000;
     pgStub.respondToSend(firstSend);
-    await request(ctx.server)
-      .post('/payments/callback')
-      .set('Authorization', `Bearer ${ctx.customer.token}`)
-      .send({
-        success: true,
-        pgTransactionId: awaiting.pgTransactionId,
-        amount: approvedAmount,
-        reason: null,
-      })
-      .expect(200);
+    await signedCallback(ctx.server, '/payments/callback', {
+      success: true,
+      pgTransactionId: awaiting.pgTransactionId,
+      amount: approvedAmount,
+      reason: null,
+    }).expect(200);
     const refund = await ctx.prisma.refund.findFirstOrThrow({
       where: { paymentId: awaiting.paymentId },
       include: { paymentCancels: true },

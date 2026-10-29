@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
 import request from 'supertest';
+import { signedCallback } from './pg-callback';
 import { type App } from 'supertest/types';
 import { Test, TestingModuleBuilder } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
@@ -117,7 +118,7 @@ export async function createRefundTestContext(options: {
   const moduleFixture = await (
     options.configure ? options.configure(builder) : builder
   ).compile();
-  const app = moduleFixture.createNestApplication();
+  const app = moduleFixture.createNestApplication({ rawBody: true });
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -310,21 +311,16 @@ export async function createRefundTestContext(options: {
     ticketType: TicketType,
     issueOptions: IssueTicketOptions = {},
   ): Promise<IssuedTicket> {
-    const buyer = issueOptions.buyer ?? customer;
     const { orderId, paymentId, pgTransactionId, productId, amount, seatId } =
       await orderAwaitingApproval(ticketType, issueOptions);
 
-    // PG 승인 콜백(현재 결제 콜백은 JWT 인증, US7에서 서명 인증으로 바뀌면 함께 수정)
-    await request(server)
-      .post('/payments/callback')
-      .set('Authorization', `Bearer ${buyer.token}`)
-      .send({
-        success: true,
-        pgTransactionId,
-        amount,
-        reason: null,
-      })
-      .expect(200);
+    // PG 승인 콜백(로그인 없이 PG 서명으로 보낸다, 환불 명세 API 계약 §7)
+    await signedCallback(server, '/payments/callback', {
+      success: true,
+      pgTransactionId,
+      amount,
+      reason: null,
+    }).expect(200);
 
     // 발급된 이용권 조회
     const ticket = await prisma.ticket.findFirstOrThrow({

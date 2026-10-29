@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
 import request from 'supertest';
+import { signedCallback } from './helpers/pg-callback';
 import { type App } from 'supertest/types';
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
@@ -270,16 +271,12 @@ describe('좌석 타입 (E2E)', () => {
     const payment = await prisma.payment.findUniqueOrThrow({
       where: { id: paymentId },
     });
-    await request(server)
-      .post('/payments/callback')
-      .set('Authorization', `Bearer ${userToken}`)
-      .send({
-        success,
-        pgTransactionId: payment.pgTransactionId,
-        amount: payment.amount,
-        reason: success ? null : 'E2E 승인 실패',
-      })
-      .expect(200);
+    await signedCallback(server, '/payments/callback', {
+      success,
+      pgTransactionId: payment.pgTransactionId,
+      amount: payment.amount,
+      reason: success ? null : 'E2E 승인 실패',
+    }).expect(200);
   }
 
   /**
@@ -345,7 +342,7 @@ describe('좌석 타입 (E2E)', () => {
       imports: [AppModule],
     }).compile();
 
-    app = moduleFixture.createNestApplication();
+    app = moduleFixture.createNestApplication({ rawBody: true });
 
     // main.ts와 동일하게 설정
     app.useGlobalPipes(

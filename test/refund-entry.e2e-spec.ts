@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
 import request from 'supertest';
+import { signedCallback } from './helpers/pg-callback';
 import {
   PaymentCancelStatus,
   RefundPayoutStatus,
@@ -77,18 +78,14 @@ describe('종료된 이용권의 입실 차단 (E2E)', () => {
 
   it('환불로 이용이 종료되고 지급도 완료된 이용권으로 입실하면 이용 종료 오류로 거부된다 (QS-3-1)', async () => {
     const refunded = await refundedFixedTicket();
-    await request(ctx.server)
-      .post('/refund/callback')
-      .set('Authorization', `Bearer ${ctx.customer.token}`)
-      .send({
-        success: true,
-        paymentCancelId: refunded.paymentCancelId,
-        pgTransactionId: `pg-cancel-${refunded.paymentCancelId}`,
-        orderItemId: refunded.orderItemId,
-        amount: refunded.amount,
-        reason: null,
-      })
-      .expect(200);
+    await signedCallback(ctx.server, '/refund/callback', {
+      success: true,
+      paymentCancelId: refunded.paymentCancelId,
+      pgTransactionId: `pg-cancel-${refunded.paymentCancelId}`,
+      orderItemId: refunded.orderItemId,
+      amount: refunded.amount,
+      reason: null,
+    }).expect(200);
     const refund = await ctx.prisma.refund.findUniqueOrThrow({
       where: { id: refunded.refundId },
     });
@@ -131,18 +128,14 @@ describe('종료된 이용권의 입실 차단 (E2E)', () => {
 
   it('환불 확정 뒤 PG 취소 요청이 실패한 이용권으로 입실하면 이용 종료 오류로 거부되고 이용권·고정석은 복구되지 않는다 (QS-3-3)', async () => {
     const refunded = await refundedFixedTicket();
-    await request(ctx.server)
-      .post('/refund/callback')
-      .set('Authorization', `Bearer ${ctx.customer.token}`)
-      .send({
-        success: false,
-        paymentCancelId: refunded.paymentCancelId,
-        pgTransactionId: `pg-cancel-${refunded.paymentCancelId}`,
-        orderItemId: refunded.orderItemId,
-        amount: refunded.amount,
-        reason: '취소 가능 기간 경과',
-      })
-      .expect(200);
+    await signedCallback(ctx.server, '/refund/callback', {
+      success: false,
+      paymentCancelId: refunded.paymentCancelId,
+      pgTransactionId: `pg-cancel-${refunded.paymentCancelId}`,
+      orderItemId: refunded.orderItemId,
+      amount: refunded.amount,
+      reason: '취소 가능 기간 경과',
+    }).expect(200);
 
     const res = await enter(refunded).expect(409);
 

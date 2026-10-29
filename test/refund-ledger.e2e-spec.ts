@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
 import request from 'supertest';
+import { signedCallback } from './helpers/pg-callback';
 import {
   LedgerStatus,
   PaymentCancelStatus,
@@ -64,10 +65,7 @@ describe('실제 지급별 원장 (E2E)', () => {
    * @returns supertest 요청
    */
   function sendRefundCallback(body: object) {
-    return request(ctx.server)
-      .post('/refund/callback')
-      .set('Authorization', `Bearer ${ctx.customer.token}`)
-      .send(body);
+    return signedCallback(ctx.server, '/refund/callback', body);
   }
 
   it('환불금 지급 처리 중에 PG가 취소를 확정하면 그 매장·주문의 실제 취소 금액만큼 음수 원장 1건이 생긴다 (QS-4-1)', async () => {

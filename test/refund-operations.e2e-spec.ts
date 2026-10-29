@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
 import request from 'supertest';
+import { signedCallback } from './helpers/pg-callback';
 import { randomUUID } from 'crypto';
 import {
   ManualRefundPayoutStatus,
@@ -652,17 +653,13 @@ describe('미지급 환불금 재처리 (E2E)', () => {
     const attempt = await ctx.prisma.paymentCancel.findFirstOrThrow({
       where: { refundId },
     });
-    await request(ctx.server)
-      .post('/refund/callback')
-      .set('Authorization', `Bearer ${ctx.customer.token}`)
-      .send({
-        success: true,
-        paymentCancelId: attempt.id,
-        pgTransactionId: `pg-cancel-${attempt.id}`,
-        orderItemId: issued.orderItemId,
-        amount: actualAmount,
-      })
-      .expect(200);
+    await signedCallback(ctx.server, '/refund/callback', {
+      success: true,
+      paymentCancelId: attempt.id,
+      pgTransactionId: `pg-cancel-${attempt.id}`,
+      orderItemId: issued.orderItemId,
+      amount: actualAmount,
+    }).expect(200);
     return refundId;
   }
 

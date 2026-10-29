@@ -9,6 +9,7 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     bufferLogs: true, // Winston 준비 전 발생하는 초기 로그 손실 방지
+    rawBody: true, // PG 콜백 서명 검증용 파싱 전 원문 바이트(환불 명세 API 계약 §7)
   });
 
   // NestJS 기본 로거를 Winston으로 교체

@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
 import request from 'supertest';
+import { signedCallback } from './helpers/pg-callback';
 import {
   PaymentCancelStatus,
   PaymentStatus,
@@ -220,10 +221,7 @@ describe('매장 환불 (E2E)', () => {
    * @returns supertest 요청
    */
   function sendRefundCallback(body: object) {
-    return request(ctx.server)
-      .post('/refund/callback')
-      .set('Authorization', `Bearer ${ctx.customer.token}`)
-      .send(body);
+    return signedCallback(ctx.server, '/refund/callback', body);
   }
 
   it('사용 이력 이용권의 매장 환불 뒤 PG가 그 금액의 취소를 확정하면 지급 완료가 되고 이용 종료·좌석 해제는 반복하지 않는다 (QS-2-2)', async () => {

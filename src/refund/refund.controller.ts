@@ -10,7 +10,10 @@ import {
   Post,
   Query,
   Res,
+  UseGuards,
 } from '@nestjs/common';
+import { Public } from 'src/auth/decorators/public.decorator';
+import { PgSignatureGuard } from 'src/pg/guards/pg-signature.guard';
 import type { Response } from 'express';
 import { CurrentUser } from 'src/auth/decorators/current-user.decorator';
 import type { JwtValidationResult } from 'src/auth/interfaces/jwt-payload.interface';
@@ -129,6 +132,8 @@ export class RefundController {
    */
   @Post('callback')
   @HttpCode(HttpStatus.OK)
+  @Public()
+  @UseGuards(PgSignatureGuard)
   async callbackRefund(@Body() dto: PgRefundCallbackDto) {
     await this.refundResultService.receiveCallback({
       success: dto.success,

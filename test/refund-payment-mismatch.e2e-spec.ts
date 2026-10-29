@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
-import request from 'supertest';
+import { signedCallback } from './helpers/pg-callback';
 import {
   PaymentCancelStatus,
   PaymentStatus,
@@ -39,15 +39,12 @@ describe('승인 금액 불일치의 자동 취소 (E2E)', () => {
     awaiting: AwaitingPayment,
     approvedAmount: number,
   ) {
-    return request(ctx.server)
-      .post('/payments/callback')
-      .set('Authorization', `Bearer ${ctx.customer.token}`)
-      .send({
-        success: true,
-        pgTransactionId: awaiting.pgTransactionId,
-        amount: approvedAmount,
-        reason: null,
-      });
+    return signedCallback(ctx.server, '/payments/callback', {
+      success: true,
+      pgTransactionId: awaiting.pgTransactionId,
+      amount: approvedAmount,
+      reason: null,
+    });
   }
 
   /**
@@ -138,17 +135,13 @@ describe('승인 금액 불일치의 자동 취소 (E2E)', () => {
     const attempt = (await findSystemRefund(awaiting.paymentId))!
       .paymentCancels[0];
 
-    await request(ctx.server)
-      .post('/refund/callback')
-      .set('Authorization', `Bearer ${ctx.customer.token}`)
-      .send({
-        success: true,
-        paymentCancelId: attempt.id,
-        pgTransactionId: `pg-cancel-${attempt.id}`,
-        orderItemId: null,
-        amount: approvedAmount,
-      })
-      .expect(200);
+    await signedCallback(ctx.server, '/refund/callback', {
+      success: true,
+      paymentCancelId: attempt.id,
+      pgTransactionId: `pg-cancel-${attempt.id}`,
+      orderItemId: null,
+      amount: approvedAmount,
+    }).expect(200);
 
     const refund = await findSystemRefund(awaiting.paymentId);
     const payment = await ctx.prisma.payment.findUniqueOrThrow({
