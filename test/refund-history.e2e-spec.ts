@@ -22,6 +22,38 @@ describe('환불 내역 조회 (E2E)', () => {
     await ctx.close();
   });
 
+  it('운영자는 소유 관계 없이 어느 매장과 사용자의 환불 내역이든 조회한다 (QS-8-5)', async () => {
+    for (const options of [
+      { shop: ctx.shop, owner: ctx.owner, buyer: ctx.customer },
+      {
+        shop: ctx.otherShop,
+        owner: ctx.otherShopOwner,
+        buyer: ctx.otherCustomer,
+      },
+    ]) {
+      const issued = await ctx.issuePeriodTicket(options);
+      const accepted = await request(ctx.server)
+        .post('/refund')
+        .set('Authorization', `Bearer ${options.buyer.token}`)
+        .send({ ticketId: issued.ticketId, consentToTerminateTicket: true })
+        .expect(202);
+      for (const path of [
+        `/refund/shop/${options.shop.id}`,
+        `/refund/user/${options.buyer.id}`,
+      ]) {
+        const response = await request(ctx.server)
+          .get(path)
+          .set('Authorization', `Bearer ${ctx.manager.token}`)
+          .expect(200);
+        expect(response.body.data.items).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ refundId: accepted.body.data.refundId }),
+          ]),
+        );
+      }
+    }
+  });
+
   it('고객은 자기 내역만 보며 쿼리나 사용자 경로로 다른 고객을 지정할 수 없다 (QS-8-4)', async () => {
     const refundIds: string[] = [];
     for (const buyer of [ctx.customer, ctx.otherCustomer]) {

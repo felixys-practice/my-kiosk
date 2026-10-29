@@ -324,7 +324,7 @@
 - [X] T148 [US8] [A65] E2E: `test/refund-history.e2e-spec.ts`에 명세 8-2의 Given/When으로 요청하고 다음 결과를 검증한다: 해당 매장을 찾을 수 없다는 응답을 받고 내역은 보이지 않는다. 테스트 이름 끝에 `(QS-8-2)`를 붙인다.
 - [X] T149 [US8] [A66] E2E: `test/refund-history.e2e-spec.ts`에 명세 8-3의 Given/When으로 요청하고 다음 결과를 검증한다: 조회된다. 테스트 이름 끝에 `(QS-8-3)`를 붙인다.
 - [X] T150 [US8] [A67] E2E: `test/refund-history.e2e-spec.ts`에 명세 8-4의 Given/When으로 요청하고 다음 결과를 검증한다: 자기 환불 내역만 보인다. 다른 고객을 지정해 조회할 방법은 없다. 테스트 이름 끝에 `(QS-8-4)`를 붙인다.
-- [ ] T151 [US8] [A68] E2E: `test/refund-history.e2e-spec.ts`에 명세 8-5의 Given/When으로 요청하고 다음 결과를 검증한다: 조회된다. 테스트 이름 끝에 `(QS-8-5)`를 붙인다.
+- [X] T151 [US8] [A68] E2E: `test/refund-history.e2e-spec.ts`에 명세 8-5의 Given/When으로 요청하고 다음 결과를 검증한다: 조회된다. 테스트 이름 끝에 `(QS-8-5)`를 붙인다.
 
 ### 단위 테스트와 구현
 
@@ -333,7 +333,7 @@
 - [ ] T154 [US8] [U246] [U247] [U248] `src/refund/dto/get-refund-query.dto.ts`, `src/refund/dto/refund-response.dto.ts`에 확정된 환불 금액·실제 지급액·미지급액·초과액·종료 시각·PG 요청/외부 지급 이력을 반영한다. 운영 상세 오류·증빙·검토 사유는 MANAGER에만 노출하고 LEGACY 이력을 신규 이용 종료와 구분한다.
 - [ ] T155 [US8] [U245] `src/refund/refund.controller.ts`, `src/refund/refund-query.service.ts`에 고정 경로를 동적 refundId보다 먼저 연결한다. 고객이 다른 userId를 지정하지 못하게 하고 조회 때 현재 ShopOwner를 재검사한다.
 
-- [ ] T187 [US8] [A64] [A65] [A66] [A67] [A68] `test/refund-history.e2e-spec.ts`의 사용자 스토리 8 인수 테스트 A64부터 A68까지 5개가 모두 통과하는지 실행해 확인한 뒤에만 이 스토리를 완료로 표시한다.
+- [X] T187 [US8] [A64] [A65] [A66] [A67] [A68] `test/refund-history.e2e-spec.ts`의 사용자 스토리 8 인수 테스트 A64부터 A68까지 5개가 모두 통과하는지 실행해 확인한 뒤에만 이 스토리를 완료로 표시한다.
 
 **검수 관문**: T147부터 T155까지의 작업과 T187 작업을 마치면 실행 규칙의 Phase 검수 절차에 따라 Codex 검수를 받는다. "통과" 판정 전에는 다음 Phase로 넘어가지 않는다.
 

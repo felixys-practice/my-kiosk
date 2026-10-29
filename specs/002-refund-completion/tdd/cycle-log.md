@@ -1349,3 +1349,16 @@ U10~U15를 마친 뒤, 관계 검증의 비교 대상 설정을 생략하면 정
 - 전체 회귀: Test Suites: 50 passed, 50 total / Tests:       578 passed, 578 total / Time:        13.543 s, estimated 14 s; Test Suites: 13 passed, 13 total / Tests:       164 passed, 164 total / Time:        13.04 s, estimated 14 s. 리팩터링 없음.
 
 - 실패 근거: 위 A67 red 참조.
+
+- A67 구현·회귀 커밋: `4bbb514`.
+
+### A68 운영자 범위 뮤턴트
+
+- `npx jest --config ./test/jest-e2e.json test/refund-history.e2e-spec.ts -t QS-8-5` 최초 1 passed. MANAGER에게도 점주 관계를 요구하는 변형에서 `expected 200 "OK", got 404 "Not Found"`, 1 failed. 원복했다. 서로 다른 매장·고객 각각의 목록을 확인한다.
+
+### A68
+
+- 운영자의 서로 다른 매장·사용자 환불 조회를 HTTP에서 검증했다. 업무 결정 변경 없음.
+- 전체 회귀: Test Suites: 50 passed, 50 total / Tests:       578 passed, 578 total / Time:        13.646 s, estimated 14 s; Test Suites: 13 passed, 13 total / Tests:       165 passed, 165 total / Time:        13.1 s. 리팩터링 없음.
+
+- 실패 근거: 위 A68 운영자 범위 뮤턴트 참조.
