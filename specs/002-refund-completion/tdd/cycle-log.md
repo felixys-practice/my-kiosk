@@ -1309,3 +1309,17 @@ U10~U15를 마친 뒤, 관계 검증의 비교 대상 설정을 생략하면 정
 - 전체 회귀: Test Suites: 50 passed, 50 total / Tests:       578 passed, 578 total / Time:        16.488 s; Test Suites: 13 passed, 13 total / Tests:       161 passed, 161 total / Time:        16.653 s, estimated 17 s. 리팩터링 없음.
 
 - 실패 근거: 위 U241 경계 뮤턴트 참조.
+
+- U241 구현·회귀 커밋: `07987cc`.
+
+### A65 현재 점주 범위 뮤턴트
+
+- `npx jest --config ./test/jest-e2e.json test/refund-history.e2e-spec.ts -t QS-8-2` 최초 1 passed(A64 범위 구현). 점주 필터를 일시 제거하면 `expected 404 "Not Found", got 200 "OK"`, 1 failed. 원복했다.
+- 다른 매장과 ShopOwner 해제 뒤의 재요청을 같은 범위 시나리오에서 검증한다.
+
+### A65
+
+- 소유하지 않거나 소유 관계가 해제된 매장은 404 SHOP_NOT_FOUND를 반환하는지 HTTP로 검증했다.
+- 전체 회귀: Test Suites: 50 passed, 50 total / Tests:       578 passed, 578 total / Time:        14.362 s, estimated 17 s; Test Suites: 13 passed, 13 total / Tests:       162 passed, 162 total / Time:        16.968 s. 리팩터링 없음.
+
+- 실패 근거: 위 A65 범위 뮤턴트 참조.

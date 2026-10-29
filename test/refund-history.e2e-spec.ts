@@ -22,6 +22,29 @@ describe('환불 내역 조회 (E2E)', () => {
     await ctx.close();
   });
 
+  it('점주는 다른 매장이나 소유 관계가 해제된 매장 내역을 조회할 수 없다 (QS-8-2)', async () => {
+    const foreign = await request(ctx.server)
+      .get(`/refund/shop/${ctx.otherShop.id}`)
+      .set('Authorization', `Bearer ${ctx.owner.token}`)
+      .expect(404);
+    expect(foreign.body.error.code).toBe('SHOP_NOT_FOUND');
+
+    await ctx.prisma.shopOwner.delete({
+      where: { shopId_userId: { shopId: ctx.shop.id, userId: ctx.coOwner.id } },
+    });
+    try {
+      const revoked = await request(ctx.server)
+        .get(`/refund/shop/${ctx.shop.id}`)
+        .set('Authorization', `Bearer ${ctx.coOwner.token}`)
+        .expect(404);
+      expect(revoked.body.error.code).toBe('SHOP_NOT_FOUND');
+    } finally {
+      await ctx.prisma.shopOwner.create({
+        data: { shopId: ctx.shop.id, userId: ctx.coOwner.id },
+      });
+    }
+  });
+
   it('현재 점주는 자기 매장의 환불 내역을 환불 식별자로 조회한다 (QS-8-1)', async () => {
     const issued = await ctx.issuePeriodTicket();
     const accepted = await request(ctx.server)
