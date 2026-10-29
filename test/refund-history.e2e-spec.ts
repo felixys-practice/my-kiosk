@@ -23,6 +23,27 @@ describe('환불 내역 조회 (E2E)', () => {
     await ctx.close();
   });
 
+  it('U386 역할 부족과 없는 조회 대상을 구분하고 권한 안 빈 목록은 허용한다 (QS-8-5)', async () => {
+    for (const [path, actor, status, code] of [
+      [`/refund/shop/${ctx.shop.id}`, ctx.customer, 403, 'REFUND_FORBIDDEN'],
+      [`/refund/user/${ctx.customer.id}`, ctx.owner, 403, 'REFUND_FORBIDDEN'],
+      [`/refund/shop/${randomUUID()}`, ctx.manager, 404, 'SHOP_NOT_FOUND'],
+      [`/refund/user/${randomUUID()}`, ctx.manager, 404, 'USER_NOT_FOUND'],
+    ] as const) {
+      const response = await request(ctx.server)
+        .get(path)
+        .set('Authorization', `Bearer ${actor.token}`)
+        .expect(status);
+      expect(response.body.error.code).toBe(code);
+    }
+    const empty = await request(ctx.server)
+      .get(`/refund/user/${ctx.owner.id}`)
+      .set('Authorization', `Bearer ${ctx.manager.token}`)
+      .expect(200);
+    expect(empty.body.data.items).toEqual([]);
+    expect(empty.body.data.meta.total).toBe(0);
+  });
+
   it('U385 실제 PG 오류와 외부 지급 증빙은 운영자의 HTTP 응답에만 담긴다 (QS-8-3)', async () => {
     const privateValue = '비공개 PG 오류와 지급 증빙';
     const defaultSend = pgStub.defaultSend;

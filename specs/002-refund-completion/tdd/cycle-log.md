@@ -1508,3 +1508,17 @@ U10~U15를 마친 뒤, 관계 검증의 비교 대상 설정을 생략하면 정
 - 전체 회귀: Test Suites: 51 passed, 51 total / Tests:       586 passed, 586 total / Time:        17.572 s; Test Suites: 13 passed, 13 total / Tests:       168 passed, 168 total / Time:        17.829 s, estimated 21 s. 리팩터링 없음.
 
 - 실패 근거: 위 U385 운영 정보 HTTP 뮤턴트 참조.
+
+- U385 구현·회귀 커밋: `0cff357`.
+
+### U386 HTTP 범위·존재 응답 검증
+
+- `npx jest --config ./test/jest-e2e.json test/refund-history.e2e-spec.ts -t U386` 최초 1 passed. 사용자 존재 확인을 제거하면 `expected 404 "Not Found", got 200 "OK"`, 1 failed. 원복했다.
+- USER의 매장 조회·OWNER의 사용자 지정 조회는 403, 없는 매장·사용자는 각각 계약 404 코드이며 범위 안 빈 목록은 200이다.
+
+### U386
+
+- 대상이 없음을 빈 목록과 혼동하지 않고 역할·존재·빈 목록 응답을 구분하는지 HTTP로 확인했다.
+- 전체 회귀: Test Suites: 51 passed, 51 total / Tests:       586 passed, 586 total / Time:        17.254 s, estimated 18 s; Test Suites: 13 passed, 13 total / Tests:       169 passed, 169 total / Time:        22.644 s. 리팩터링 없음.
+
+- 실패 근거: 위 U386 HTTP 범위 뮤턴트 참조.
