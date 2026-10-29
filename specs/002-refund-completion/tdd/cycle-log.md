@@ -1740,3 +1740,20 @@ Tests:       1 failed, 4 skipped, 5 total
 - 다른 공동 점주의 읽음과 무관하게 요청자 본인의 Receipt가 없는 알림만 필터링한다.
 - 전체 회귀: Test Suites: 53 passed, 53 total / Tests:       593 passed, 593 total / Time:        16.034 s; Test Suites: 13 passed, 13 total / Tests:       170 passed, 170 total / Time:        15.132 s, estimated 17 s. 리팩터링 없음.
 - 실패/기존 근거: 위 U259 실제 red 참조.
+
+- U259 커밋: `25ed016`.
+
+### U394 red
+
+- `npx jest src/refund/refund-notification.service.spec.ts -t U394`
+```text
+    Expected: ObjectContaining {"where": {"AND": [{"OR": [{"recipientUserId": null}, {"recipientUserId": "owner"}], "audience": "SHOP", "shop": {"owners": {"some": {"userId": "owner"}}}}, {"audience": "OPERATOR"}]}}
+    Received: {"include": {"receipts": {"select": {"readAt": true}, "where": {"userId": "owner"}}}, "orderBy": [{"createdAt": "desc"}, {"id": "desc"}], "skip": 0, "take": 20, "where": {"AND": [{"OR": [{"recipientUserId": null}, {"recipientUserId": "owner"}], "audience": "SHOP", "shop": {"owners": {"some": {"userId": "owner"}}}}]}}
+Tests:       1 failed, 5 skipped, 6 total
+```
+
+### U394
+
+- audience 필터는 권한 조건과 AND로 결합해 역할·소유 매장 범위를 넓히지 않는다.
+- 전체 회귀: Test Suites: 53 passed, 53 total / Tests:       594 passed, 594 total / Time:        15.978 s, estimated 16 s; Test Suites: 13 passed, 13 total / Tests:       170 passed, 170 total / Time:        15.921 s. 리팩터링 없음.
+- 실패/기존 근거: 위 U394 실제 red 참조.

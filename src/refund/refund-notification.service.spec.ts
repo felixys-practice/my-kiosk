@@ -6,6 +6,25 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { GetRefundNotificationQueryDto } from './dto/get-refund-notification-query.dto';
 
 describe('환불 알림 수신 범위', () => {
+  it('U394 audience를 지정해도 현재 역할·매장 범위를 확장하지 않는다', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const prisma = {
+      refundNotification: { findMany, count: jest.fn().mockResolvedValue(0) },
+      $transaction: (queries: Promise<unknown>[]) => Promise.all(queries),
+    } as unknown as PrismaService;
+    const actor = { userId: 'owner', role: 'OWNER' };
+    await new RefundNotificationRepository(prisma).list(
+      actor,
+      Object.assign(new GetRefundNotificationQueryDto(), {
+        audience: 'OPERATOR',
+      }),
+    );
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { AND: [notificationScope(actor), { audience: 'OPERATOR' }] },
+      }),
+    );
+  });
   it('U259 미읽음 필터는 요청자에게 읽음 기록이 없는 알림만 조회한다', async () => {
     const findMany = jest.fn().mockResolvedValue([]);
     const prisma = {

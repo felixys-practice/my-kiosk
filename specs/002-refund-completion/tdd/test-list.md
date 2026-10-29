@@ -674,3 +674,6 @@ suite_baseline: green
 | U391 | 운영자 알림 범위는 본인에게 지정되거나 범위 발송된 OPERATOR로 제한된다 | FR-038, 계약 §9 | example | DONE | `src/refund/refund-notification.service.spec.ts` / U391 |
 | U392 | 알림 쿼리 기본값과 페이지·크기·수신 범위·미읽음 형식을 검증한다 | 계약 §9·10 | example | DONE | `src/refund/dto/get-refund-notification-query.dto.spec.ts` / U392 |
 | U393 | 알림 목록은 수신 범위 안에서 안정된 순서·페이지·사용자 읽음을 조회한다 | FR-038, FR-039, 계약 §9 | example | DONE | `src/refund/refund-notification.service.spec.ts` / U393 |
+| U394 | audience 필터는 현재 수신 범위와 교집합으로 적용한다 | 계약 §9 | example | DONE | `src/refund/refund-notification.service.spec.ts` / U394 |
+| U395 | 알림 조회의 계산 위치가 표현 범위를 넘으면 ORM 전에 거절한다 | 계약 §9·10 | example | PENDING | |
+| U396 | 알림 응답은 사건·메시지·현재 사용자의 읽음만 노출한다 | FR-038, FR-039, 계약 §9 | example | PENDING | |

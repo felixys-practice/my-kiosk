@@ -19,6 +19,7 @@ export class RefundNotificationRepository {
     const conditions: Prisma.RefundNotificationWhereInput[] = [
       notificationScope(actor),
     ];
+    if (query.audience) conditions.push({ audience: query.audience });
     if (query.unreadOnly)
       conditions.push({ receipts: { none: { userId: actor.userId } } });
     const where: Prisma.RefundNotificationWhereInput = { AND: conditions };
