@@ -1375,3 +1375,16 @@ U10~U15를 마친 뒤, 관계 검증의 비교 대상 설정을 생략하면 정
 - 전체 회귀: Test Suites: 51 passed, 51 total / Tests:       579 passed, 579 total / Time:        14.587 s; Test Suites: 13 passed, 13 total / Tests:       165 passed, 165 total / Time:        16.039 s. 리팩터링 없음.
 
 - 실패 근거: 위 U239 red 참조.
+
+- U239 구현·회귀 커밋: `7011afc`.
+
+### U244 빈 목록 뮤턴트
+
+- `npx jest src/refund/refund-query.service.spec.ts -t U244` 최초 1 passed. 빈 목록을 찾을 수 없음으로 바꾸는 변형에서는 `Received promise rejected instead of resolved`, 1 failed. 변형 원복.
+
+### U244
+
+- 권한 안 빈 목록은 오류가 아니라 items=[]·total=0이다. GET의 200 연결은 기존 HTTP 조회 테스트와 함께 확인한다.
+- 전체 회귀: Test Suites: 51 passed, 51 total / Tests:       580 passed, 580 total / Time:        14.362 s, estimated 15 s; Test Suites: 13 passed, 13 total / Tests:       165 passed, 165 total / Time:        19.502 s. 리팩터링 없음.
+
+- 실패 근거: 위 U244 빈 목록 뮤턴트 참조.
