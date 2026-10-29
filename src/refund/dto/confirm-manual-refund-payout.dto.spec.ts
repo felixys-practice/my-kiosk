@@ -50,4 +50,13 @@ describe('별도 환불금 지급 결과 등록 DTO(ConfirmManualPayoutDto)', ()
       }),
     ).toEqual(['externalTransactionId']);
   });
+
+  it.each([0, false])(
+    '실제 지급 시각이 ISO 시각 문자열이 아니면(%p) 형식 오류(400)다',
+    async (paidAt) => {
+      expect(await invalidFieldsOf({ ...validBody, paidAt })).toEqual([
+        'paidAt',
+      ]);
+    },
+  );
 });

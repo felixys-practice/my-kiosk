@@ -1,4 +1,5 @@
 import {
+  isISO8601,
   IsDate,
   IsInt,
   IsOptional,
@@ -8,7 +9,7 @@ import {
   MaxLength,
   MinLength,
 } from 'class-validator';
-import { Transform, Type } from 'class-transformer';
+import { Transform } from 'class-transformer';
 
 /**
  * 앞뒤 공백을 지운 문자열로 바꾼다(문자열이 아니면 그대로 두어 형식 검증이 거절하게 한다)
@@ -28,8 +29,12 @@ export class ConfirmManualPayoutDto {
   @IsPositive()
   amount!: number;
 
-  // 실제 지급 시각(UTC ISO), 미래 불가
-  @Type(() => Date)
+  // 실제 지급 시각(UTC ISO 문자열), 미래 불가. ISO 문자열이 아니면 날짜로 바꾸지 않아 형식 검증이 거절한다
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' && isISO8601(value, { strict: true })
+      ? new Date(value)
+      : value,
+  )
   @IsDate()
   @MaxDate(() => new Date())
   paidAt!: Date;
