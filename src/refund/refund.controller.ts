@@ -152,8 +152,9 @@ export class RefundController {
   async getRefundHistoryByShop(
     @CurrentUser() user: JwtValidationResult,
     @Param('shopId', ParseUUIDPipe) shopId: string,
+    @Query() query: GetRefundQueryDto,
   ) {
-    return this.refundQueryService.byShop(user, shopId);
+    return this.refundQueryService.byShop(user, shopId, query);
   }
 
   // 사용자의 환불 내역

@@ -1253,3 +1253,19 @@ U10~U15를 마친 뒤, 관계 검증의 비교 대상 설정을 생략하면 정
 - 실행 메모: 첫 병렬 단위 실행은 복구 전역 조회에 다른 통합 테스트 데이터가 섞여 3 failed·571 passed. 코드를 바꾸지 않고 전체를 직렬 실행하면 574 passed. 이후 전체 단위는 직렬 실행하며 테스트를 제외하지 않는다.
 
 - 실패 근거: `expected 200 "OK", got 400 "Bad Request"` (앞의 A64 red 명령)
+
+- A64 구현·회귀 커밋: `398fbec`.
+
+### U240 red
+
+- 명령: `npx jest src/refund/dto/get-refund-query.dto.spec.ts -t U240`
+- 실제 출력: `- "limit": 20`, `- "page": 1`, `+ "limit": undefined`, `+ "page": undefined`; `Tests: 1 failed, 1 total`.
+
+- U240 회귀 중 환경 간섭: 전체 단위 직렬 실행에서도 `4 failed, 571 passed, 575 total`. 예상 밖 PG 취소 요청 ID를 조회했으나 실행 종료 후 DB에서는 해당 행이 없었다. VS Code Jest 확장이 `--watch`로 동일 저장소 테스트를 동시에 실행 중임을 PID 53269·53480의 실제 명령으로 확인했다. 단순 병렬 파일 실행만의 문제라는 앞의 추정은 불충분했으며, watch 중단 뒤 단독 회귀로 확인한다.
+
+### U240
+
+- 기본 page=1·limit=20과 실제 skip/take·페이지 메타를 연결했다. 공개 정렬/경계는 다음 동작에서 검증한다.
+- 전체 회귀: Test Suites: 50 passed, 50 total / Tests:       575 passed, 575 total / Time:        20.09 s; Test Suites: 13 passed, 13 total / Tests:       161 passed, 161 total / Time:        22.182 s. 리팩터링 없음.
+
+- 실패 근거: `npx jest src/refund/dto/get-refund-query.dto.spec.ts -t U240` → `+ "limit": undefined`, `+ "page": undefined`, 1 failed.

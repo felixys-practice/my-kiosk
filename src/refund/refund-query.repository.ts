@@ -26,7 +26,16 @@ export class RefundQueryRepository {
     });
   }
 
-  findMany(where: Prisma.RefundWhereInput): Promise<RefundQueryRow[]> {
-    return this.prisma.refund.findMany({ where, include: refundQueryInclude });
+  async findMany(where: Prisma.RefundWhereInput, page: number, limit: number) {
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.refund.findMany({
+        where,
+        include: refundQueryInclude,
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.refund.count({ where }),
+    ]);
+    return { items, total };
   }
 }
