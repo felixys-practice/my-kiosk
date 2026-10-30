@@ -8,6 +8,8 @@ import {
 } from './helpers/refund-test-context';
 import { RefundPgStub } from './helpers/refund-pg.stub';
 import { RefundAcceptanceService } from '../src/refund/refund-acceptance.service';
+import { RefundLockingRepository } from '../src/refund/refund-locking.repository';
+import { RefundRepository } from '../src/refund/refund.repository';
 
 /** 환불 경로 사이의 동시 실행에서 실제 DB 제약과 PG 호출 수를 확인한다. */
 describe('환불 동시성 (E2E)', () => {
@@ -33,6 +35,10 @@ describe('환불 동시성 (E2E)', () => {
     const acceptance = ctx.app.get<RefundAcceptanceService>(
       RefundAcceptanceService,
     );
+    const locking = ctx.app.get<RefundLockingRepository>(
+      RefundLockingRepository,
+    );
+    const repository = ctx.app.get<RefundRepository>(RefundRepository);
     const original: RefundAcceptanceService['findLockedTarget'] =
       acceptance.findLockedTarget.bind(acceptance);
     let releaseCustomer!: () => void;
@@ -43,22 +49,48 @@ describe('환불 동시성 (E2E)', () => {
     const locked = new Promise<void>((resolve) => {
       customerLocked = resolve;
     });
-    let storeEntered!: () => void;
-    const entered = new Promise<void>((resolve) => {
-      storeEntered = resolve;
+    let storeLockAttempted!: () => void;
+    const lockAttempted = new Promise<void>((resolve) => {
+      storeLockAttempted = resolve;
     });
     let calls = 0;
+    let storeCallStarted = false;
     const spy = jest
       .spyOn(acceptance, 'findLockedTarget')
       .mockImplementation(async (...args) => {
         calls += 1;
-        if (calls === 2) storeEntered();
+        if (calls === 2) storeCallStarted = true;
         const target = await original(...args);
         if (calls === 1) {
           customerLocked();
           await holdCustomer;
         }
         return target;
+      });
+    const originalRead: RefundRepository['findCustomerRefundTarget'] =
+      repository.findCustomerRefundTarget.bind(repository);
+    let delayedStoreRead = false;
+    let storeReadCompleted = false;
+    const readSpy = jest
+      .spyOn(repository, 'findCustomerRefundTarget')
+      .mockImplementation(async (...args) => {
+        if (storeCallStarted && !delayedStoreRead) {
+          delayedStoreRead = true;
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+        const result = await originalRead(...args);
+        if (storeCallStarted) storeReadCompleted = true;
+        return result;
+      });
+    const originalLock: RefundLockingRepository['lockForAcceptance'] =
+      locking.lockForAcceptance.bind(locking);
+    let lockCalls = 0;
+    const lockSpy = jest
+      .spyOn(locking, 'lockForAcceptance')
+      .mockImplementation(async (...args) => {
+        lockCalls += 1;
+        if (lockCalls === 2) storeLockAttempted();
+        return originalLock(...args);
       });
 
     try {
@@ -80,7 +112,9 @@ describe('환불 동시성 (E2E)', () => {
           consentToTerminateTicket: true,
         })
         .then((response) => response);
-      await entered;
+      // 두 번째 요청은 최초 대상 읽기를 마치고 잠금 호출에 들어왔다.
+      await lockAttempted;
+      expect(storeReadCompleted).toBe(true);
       let storeFinished = false;
       void storePromise.then(() => {
         storeFinished = true;
@@ -98,6 +132,8 @@ describe('환불 동시성 (E2E)', () => {
     } finally {
       releaseCustomer();
       spy.mockRestore();
+      readSpy.mockRestore();
+      lockSpy.mockRestore();
     }
     expect(
       await ctx.prisma.refund.count({
