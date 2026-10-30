@@ -1,17 +1,3 @@
-// PG 거래조회 결과 - 락 만료 후 재시도 시, 이전 취소 요청의 실제 처리 상태를 확인하기 위해 사용
-export enum PgCancelInquiryResult {
-  NOT_FOUND = 'NOT_FOUND', // PG에 해당 취소 거래 없음(요청이 PG에 도달하지 않음)
-  SUCCEEDED = 'SUCCEEDED', // PG가 취소를 성공 처리함
-  FAILED = 'FAILED', // PG가 취소를 실패 처리함
-  IN_PROGRESS = 'IN_PROGRESS', // PG가 요청을 접수했고 아직 처리 중(PENDING/PROCESSING 등) - 확정 불가, 진행 중으로 취급
-}
-
-export interface PgCancelInquiry {
-  result: PgCancelInquiryResult;
-  pgTransactionId?: string;
-  cancelledAmount?: number;
-}
-
 // ── 환불 PG 취소 계약 (specs/002-refund-completion API 계약 §8) ─────────
 
 /** PG 취소 송신 결과 */

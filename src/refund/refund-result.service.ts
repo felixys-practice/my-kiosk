@@ -16,7 +16,6 @@ import {
 import { RefundLedgerRepository } from 'src/ledger/refund-ledger.repository';
 import { AttemptForResult, RefundRepository } from './refund.repository';
 import { RefundEventRepository } from './refund-event.repository';
-import { RefundService } from './refund.service';
 import {
   PgCallbackTargetMismatchError,
   PgCallbackTargetNotFoundError,
@@ -113,7 +112,6 @@ export class RefundResultService {
     private readonly ledgerRepository: RefundLedgerRepository,
     private readonly eventRepository: RefundEventRepository,
     private readonly txLogger: TransactionLoggerService,
-    private readonly legacyRefundService: RefundService,
   ) {}
 
   /**

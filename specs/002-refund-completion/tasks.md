@@ -47,7 +47,7 @@
 - [X] T012 [U35] [U36] [U37] [U38] [U39] [U40] [U41] [U42] [U43] [U44] `src/refund/refund-idempotency.service.ts`, `src/refund/refund-idempotency.repository.ts`에 DB 기반 요청 기록과 최초 응답 재반환을 구현한다. 키는 “1~128자 ASCII 비공백”, 해시는 대상·금액·trim 사유·동의를 포함하고 거절된 동의 확인 요청은 이후 유효한 요청을 막지 않는다. 기존 `src/common/interceptors/idempotency.interceptor.ts`의 다른 도메인 동작은 유지한다.
 - [X] T013 [U45] [U46] [U47] [U48] [U49] `src/common/filters/http-exception.filter.spec.ts`, `src/refund/refund-access.service.spec.ts`에 명시적 오류 코드 보존, 역할 부족 403, 소유 범위 밖 404와 재요청 오류 우선순위 테스트를 작성한다.
 - [X] T014 [U45] [U46] [U47] [U48] [U49] `src/common/filters/http-exception.filter.ts`, `src/refund/errors/refund.error.ts`, `src/refund/refund-access.service.ts`, `src/refund/refund.repository.ts`에 계약 §10 오류와 현재 ShopOwner·본인·MANAGER 조회 범위를 구현한다. 필터는 `error.code ?? error.name`을 사용하고 기존 도메인 오류를 보존한다.
-- [ ] T015 [U50] [U51] [U52] [U53] [U54] [U55] [U56] [U57] [U58] `src/pg/pg.service.spec.ts`에 일반 HTTP 404·조회 지연·인증 오류를 확실한 미접수로 오인하지 않는 동작과 실제 취소 금액 누락 거절을 테스트한다.
+- [X] T015 [U50] [U51] [U52] [U53] [U54] [U55] [U56] [U57] [U58] `src/pg/pg.service.spec.ts`에 일반 HTTP 404·조회 지연·인증 오류를 확실한 미접수로 오인하지 않는 동작과 실제 취소 금액 누락 거절을 테스트한다.
 - [X] T016 [U51] [U52] [U53] [U54] [U55] [U56] [U57] [U58] `src/pg/pg.types.ts`, `src/pg/pg.service.ts`에 송신 NOT_SENT/ACCEPTED/UNKNOWN/SUCCEEDED/REJECTED와 조회 SUCCEEDED/FAILED/IN_PROGRESS/NOT_FOUND/QUERY_ERROR 계약을 구현한다. NOT_FOUND는 authoritative=true가 필수이며 미연동은 명시적 전송 전 실패·조회 오류다.
 - [X] T017 [U59] [U60] [U61] `src/refund/refund-locking.repository.ts`, `src/session-lifecycle/session-lifecycle.repository.ts`에 Payment → Ticket → TicketPause → UsageSession → SeatAssignment → Refund → PaymentCancel → ManualRefundPayout 잠금과 같은 종류 ID 순 잠금을 제공한다. Service에 직접 DB 잠금 쿼리를 두지 않고 외부 PG 호출 중에는 트랜잭션을 유지하지 않는다. `src/refund/refund-locking.repository.spec.ts`로 잠금 순서 계약을 확인한다.
 - [X] T018 `src/refund/refund.module.ts`, `src/session-lifecycle/session-lifecycle.module.ts`, `src/pg/pg.module.ts`에 공통 Repository와 PG 대역 교체 지점을 연결한다. 새 서비스는 도입되는 스토리에서 등록하고 다른 도메인과 순환 의존이 생기지 않는지 `test/refund-bootstrap.e2e-spec.ts`에서 검증한다.
@@ -374,7 +374,7 @@
 
 - T169 [범위 제외, 2026-10-30] [U262] [U263] [U264] [U265] [U266] 과거 환불 이관 사전 점검 도구와 그 테스트는 작성하지 않는다. 개발 데이터를 폐기할 수 있다는 사용자 결정에 따른 제외이며 구현 완료로 계산하지 않는다.
 - T170 [범위 제외, 2026-10-30] [U264] [U265] [U266] 과거 환불·원장을 새 구조로 옮기는 스크립트와 이관 E2E는 작성하지 않는다. 과거 승인 대기·성공·실패 기록 보존 요구는 이번 개발 데이터 재구축에 적용하지 않는다.
-- [ ] T174 `src/refund/refund.service.ts`, `src/refund/refund.repository.ts`, `src/refund/refund.module.ts`에서 신규 흐름으로 대체한 RefundLock TTL 해제·승인 대기·PG 실패 후 이용권 복구 코드를 제거하고 기존 `src/refund/refund.service.spec.ts`의 변경된 기대값을 명세와 대조한다. 테스트 기대값 변경이 필요한 항목은 헌법 III에 따라 근거와 사용자 확인을 남긴 뒤 변경한다.
+- [X] T174 `src/refund/refund.service.ts`, `src/refund/refund.repository.ts`, `src/refund/refund.module.ts`에서 신규 흐름으로 대체한 RefundLock TTL 해제·승인 대기·PG 실패 후 이용권 복구 코드를 제거하고 기존 `src/refund/refund.service.spec.ts`의 변경된 기대값을 명세와 대조한다. 테스트 기대값 변경이 필요한 항목은 헌법 III에 따라 근거와 사용자 확인을 남긴 뒤 변경한다.
 - [ ] T171 기존 마이그레이션을 빈 검증용 DB에 순서대로 적용해 최종 스키마·필수 연결·unique·금액 제약을 확인한다. T174에서 이전 코드의 참조를 정리한 뒤 필요한 최종 마이그레이션으로 RefundLock을 제거한다. 기존 마이그레이션 통합은 별도 결정 없이 수행하지 않는다. 운영 DB 복제본 이관과 구버전 중지·전환·재개 검증은 제외한다.
 - [ ] T172 `test/refund-concurrency.e2e-spec.ts`에 고객/점주 동시 접수, 입실/환불, 콜백/조회, 자동/개별 조회, 점주·운영자의 실패 요청 개별 조회/MANAGER 직접 PG 재요청/외부 지급 예약, 증빙 반복 등록 경쟁을 재현한다. 확정 환불·활성 PG 요청·활성 지급 예약·지급별 원장 수와 실제 PG 호출 수를 검증한다.
 - [ ] T173 `test/refund-crash-recovery.e2e-spec.ts`에 커밋 전/후·PG 전송 전/후·성공 후 저장 실패·worker 중단·담당 만료·큐 유실/중복을 재현한다. 재시작 후 DB 기록에서 조회를 재개하고 이용 종료·확정된 환불 금액·외부 지급 예약을 보존하는지 검증한다.

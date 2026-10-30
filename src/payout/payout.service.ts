@@ -19,9 +19,7 @@ export class PayoutService {
     amount: number,
   ): Promise<BankTransferResponse> {
     // TODO: 실제 은행 송금 API 연동
-    // 실제 은행 가입 전이므로 가장 보수적인 가정(송금이 성사되지 않았다)으로
-    // 항상 실패를 반환한다 - PgService.inquiryPaymentCancel()의 NOT_FOUND
-    // 기본값과 같은 이유다.
+    // 실제 은행에 연동하기 전이므로 송금 성공으로 처리하지 않고 실패를 반환한다.
     await new Promise<void>((resolve) => {
       setTimeout(() => {
         resolve();

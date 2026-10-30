@@ -1,5 +1,4 @@
 import { Module } from '@nestjs/common';
-import { RefundService } from './refund.service';
 import { RefundController } from './refund.controller';
 import { RefundRepository } from './refund.repository';
 import { LoggerModule } from 'src/logger/logger.module';
@@ -46,7 +45,6 @@ import { RefundNotificationController } from './refund-notification.controller';
     BullModule.registerQueue({ name: refundRecoveryQueueName }),
   ],
   providers: [
-    RefundService,
     RefundRepository,
     // 환불 공통 기반(Phase 2): DB 멱등 기록, 권한 범위, 공유 잠금 순서
     RefundIdempotencyRepository,
@@ -83,6 +81,6 @@ import { RefundNotificationController } from './refund-notification.controller';
     RefundRecoveryController,
     RefundOperationsController,
   ],
-  exports: [RefundService, RefundSystemService],
+  exports: [RefundSystemService],
 })
 export class RefundModule {}
