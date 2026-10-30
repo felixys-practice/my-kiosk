@@ -529,6 +529,7 @@ model PaymentCancel {
   // NOTE: 트리거 (raw migration으로 관리)
   // - payment_cancels_refund_target_check: refund_id가 있으면 order_item_id가 환불의 order_item_id와 같아야 한다
   // NOTE: CHECK 제약 (raw migration으로 관리)
+  // - payment_cancels_attempt_number_check: attempt_number >= 1
   // - payment_cancels_actual_amount_check: actual_amount >= 0
   // - payment_cancels_counts_check: resend·manual_resend·inquiry·inquiry_failure·send_attempt 횟수 >= 0
 

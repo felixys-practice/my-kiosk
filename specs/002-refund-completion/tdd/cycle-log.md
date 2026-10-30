@@ -2270,3 +2270,14 @@ Tests: 1 failed, 39 skipped, 40 total
 - attempt_number를 생략한 실제 INSERT가 성공하는 실패를 먼저 확인했다. 이 기록 뒤 NOT NULL과 Prisma 필수 필드를 적용한다.
 - 필수 필드로 생성한 Prisma 타입에서는 null 정렬 옵션을 허용하지 않아 환불 조회의 시도 번호 정렬을 desc로 단순화했다. 모든 행의 번호가 필수인 조건에서 최신 시도 정렬 결과는 같다. 기존 조회 테스트 단언은 유지한다.
 - U400 green: 별도 검증 DB의 단일 테스트1개·전체 단위594개·E2E179개와 타입 검사 통과. 93개 마이그레이션 적용 상태에서 확인했다.
+
+### U401 PG 취소 시도 번호의 하한
+
+- 별도 검증 DB에서 `node /tmp/refund-verify-db.cjs single U401`을 실행했다.
+```text
+Received promise resolved instead of rejected
+Resolved to value: 1
+Tests: 1 failed, 40 skipped, 41 total
+```
+- 0번 시도를 DB가 저장하는 실제 실패를 먼저 확인했다. 이 기록 뒤 1 이상 CHECK 제약을 적용한다. 1번 저장은 기존 제약 통합 테스트에서 계속 검증한다.
+- U401 green: 0·음수 거절 단일 테스트1개와 전체 단위595개·E2E179개가 별도 DB에서 통과했다(94개 마이그레이션).

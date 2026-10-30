@@ -688,3 +688,4 @@ U17·U248의 DONE은 이전에 구현·검증한 과거 이력 호환 동작의 
 | U398 | 환불 기록에 연결되지 않은 PG 취소 요청의 콜백을 처리하지 않고 404 PG_CALLBACK_TARGET_NOT_FOUND로 거절한다 | 계약 §7·§10, T174, 개발 데이터 폐기 결정 | example | DONE | src/refund/refund-result.service.spec.ts / U398 |
 | U399 | 환불 ID 없이 PG 취소 요청을 DB에 저장하면 거절된다 | data-model §4, T171 | example | DONE | src/prisma/refund-constraints.integration.spec.ts / U399 |
 | U400 | 시도 번호 없이 PG 취소 요청을 DB에 저장하면 거절된다 | data-model §4, T171 | example | DONE | src/prisma/refund-constraints.integration.spec.ts / U400 |
+| U401 | PG 취소 시도 번호가 0 또는 음수이면 DB가 거절한다 | data-model §4, T171 | boundary | DONE | src/prisma/refund-constraints.integration.spec.ts / U401 |
