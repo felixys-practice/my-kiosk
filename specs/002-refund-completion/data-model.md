@@ -71,7 +71,7 @@ Payment에 `approvedAmount Int?`를 추가한다. 기존 amount는 원래 요청
 | refundId | 필수 FK. 모든 PG 취소 요청은 하나의 Refund에 연결된다 |
 | amount / actualAmount | 고정 요청액 / 확인 전 null인 실제 PG 취소액 |
 | status | REQUESTED / QUERY_FAILED / SUCCEEDED / FAILED |
-| attemptNumber / requestedAt | 환불 안의 증가하는 시도 번호 / 생성 시각 |
+| attemptNumber / requestedAt | 환불 안에서 1부터 증가하는 필수 시도 번호 / 생성 시각 |
 | pgTransactionId | PG 취소 거래 ID, 고유, 승인 거래와 별개 |
 | failureCode / failureReason / failedAt | 확정 시도 실패, Refund 실패·철회가 아님 |
 | cancelledAt / updatedAt | 실제 PG 성공 확정 / 최종 갱신 |
