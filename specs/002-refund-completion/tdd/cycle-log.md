@@ -2219,3 +2219,17 @@ Tests:       1 failed, 8 skipped, 9 total
 - 테스트 정리 뒤 단위591개 통과(600-승인된9개). E2E178 passed·1 failed: seat-type QS-13 준비 입실이 `expected 201 "Created", got 500 "Internal Server Error"`로 실패했다. 실제 오류는 `재시도 4회차 실패: 성공 조건 미충족`, UsageSessionService.createSession의 mockExternalApi 재시도 경로다. 해당 함수는 Math.random()<0.1일 때 false를 반환하며 운영 소스는 이 단계에서 변경하지 않았다. 기존에 알려진 비결정적 모의 API 경로의 실패를 기록하고 단언/조건/실행대상 완화 없이 전체 E2E를 재실행한다.
 
 - 같은 전체 E2E 재실행179개 통과(38.676초). 승인된 테스트 폐기로 단위 총계는600→591이며 신규 환불 동작의 회귀179개는 유지했다. 운영 구현 변경 전의 별도 테스트 정리 단계로 커밋한다.
+
+### U398 콜백 연결 필수 red
+
+- 테스트만 먼저 추가하고 `npx jest src/refund/refund-result.service.spec.ts -t U398 --runInBand` 실행.
+```text
+    expect(received).rejects.toBeInstanceOf()
+
+    Received promise resolved instead of rejected
+    Resolved to value: undefined
+Tests:       1 failed, 1 total
+```
+- 환불에 연결된 요청이 없는데 기존 호환 서비스가 처리해 정상 종료하는 실제 실패를 기록했다. 이 기록 뒤 receiveCallback의 옛 경로 분기를 제거해 모든 콜백을 공통 결과 처리로 보낸다.
+
+- U398 green: 같은 테스트1개 통과, 전체 단위592개·E2E179개 통과. 환불에 연결된 시도를 찾지 못하면 공통 콜백 처리의 기존 PG_CALLBACK_TARGET_NOT_FOUND(404)로 거절한다. 금액·동의·지급 상태 규칙은 바꾸지 않았다. 사용하지 않는 클래스·메서드는 다음 별도 구조 정리에서 제거한다.

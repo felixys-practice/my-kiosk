@@ -680,3 +680,9 @@ U17·U248의 DONE은 이전에 구현·검증한 과거 이력 호환 동작의 
 | U395 | 알림 조회의 계산 위치가 표현 범위를 넘으면 ORM 전에 거절한다 | 계약 §9·10 | example | DONE | `src/refund/refund-notification.service.spec.ts` / U395 |
 | U396 | 알림 응답은 사건·메시지·현재 사용자의 읽음만 노출한다 | FR-038, FR-039, 계약 §9 | example | DONE | `src/refund/refund-notification.service.spec.ts` / U396 |
 | U397 | 동일 사용자·알림의 최초 읽음 요청이 동시에 겹쳐도 모두 200과 같은 최초 readAt을 반환하며 Receipt는 1건이다 | FR-039 / 계약 §9 | example | DONE | test/refund-notifications.e2e-spec.ts / U397 |
+
+## 최종 코드 정리·빈 DB 검증 추가 동작
+
+| ID | 동작 | 근거 | 종류 | 상태 | 테스트 |
+|---|---|---|---|---|---|
+| U398 | 환불 기록에 연결되지 않은 PG 취소 요청의 콜백을 처리하지 않고 404 PG_CALLBACK_TARGET_NOT_FOUND로 거절한다 | 계약 §7·§10, T174, 개발 데이터 폐기 결정 | example | DONE | src/refund/refund-result.service.spec.ts / U398 |

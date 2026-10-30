@@ -341,29 +341,12 @@ export class RefundResultService {
   /**
    * PG 취소 결과 콜백을 받아 대상에 맞는 처리로 보낸다 (API 계약 §7 POST /refund/callback)
    * - 환불 기록에 연결된 PG 취소 요청은 환불금 지급 결과 공통 처리로 반영한다
-   * - 기존 경로가 만든 PG 취소 요청(refundId 없음)은 US6·Phase 13 전환 전까지 기존 처리를 유지한다
    * @param callback 콜백 본문
-   * @throws PgCallbackTargetMismatchError 기존 경로 요청에 결제 전체(null) 대상 콜백이 온 경우
+   * @throws PgCallbackTargetNotFoundError 환불에 연결된 PG 취소 요청을 찾을 수 없는 경우
    * @throws RefundStorageUnavailableError 결과 저장이 실패한 경우(503)
    */
   async receiveCallback(callback: RefundCallbackInput): Promise<void> {
     try {
-      if (
-        await this.refundRepository.isLegacyAttempt(callback.paymentCancelId)
-      ) {
-        // 기존 경로의 PG 취소 요청은 항상 주문 상품 대상이다. 결제 전체(null) 콜백은 연결 불일치다
-        if (callback.orderItemId === null) {
-          throw new PgCallbackTargetMismatchError();
-        }
-        await this.legacyRefundService.callback(
-          callback.success,
-          callback.paymentCancelId,
-          callback.orderItemId,
-          callback.amount,
-          callback.reason,
-        );
-        return;
-      }
       await this.applyCallback(callback);
     } catch (error) {
       // 대상 오류(404·409 등 도메인 오류)는 그대로, 그 밖의 저장 실패는 PG가 다시 보내도록 503으로 바꾼다(API 계약 §7)
