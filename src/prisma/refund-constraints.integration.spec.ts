@@ -431,6 +431,13 @@ describe('환불 저장 모델 DB 제약', () => {
     });
   });
 
+  it('U402 폐기한 환불 잠금 테이블은 생성하지 않는다', async () => {
+    const rows = await prisma.$queryRaw<{ tableName: string | null }[]>`
+      SELECT to_regclass('public.refund_locks')::text AS "tableName"
+    `;
+    expect(rows[0].tableName).toBeNull();
+  });
+
   describe('PaymentCancel', () => {
     it('U401 PG 취소 시도 번호가 0 이하이면 DB가 거절한다', async () => {
       const target = await createAcceptedRefund();

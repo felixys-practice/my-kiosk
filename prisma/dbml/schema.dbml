@@ -193,7 +193,6 @@ Table order_items {
   product products [not null]
   order orders [not null]
   paymentCancels payment_cancels [not null]
-  refundLock refund_locks
   seatAssignments seat_assignments [not null]
   createdAt DateTime [default: `now()`, not null]
   updatedAt DateTime [not null]
@@ -256,22 +255,12 @@ Table payment_cancels {
   payment payments [not null]
   orderItemId String
   orderItem order_items
-  locks refund_locks [not null]
   ledger ledger
   notifications refund_notifications [not null]
 
   indexes {
     (refundId, attemptNumber) [unique]
   }
-}
-
-Table refund_locks {
-  orderItemId String [pk]
-  paymentCancelId String [not null]
-  expiresAt DateTime [not null]
-  orderItem order_items [not null]
-  paymentCancel payment_cancels [not null]
-  createdAt DateTime [default: `now()`, not null]
 }
 
 Table usage_sessions {
@@ -753,10 +742,6 @@ Ref: payment_cancels.requestedById > user.id [delete: Restrict]
 Ref: payment_cancels.paymentId > payments.id
 
 Ref: payment_cancels.orderItemId > order_items.id [delete: Restrict]
-
-Ref: refund_locks.orderItemId - order_items.id
-
-Ref: refund_locks.paymentCancelId > payment_cancels.id
 
 Ref: usage_sessions.ticketId > tickets.id
 

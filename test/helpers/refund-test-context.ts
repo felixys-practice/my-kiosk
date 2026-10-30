@@ -353,7 +353,6 @@ export async function createRefundTestContext(options: {
     });
     await prisma.ledger.deleteMany({ where: { shopId: { in: shopIds } } });
     await prisma.manualRefundPayout.deleteMany({ where: byRefund });
-    await prisma.refundLock.deleteMany({ where: { orderItem: byOrderUser } });
     await prisma.paymentCancel.deleteMany({ where: { payment: byOrderUser } });
     await prisma.refund.deleteMany({ where: { payment: byOrderUser } });
     await prisma.ticketSeatChange.deleteMany({

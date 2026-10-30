@@ -408,7 +408,6 @@ model OrderItem {
   product         Product          @relation(fields: [productId], references: [id])
   order           Order            @relation(fields: [orderId], references: [id])
   paymentCancels  PaymentCancel[] // 이 상품에 대한 취소 요청 이력(상품당 SUCCEEDED는 최대 1건, FAILED/REQUESTED 포함 시 여러 건 가능)
-  refundLock      RefundLock? // 이 상품에 대해 현재 진행 중인 환불이 있으면 존재(동시 중복 진행 방지용 락)
   seatAssignments SeatAssignment[] // 고정석 상품의 좌석 선점·확정 기록
 
   createdAt DateTime @default(now()) @map("created_at")
@@ -521,7 +520,6 @@ model PaymentCancel {
   payment       Payment              @relation(fields: [paymentId], references: [id])
   orderItemId   String?              @map("order_item_id") // 이 취소 요청의 대상 상품. 결제 전체 대상 환불(PAYMENT)이면 null, 환불에 연결된 행은 환불의 대상 상품과 같아야 한다
   orderItem     OrderItem?           @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
-  locks         RefundLock[] // 이 취소 요청이 보유 중인 상품별 락(확정되면 삭제됨)
   ledger        Ledger? // SUCCEEDED 확정 시 생성되는 원장 레코드(1:1 — 멱등키로 1건만 허용)
   notifications RefundNotification[] // 이 PG 취소 요청과 관련된 알림
   // NOTE: Partial Unique Index (raw migration으로 관리)
@@ -542,24 +540,6 @@ model PaymentCancel {
   @@index([refundId])
   @@index([status, nextInquiryAt]) // 자동 조회 대상 탐색
   @@map("payment_cancels")
-}
-
-// 상품(OrderItem) 단위 환불 동시 진행 방지용 락 테이블(예약 패턴)
-// 행이 존재 = 그 상품에 대해 미확정 취소가 진행 중, 행이 없음 = 새 취소 요청 가능
-// PaymentCancel 생성과 같은 트랜잭션에서 INSERT, 확정(성공/실패) 시 같은 트랜잭션에서 DELETE
-// expiresAt: 서버 크래시로 락 해제가 누락된 경우, 다음 락 획득 시도 시 만료된 락을 정리(자가 치유)하기 위한 TTL
-model RefundLock {
-  orderItemId     String   @id @map("order_item_id")
-  paymentCancelId String   @map("payment_cancel_id")
-  expiresAt       DateTime @map("expires_at")
-
-  orderItem     OrderItem     @relation(fields: [orderItemId], references: [id])
-  paymentCancel PaymentCancel @relation(fields: [paymentCancelId], references: [id])
-
-  createdAt DateTime @default(now()) @map("created_at")
-
-  @@index([expiresAt])
-  @@map("refund_locks")
 }
 
 enum UsageSessionStatus {

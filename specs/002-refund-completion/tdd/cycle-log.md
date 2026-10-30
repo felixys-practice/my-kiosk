@@ -2281,3 +2281,14 @@ Tests: 1 failed, 40 skipped, 41 total
 ```
 - 0번 시도를 DB가 저장하는 실제 실패를 먼저 확인했다. 이 기록 뒤 1 이상 CHECK 제약을 적용한다. 1번 저장은 기존 제약 통합 테스트에서 계속 검증한다.
 - U401 green: 0·음수 거절 단일 테스트1개와 전체 단위595개·E2E179개가 별도 DB에서 통과했다(94개 마이그레이션).
+
+### U402 폐기한 환불 잠금 테이블 제거
+
+- 별도 검증 DB에서 `node /tmp/refund-verify-db.cjs single U402`를 실행했다.
+```text
+expect(received).toBeNull()
+Received: "refund_locks"
+Tests: 1 failed, 41 skipped, 42 total
+```
+- 현재 마이그레이션이 옛 테이블을 남기는 실제 실패를 확인했다. 이 기록 뒤 테이블·Prisma 모델·테스트/시드 정리 참조를 제거한다. 현재 트랜잭션의 행 잠금을 구현하는 RefundLockingRepository는 보존한다.
+- U402 green: 별도 DB에서 단일1개·전체 단위596개·E2E179개 및 타입 검사 통과. 95개 마이그레이션으로 구형 잠금 테이블을 제거했다. 최초 빈 DB 전체 재적용은 다음 검증에서 확인한다.

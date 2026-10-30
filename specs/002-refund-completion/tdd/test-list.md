@@ -689,3 +689,4 @@ U17·U248의 DONE은 이전에 구현·검증한 과거 이력 호환 동작의 
 | U399 | 환불 ID 없이 PG 취소 요청을 DB에 저장하면 거절된다 | data-model §4, T171 | example | DONE | src/prisma/refund-constraints.integration.spec.ts / U399 |
 | U400 | 시도 번호 없이 PG 취소 요청을 DB에 저장하면 거절된다 | data-model §4, T171 | example | DONE | src/prisma/refund-constraints.integration.spec.ts / U400 |
 | U401 | PG 취소 시도 번호가 0 또는 음수이면 DB가 거절한다 | data-model §4, T171 | boundary | DONE | src/prisma/refund-constraints.integration.spec.ts / U401 |
+| U402 | 빈 DB 재구축 후 폐기한 refund_locks 테이블이 존재하지 않는다 | T174·T171, 개발 데이터 폐기 결정 | example | DONE | src/prisma/refund-constraints.integration.spec.ts / U402 |

@@ -411,9 +411,6 @@ describe('좌석 타입 (E2E)', () => {
   afterAll(async () => {
     // 역순 정리 (FK 제약 충돌 방지)
     const userIds = [ownerUser.id, normalUser.id, otherUser.id];
-    await prisma.refundLock.deleteMany({
-      where: { orderItem: { order: { userId: { in: userIds } } } },
-    });
     // 002 환불의 사건 알림(PG 미연동으로 전송 전 실패가 기록됨)은 PG 취소 요청보다 먼저 지운다
     await prisma.refundNotification.deleteMany({
       where: { refund: { payment: { order: { userId: { in: userIds } } } } },

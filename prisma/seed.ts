@@ -70,7 +70,6 @@ const SYSTEM_ACTOR = 'SYSTEM'; // 특정 사용자가 아닌 매장 스태프/�
 async function resetSeedData() {
   await prisma.usageSession.deleteMany({});
   await prisma.ticketPause.deleteMany({});
-  await prisma.refundLock.deleteMany({});
   await prisma.paymentCancel.deleteMany({});
   await prisma.payment.deleteMany({});
   await prisma.ticket.deleteMany({});
