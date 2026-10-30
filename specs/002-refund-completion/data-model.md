@@ -4,6 +4,8 @@
 
 현재 Prisma 스키마가 아니라 구현 예정 설계다. 기존 PaymentCancel·RefundLock 중심 설계를 아래 구조로 바꾼다.
 
+2026-10-30 사용자 결정으로 과거 개발 데이터 이관은 제외한다. 아래 표의 LEGACY_UNKNOWN·LEGACY_REJECTED·NOT_APPLICABLE·policyVersion=LEGACY는 이미 구현된 과거 이력 호환 표현을 설명하며, 이관 도구나 과거 이력 생성 기능을 요구하지 않는다. 현재 환불은 v0.4의 ACCEPTED로 접수한다. 호환 코드 정리는 최종 정리 작업에서 영향 범위를 확인한다.
+
 ## 1. 모델별 역할
 
 | 모델 | 역할 |
@@ -17,7 +19,7 @@
 
 `Refund`는 확정된 환불 금액과 이용 종료를 보관한다. `PaymentCancel`은 PG에 보내는 취소 요청을 번호별로 보관한다. 실패가 확정된 요청을 대신해 새 PG 취소 요청 식별자로 PG에 취소를 요청할 때는 이전 실패 기록을 보존하고 `PaymentCancel` 행을 하나 추가한다. 이때 기존 `Refund`와 확정된 환불 금액은 유지한다. 기존 요청을 기존 PG 취소 요청 식별자로 재전송할 때는 행을 추가하지 않는다.
 
-환불 1건과 PG 취소 요청 1건을 같은 레코드로 사용하지 않는다. 기존 RefundLock은 새 접수에 생성하지 않는다. 상품당 확정 Refund unique와 Ticket 행 잠금이 새 환불 중복을 막고, Refund 잠금과 활성 지급 고유성이 지급 중복을 막는다. 기존 RefundLock 데이터는 전환 검증 후 정리한다.
+환불 1건과 PG 취소 요청 1건을 같은 레코드로 사용하지 않는다. 기존 RefundLock은 새 접수에 생성하지 않는다. 상품당 확정 Refund unique와 Ticket 행 잠금이 새 환불 중복을 막고, Refund 잠금과 활성 지급 고유성이 지급 중복을 막는다. 기존 개발 데이터는 폐기할 수 있으며, 이전 환불 코드 정리 뒤 빈 DB 재구축에서 RefundLock 제거를 검증한다.
 
 ## 2. Payment·대상 구분
 
@@ -41,7 +43,7 @@ Payment에 `approvedAmount Int?`를 추가한다. 기존 amount는 원래 요청
 | targetKind | ORDER_ITEM / PAYMENT | 취소 대상 |
 | source | CUSTOMER / STORE / SYSTEM / LEGACY_UNKNOWN | 경로·알림·이력 |
 | decisionStatus | ACCEPTED / LEGACY_REJECTED | 새 환불은 ACCEPTED만, 기존 거절 이력만 별도 구분 |
-| policyVersion | String | 신규 v0.4, 과거 증거 기반 이관은 LEGACY |
+| policyVersion | String | 현재 접수하는 환불은 v0.4. LEGACY는 기존 구현의 호환 값 |
 | amount | Int, 0 이상, 확정 뒤 불변 | 확정된 환불 금액 |
 | paidAmount | Int, 0 이상 | 성공 PG 취소 요청·별도 환불금 지급의 실제액 합계, 잠금 아래 갱신 |
 | payoutStatus | PENDING / ACTION_REQUIRED / PAID / NOT_APPLICABLE | 마지막 값은 LEGACY_REJECTED만 |
@@ -50,23 +52,23 @@ Payment에 `approvedAmount Int?`를 추가한다. 기존 amount는 원래 요청
 | reviewedById / reviewedAt / reviewReason / reviewEvidenceReference | User FK? / DateTime? / String? / String? | 부족액 지급 확정 또는 초과액 검토의 실행자·시각·사유·근거 |
 | actionCode / actionReason | String? | 미지급·확인·불일치 등 조치 사유 |
 | requestedAt / acceptedAt | DateTime, acceptedAt은 과거 거절에서만 null | 신청·업무 확정 시각 |
-| terminatedAt | DateTime? | 이용권 있는 신규 환불은 필수, 이용권 없는 결제 취소는 null |
+| terminatedAt | DateTime? | 발행된 이용권의 이용을 종료한 환불은 필수, 이용권 없는 결제 취소는 null |
 | requestedById | User FK?, SYSTEM·증거 없는 과거만 null | 실행자 |
-| terminationConsentedAt / exitConsentedAt | DateTime? | 신규 CUSTOMER/STORE는 종료 동의 필수, 이용 중 STORE는 퇴실 동의도 필수 |
+| terminationConsentedAt / exitConsentedAt | DateTime? | 현재 CUSTOMER/STORE 환불은 종료 동의 필수, 이용 중 STORE는 퇴실 동의도 필수 |
 | reason / endedSessionId | String? / Session FK? | 점주 사유·실제 종료 세션 |
 | paidAt / updatedAt | DateTime? / DateTime | 전체 환불금 지급 완료·마지막 변경 |
 
 `outstandingAmount=max(amount-paidAmount,0)`, `overpaidAmount=max(paidAmount-amount,0)`는 응답에서 계산한다. PG 취소 완료는 PG가 확인한 실제액이며 고객 은행 반영 시각을 의미하지 않는다. PAID는 부족액 0, 미확정 환불금 지급 없음, reviewRequired=false일 때만 가능하다. PG 부족액을 예약대로 실제 지급하고 증빙을 확정하면 그 담당자·시각·증빙을 부족 지급 검토 기록으로도 남겨 reviewRequired를 함께 해제한다. 초과 지급은 운영자 검토 후 실제액을 유지한 채 PAID가 될 수 있다.
 
-신규 acceptedAt·terminatedAt은 같은 확정 트랜잭션의 시각을 사용한다. 이용권의 기존 expiresAt·remainingMinutes를 환불금 지급 실패로 복원하거나 연장하지 않는다. 이미 정지 중이었다면 재개 없이 해당 정지 기록을 닫고 종료 사유를 보존한다.
+현재 환불을 확정할 때 acceptedAt에는 확정 트랜잭션의 시각을 기록하고, 발행된 이용권을 종료했다면 terminatedAt에도 같은 시각을 기록한다. 이용권의 기존 expiresAt·remainingMinutes를 환불금 지급 실패로 복원하거나 연장하지 않는다. 이미 정지 중이었다면 재개 없이 해당 정지 기록을 닫고 종료 사유를 보존한다.
 
 ## 4. PaymentCancel: PG 취소 요청
 
-기존 테이블과 PK·PG 취소 거래 ID unique를 유지하고 `refundId`를 추가한다. 실제 구현 전에는 기존 orderItemId·paymentId 연결도 유지해 검증·이관한다. 새 행의 연결은 Refund와 같아야 한다.
+기존 테이블과 PK·PG 취소 거래 ID unique를 유지하고 `refundId`를 추가한다. orderItemId·paymentId 연결은 환불 대상과 일치하도록 검증한다. 과거 데이터 이관은 수행하지 않는다. 새 행의 연결은 Refund와 같아야 한다.
 
 | 필드 | 설계 |
 |---|---|
-| refundId | 새로 추가하는 취소 요청 기록은 필수 FK. 보존할 과거 거절 이력만 이관 기간 null 허용 |
+| refundId | 접수하는 취소 요청 기록은 필수 FK. 기존 코드의 nullable 연결은 최종 코드 정리와 빈 DB 제약 검증에서 확인한다 |
 | amount / actualAmount | 고정 요청액 / 확인 전 null인 실제 PG 취소액 |
 | status | REQUESTED / QUERY_FAILED / SUCCEEDED / FAILED |
 | attemptNumber / requestedAt | 환불 안의 증가하는 시도 번호 / 생성 시각 |
@@ -165,13 +167,12 @@ RefundRecoveryControl은 기존 설계의 PROBE/BATCH·nextProbeAt·담당 토�
 - 새 Refund 생성은 고객 본인 또는 해당 매장 점주만 한다. 시스템 자동 취소는 서버 내부 사건이다. MANAGER는 기존 환불 지급의 운영 처리만 한다.
 - 정지·좌석 타입 변경·입실·자동 종료는 Ticket을 잠근 뒤 REVOKED를 재검증한다. 환불 실패로 재개하는 경로는 설계에서 제거한다.
 
-## 10. 데이터 전환·배포
+## 10. 개발 DB 재구축·최초 배포
 
-1. 기존 구현의 조회만 사용하는 정리 도구로 PG 미확정 시도를 모두 확인한다. 결과를 모르면 전환을 차단한다. 옛 요청을 새 종료 동의로 추정해 활성 이용권을 일괄 소멸시키지 않는다.
-2. 거래가 증명된 기존 성공 환불은 Refund ACCEPTED/PAID·policyVersion=LEGACY로 이관하고 원래 시도를 연결한다. 실제액은 증거가 있는 기존 값만 사용하며 이미 기록된 원장을 중복 생성하지 않는다.
-3. 기존 승인 대기는 시도 이력을 FAILED·LEGACY_STORE_REFUND_REQUIRED로 보존하고 Refund LEGACY_REJECTED/NOT_APPLICABLE 이력으로 노출한다. 이용권·좌석은 바꾸지 않는다. 기존 확정 실패도 새 환불 확정으로 추정하지 않고 거절 이력으로 보존한다. 입증되지 않은 금액 불일치는 수동 성공으로 바꾸지 않는다.
-4. 새 테이블·nullable FK·검사 제약을 추가하고 검증·중복 정리 뒤 unique를 적용한다. 기존 RefundLock은 미확정 PG 건 없음이 확인된 뒤에만 삭제하고 신규 코드에서 사용을 중단한다.
-5. 구버전과 신버전의 의미가 다르므로 결제·환불·입실 변경 요청과 백그라운드 작업을 일시 중지해 전환한다. 데이터·서명 설정·새 계약 검증을 마친 뒤 연다. 신·구 코드 동시 쓰기는 금지한다.
-6. 실제 PG·은행은 아직 미연동이다. PG 미접수 확정·최종 실패·같은 키 중복 취소 방지 보장은 실연동 전에 검증해야 한다. 결과 미확정·별도 환불금 지급 예약을 지우는 다운 마이그레이션은 허용하지 않는다. 장애 시 데이터를 보존하고 수정 배포한다.
+1. 서비스 전 개발 데이터는 폐기할 수 있다(2026-10-30 사용자 결정). 과거 환불을 보존·이관하거나 누락 원장을 보충하는 도구, PG 미확정 건 정리 뒤 전환을 허용하는 절차는 이번 범위에서 제외한다.
+2. 빈 검증용 PostgreSQL DB에 마이그레이션을 순서대로 적용하고 최종 스키마·필수 연결·고유성·금액 제약을 확인한다. 과거 운영 DB 복제본의 이관 검증은 하지 않는다. 이 결정만으로 기존 마이그레이션을 합치거나 삭제하지 않는다.
+3. 이전 환불 코드와 RefundLock 참조를 정리한 뒤 불필요한 테이블 제거를 검증한다. 이미 구현된 과거 이력 호환 표현을 정리할 때는 신규 환불의 판정·지급·조회가 바뀌지 않는지 대조한다.
+4. 테스트에 필요한 개발 데이터를 다시 만들고 동시성·장애 복구·전체 단위·E2E·빌드·린트를 검증한다. 환불 결과를 추측해 확정하지 않고 원장·지급을 중복 반영하지 않는 규칙은 그대로 검증한다.
+5. 서버·클라이언트는 최종 API 계약으로 최초 배포한다. 실제 PG·은행은 아직 미연동이며 서명·미접수 확정·최종 실패·같은 키 중복 취소 방지 보장은 실연동 전에 확인한다. 서비스 시작 후에는 환불·원장·미확정 지급·예약을 보존한다.
 
-문서 수정은 DB 마이그레이션 실행이나 기존 데이터 검증을 완료했다는 의미가 아니다.
+이 절의 계획 변경은 DB 초기화·마이그레이션 실행이나 재구축 검증을 완료했다는 의미가 아니다.

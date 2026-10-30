@@ -80,7 +80,7 @@
 
 결제·환불 콜백에만 JWT를 우회하고 PG 서명 가드를 적용한다. rawBody·HMAC-SHA256·X-PG-Timestamp·X-PG-Signature·300초 허용 편차와 기존 canonical 규격은 유지한다. 서명 검증 전에 업무 상태를 바꾸지 않는다. 세부 규격은 [API 계약](contracts/rest-api.md)을 따른다.
 
-## R10. 설정·데이터 전환·범위
+## R10. 설정·개발 DB 재구축·범위
 
 | 환경 변수 | 기본값 | 의미 |
 |---|---:|---|
@@ -103,6 +103,6 @@
 
 SC-004는 최종 PG 결과를 정상 응답하고 작업이 밀리지 않는 조건에서 60+15=75초에 시도 결과를 판명하는 목표다. PG 처리 중·재전송·장애·적체 또는 미지급금 전체 해결 시간을 75초로 보장하지 않는다.
 
-기존 구현과 새 계약은 비호환이다. 기존 PG 미확정 시도는 실제 결과를 조회해 정리한 뒤 데이터 전환하며, 미확정 건이 남으면 전환을 차단한다. 과거 승인 대기·확정 실패는 신규 이용 종료로 추정하지 않고 이력으로 보존한다. 과거 성공과 누락 원장은 증거가 있는 금액만 이관한다. 상세는 [데이터 모델](data-model.md) 10절이다.
+서비스 전 개발 데이터는 폐기할 수 있으므로 과거 환불 이관·누락 원장 보충과 구버전 운영 서버 전환은 제외한다(2026-10-30 사용자 결정). 빈 검증용 DB에 스키마·제약을 적용하고 이전 코드 정리·동시성·장애 복구·전체 회귀를 확인한다. 실제 PG 연동 보장과 서비스 시작 후 지급 기록 보존 규칙은 유지한다. 상세는 [데이터 모델](data-model.md) 10절이다.
 
 근거는 기존 refund/payment/pg/usage-session/session-lifecycle/ticket-pause·Prisma 코드와 사용자 결정이다. 기존 기술 문서 [NestJS raw body](https://docs.nestjs.com/faq/raw-body), [BullMQ 스케줄러](https://docs.bullmq.io/guide/job-schedulers), [PostgreSQL 잠금](https://www.postgresql.org/docs/16/explicit-locking.html), [Node crypto](https://nodejs.org/docs/latest-v22.x/api/crypto.html)의 선택은 유지한다. 이번 수정에서 라이브러리 동작을 새로 실행 검증한 것은 아니다.

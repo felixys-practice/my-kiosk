@@ -52,7 +52,7 @@
 - [X] T017 [U59] [U60] [U61] `src/refund/refund-locking.repository.ts`, `src/session-lifecycle/session-lifecycle.repository.ts`에 Payment → Ticket → TicketPause → UsageSession → SeatAssignment → Refund → PaymentCancel → ManualRefundPayout 잠금과 같은 종류 ID 순 잠금을 제공한다. Service에 직접 DB 잠금 쿼리를 두지 않고 외부 PG 호출 중에는 트랜잭션을 유지하지 않는다. `src/refund/refund-locking.repository.spec.ts`로 잠금 순서 계약을 확인한다.
 - [X] T018 `src/refund/refund.module.ts`, `src/session-lifecycle/session-lifecycle.module.ts`, `src/pg/pg.module.ts`에 공통 Repository와 PG 대역 교체 지점을 연결한다. 새 서비스는 도입되는 스토리에서 등록하고 다른 도메인과 순환 의존이 생기지 않는지 `test/refund-bootstrap.e2e-spec.ts`에서 검증한다.
 
-**체크포인트**: 검증용 DB에서 신규 모델을 쓸 수 있고 공통 권한·멱등·PG 계약이 검증됐다. 실제 데이터 이관과 기존 RefundLock 제거는 마지막 전환 단계에서 수행한다.
+**체크포인트**: 검증용 DB에서 신규 모델을 쓸 수 있고 공통 권한·멱등·PG 계약이 검증됐다. 과거 개발 데이터 이관은 2026-10-30 사용자 결정으로 제외한다. 기존 RefundLock 참조 정리와 빈 DB 재구축은 마지막 검증 단계에서 수행한다.
 
 **검수 관문**: T006부터 T018까지 마치면 실행 규칙의 Phase 검수 절차에 따라 Codex 검수를 받는다. "통과" 판정 전에는 다음 Phase로 넘어가지 않는다.
 
@@ -366,22 +366,24 @@
 
 **검수 관문**: T156부터 T168까지의 작업과 T188 작업을 마치면 실행 규칙의 Phase 검수 절차에 따라 Codex 검수를 받는다. "통과" 판정 전에는 다음 Phase로 넘어가지 않는다.
 
-## Phase 13: 데이터 전환과 전체 검증
+## Phase 13: 개발 DB 재구축과 최종 기능 검증
 
-**목적**: 기존 이력을 보존해 새 계약으로 전환할 수 있는지 검증하고 모든 인수 기준을 실제 테스트에 연결한다.
+**목적**: 서비스 전 개발 데이터를 폐기할 수 있다는 2026-10-30 사용자 결정에 따라, 빈 검증용 DB의 스키마·제약과 최종 환불 기능을 검증한다. 과거 데이터 이관·구버전 운영 서버 전환은 제외한다.
 
-- [ ] T169 [U262] [U263] [U264] [U265] [U266] `scripts/refund/check-legacy-refunds.ts`와 `scripts/refund/check-legacy-refunds.spec.ts`에 읽기 전용 이관 사전 점검을 만든다. 기존 PG 미확정·증거 없는 금액·중복 확정 대상이 남으면 전환을 차단하고 결과를 추측하지 않는다. 운영 데이터에 자동 쓰기를 수행하지 않는다.
-- [ ] T170 [U264] [U265] [U266] `scripts/refund/migrate-legacy-refunds.ts`, `test/refund-migration.e2e-spec.ts`에 성공 증거 기반 ACCEPTED/PAID·LEGACY 이관, 승인 대기/확정 실패 LEGACY_REJECTED/NOT_APPLICABLE 보존, LEGACY_STORE_REFUND_REQUIRED 사유와 누락 원장 중복 없는 보충을 구현한다. 과거 실패 이용권·좌석·동의를 신규 종료로 바꾸지 않는다. 검증용 DB 이관 뒤 HTTP로 과거/신규 내역을 대조한다.
-- [ ] T171 `prisma/migrations/20261027000200_refund_completion_finalize/migration.sql`에 이관 검증 후 필수 연결·unique 제약 확정과 기존 RefundLock 정리 절차를 작성한다. 기존 데이터가 있는 환경은 변경 요청/worker 중지→확장→이관 검증→최종 제약→새 서버 재개 순서로 적용하고, 빈 테스트 DB와 기존 데이터 복제본 모두 검증한다.
+완료된 Phase 1~12의 과거 이력 관련 작업·테스트는 당시 구현과 검증 기록이다. 새 이관 도구를 요구하지 않으며, 호환 코드 정리는 T174에서 영향 범위를 확인한다. T169·T170은 완료한 구현이 아니라 범위에서 제외한 작업이다.
+
+- T169 [범위 제외, 2026-10-30] [U262] [U263] [U264] [U265] [U266] 과거 환불 이관 사전 점검 도구와 그 테스트는 작성하지 않는다. 개발 데이터를 폐기할 수 있다는 사용자 결정에 따른 제외이며 구현 완료로 계산하지 않는다.
+- T170 [범위 제외, 2026-10-30] [U264] [U265] [U266] 과거 환불·원장을 새 구조로 옮기는 스크립트와 이관 E2E는 작성하지 않는다. 과거 승인 대기·성공·실패 기록 보존 요구는 이번 개발 데이터 재구축에 적용하지 않는다.
+- [ ] T174 `src/refund/refund.service.ts`, `src/refund/refund.repository.ts`, `src/refund/refund.module.ts`에서 신규 흐름으로 대체한 RefundLock TTL 해제·승인 대기·PG 실패 후 이용권 복구 코드를 제거하고 기존 `src/refund/refund.service.spec.ts`의 변경된 기대값을 명세와 대조한다. 테스트 기대값 변경이 필요한 항목은 헌법 III에 따라 근거와 사용자 확인을 남긴 뒤 변경한다.
+- [ ] T171 기존 마이그레이션을 빈 검증용 DB에 순서대로 적용해 최종 스키마·필수 연결·unique·금액 제약을 확인한다. T174에서 이전 코드의 참조를 정리한 뒤 필요한 최종 마이그레이션으로 RefundLock을 제거한다. 기존 마이그레이션 통합은 별도 결정 없이 수행하지 않는다. 운영 DB 복제본 이관과 구버전 중지·전환·재개 검증은 제외한다.
 - [ ] T172 `test/refund-concurrency.e2e-spec.ts`에 고객/점주 동시 접수, 입실/환불, 콜백/조회, 자동/개별 조회, 점주·운영자의 실패 요청 개별 조회/MANAGER 직접 PG 재요청/외부 지급 예약, 증빙 반복 등록 경쟁을 재현한다. 확정 환불·활성 PG 요청·활성 지급 예약·지급별 원장 수와 실제 PG 호출 수를 검증한다.
 - [ ] T173 `test/refund-crash-recovery.e2e-spec.ts`에 커밋 전/후·PG 전송 전/후·성공 후 저장 실패·worker 중단·담당 만료·큐 유실/중복을 재현한다. 재시작 후 DB 기록에서 조회를 재개하고 이용 종료·확정된 환불 금액·외부 지급 예약을 보존하는지 검증한다.
-- [ ] T174 `src/refund/refund.service.ts`, `src/refund/refund.repository.ts`, `src/refund/refund.module.ts`에서 신규 흐름으로 대체한 RefundLock TTL 해제·승인 대기·PG 실패 후 이용권 복구 코드를 제거하고 기존 `src/refund/refund.service.spec.ts`의 변경된 기대값을 명세와 대조한다. 테스트 기대값 변경이 필요한 항목은 헌법 III에 따라 근거와 사용자 확인을 남긴 뒤 변경한다.
-- [ ] T175 `specs/002-refund-completion/quickstart.md`에 실제 E2E 파일/테스트 이름 대응을 기록한다. 92개 QS 모두 HTTP 테스트가 존재하고 60개 FR·25개 SC가 구현/테스트에 연결되는지 대조한다. 자동 최종 결과 정상·무적체 조건에서 기본 75초 목표도 테스트 시계로 검증한다.
-- [ ] T176 [P] `specs/002-refund-completion/release-checklist.md`에 API/클라이언트 비호환 전환, 실제 PG의 authoritative NOT_FOUND·최종 실패·멱등 키·서명 보장 확인 항목, 기존 미확정 정리, 작업자 중지/재개, 데이터 보존 수정 배포 절차를 적는다. 이 저장소 밖 클라이언트와 실제 PG 검증은 미확인으로 표시한다.
+- [ ] T175 `specs/002-refund-completion/quickstart.md`에 실제 E2E 파일/테스트 이름 대응을 기록한다. 92개 QS 모두 HTTP 테스트가 존재하고 현재 범위의 FR·SC가 구현/테스트에 연결되는지 대조한다. 범위 제외한 FR-007a와 U262~U266은 제외 근거를 표시하고 미구현 누락으로 계산하지 않는다. 자동 최종 결과 정상·무적체 조건에서 기본 75초 목표도 테스트 시계로 검증한다.
+- [ ] T176 [P] `specs/002-refund-completion/release-checklist.md`에 빈 DB 재구축·필수 설정·서버/클라이언트 API 계약 일치와 실제 PG의 authoritative NOT_FOUND·최종 실패·멱등 키·서명 보장 확인 항목을 적는다. 실제 PG와 은행 연동 검증은 미확인으로 표시한다. 과거 개발 데이터 이관·구버전 운영 서버 전환 체크리스트는 만들지 않는다.
 - [ ] T177 `src/refund/refund.controller.ts`, `src/refund/refund-operations.controller.ts`, `src/refund/refund-recovery.controller.ts`, `src/refund/refund-notification.controller.ts`의 Swagger와 한글 주석을 최종 API 계약에 맞춘다. 예약 대상·외부 실제 지급·결과 등록·예약 실패 종료를 구별하고 spec·다이어그램·API의 의미 차이를 `specs/002-refund-completion/verification.md`에 기록해 해소한다.
 - [ ] T178 `.specify/memory/tdd-profile.md`의 전체 단위·E2E 명령, `npm run build`, 변경 파일 ESLint를 실행하고 `specs/002-refund-completion/verification.md`에 실제 결과를 기록한다. 소유권·중복 지급·원장 중복·서명·예약 차단의 의도적 오류를 넣어 테스트가 실패하는지 확인한 뒤 원복하고 재검증한다.
 
-**검수 관문**: T169부터 T178까지 마치면 실행 규칙의 Phase 검수 절차에 따라 Codex 검수를 받는다. "통과" 판정 전에는 구현 완료로 보고하지 않는다.
+**검수 관문**: 범위에 남은 T171부터 T178까지 마치면 실행 규칙의 Phase 검수 절차에 따라 Codex 검수를 받는다. "통과" 판정 전에는 구현 완료로 보고하지 않는다.
 
 ## 의존 관계와 실행 순서
 
@@ -401,7 +403,7 @@ Phase 번호는 명세 우선순위별 문서 구성이다. 실제 실행은 다
 | US7 콜백 인증 | 공통 오류·설정·PG 계약 | US4/US6 HTTP 처리와 연결. 서명 전용 단위 테스트는 먼저 작성 가능 |
 | US8 내역 | 기반 모델·권한, US1/US10 fixture | 사용자별 범위·이력·증빙 노출 검증 |
 | US9 알림·응답 | US4 내부 사건 저장·US8 조회 | US5/US10의 실패/예약 알림까지 연결 |
-| 최종 전환·배포 검증 | 모든 스토리 | 이관·동시성·중단 복구·전체 회귀·TDD 증거 확인 |
+| 최종 재구축·배포 검증 | 모든 스토리 | 빈 DB 스키마·제약·동시성·중단 복구·전체 회귀·TDD 증거 확인 |
 
 각 단계 사이에는 실행 규칙의 Phase 검수 절차에 따른 Codex "통과" 판정이 필요하다. 권장 구현 순서는 기반 → US1 접수 → US4 공통 결과 → US2·US3 → US5 일반 복구 → US10 공통 PG 재요청 → US5 개별 확인 완료 → US6·US10 외부 지급 → US7 → US8·US9 → 최종 검증이다. 신규 콜백을 외부에 공개하는 배포는 US7 완료 후에만 한다.
 

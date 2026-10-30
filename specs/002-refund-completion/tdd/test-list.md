@@ -607,19 +607,21 @@ suite_baseline: green
 | U260 | 받을 수 없는 알림의 읽음 처리는 404 NOTIFICATION_NOT_FOUND로 거절된다 | FR-039 | example | DONE | `src/refund/refund-notification.service.spec.ts` / U260 |
 | U261 | PG 실패가 있어도 접수 응답은 502가 아니라 202와 ACCEPTED·ACTION_REQUIRED 상태다 | FR-035 | example | DONE | `test/refund-notifications.e2e-spec.ts` / U261 |
 
-### `scripts/refund/check-legacy-refunds.ts, scripts/refund/migrate-legacy-refunds.ts`
+### 범위에서 제외한 과거 데이터 이관 (2026-10-30 사용자 결정)
 
 | id | behavior | traces | kind | state | test |
 |---|---|---|---|---|---|
-| U262 | 이관 사전 점검은 결과가 미확정인 과거 PG 취소 요청이 남아 있으면 전환 차단 결과를 낸다 | INV-1 | example | PENDING | |
-| U263 | 이관 사전 점검은 DB에 아무것도 쓰지 않는다 | INV-1 | example | PENDING | |
-| U264 | 과거 승인 대기 환불은 LEGACY_REJECTED·NOT_APPLICABLE과 사유 LEGACY_STORE_REFUND_REQUIRED로 이관되고 이용권은 바뀌지 않는다 | FR-007a | example | PENDING | |
-| U265 | 성공 증거가 있는 과거 환불만 ACCEPTED·PAID로 이관된다 | INV-1 | example | PENDING | |
-| U266 | 누락 원장 보충을 두 번 실행해도 원장은 지급마다 1건이다 | FR-019 | example | PENDING | |
+| U262 | 이관 사전 점검은 결과가 미확정인 과거 PG 취소 요청이 남아 있으면 전환 차단 결과를 낸다 | INV-1 | example | DROPPED | 개발 데이터 폐기 허용으로 이관 도구·과거 기록 보존을 제외함(2026-10-30) |
+| U263 | 이관 사전 점검은 DB에 아무것도 쓰지 않는다 | INV-1 | example | DROPPED | 개발 데이터 폐기 허용으로 이관 도구·과거 기록 보존을 제외함(2026-10-30) |
+| U264 | 과거 승인 대기 환불은 LEGACY_REJECTED·NOT_APPLICABLE과 사유 LEGACY_STORE_REFUND_REQUIRED로 이관되고 이용권은 바뀌지 않는다 | FR-007a | example | DROPPED | 개발 데이터 폐기 허용으로 이관 도구·과거 기록 보존을 제외함(2026-10-30) |
+| U265 | 성공 증거가 있는 과거 환불만 ACCEPTED·PAID로 이관된다 | INV-1 | example | DROPPED | 개발 데이터 폐기 허용으로 이관 도구·과거 기록 보존을 제외함(2026-10-30) |
+| U266 | 누락 원장 보충을 두 번 실행해도 원장은 지급마다 1건이다 | FR-019 | example | DROPPED | 개발 데이터 폐기 허용으로 이관 도구·과거 기록 보존을 제외함(2026-10-30) |
+
+U17·U248의 DONE은 이전에 구현·검증한 과거 이력 호환 동작의 기록이다. FR-007a 제외 이후 새 이관 기능을 요구하는 근거로 사용하지 않는다. 이미 있는 테스트의 변경·정리는 T174에서 근거와 회귀 영향을 확인한다.
 
 ## 불변식
 
-- **INV-1**: 데이터 전환은 결과가 미확정이거나 증거가 없는 과거 환불·PG 취소 요청의 결과를 추측해 바꾸지 않는다. 근거: `plan.md` 6절 "미확정 기존 PG 취소 요청이 있으면 전환을 멈추고 조회로 정리한다. 증거 있는 성공만 PAID로 이관한다", `data-model.md` 10절.
+- **INV-1 (범위 제외, 2026-10-30)**: 과거 데이터 이관의 결과 추정 금지 규칙은 개발 데이터 폐기 결정으로 적용 대상이 없다. 서비스 시작 후 PG 미확정 결과를 추측해 확정하지 않는 업무 규칙과 동시성·장애 복구 검증은 유지한다. 근거: `spec.md` Session 2026-10-30, `plan.md` 6절, `data-model.md` 10절.
 - **INV-2**: 환불 저장 모델은 data-model §3·§6이 정한 값 제약(금액·합계 음수 금지, 별도 환불금 지급액 양수, 대상 종류별 상품 ID 규칙, 신규 확정 환불의 실행자·종료 동의·확정 시각 필수, NOT_APPLICABLE은 과거 거절만)을 서비스 검증과 별개로 DB에서도 거부한다. 근거: `data-model.md` §3 필드 표, §6 "amount·actualAmount·paidAmount·횟수는 음수 금지. ORDER_ITEM은 상품 필수, PAYMENT는 상품 null·SYSTEM만. 신규 CUSTOMER/STORE는 실행자·종료 동의 필수다", `tasks.md` T007. 2026-10-28 Phase 2 진행 중 테스트 목록에 빠진 제약을 발견해 추가했다.
 
 ## 아직 담당 파일을 정하지 않은 동작

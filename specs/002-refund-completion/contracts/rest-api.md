@@ -40,6 +40,8 @@
 
 ## 3. 환불 정보·상태
 
+과거 개발 데이터 이관은 범위에서 제외했다. 아래 LEGACY_REJECTED·NOT_APPLICABLE·policyVersion=LEGACY 설명은 현재 구현의 호환 표현이며, 새 접수에서는 생성하지 않는다. 호환 표현을 정리할 때 신규 환불의 응답 계약이 바뀌지 않는지 확인한다.
+
 ```json
 {
   "refundId":"UUID", "decisionStatus":"ACCEPTED", "policyVersion":"v0.4",
@@ -55,14 +57,14 @@
 
 | 구분 | 값·표시 |
 |---|---|
-| decisionStatus | 신규 ACCEPTED는 이용 종료·금액 확정. LEGACY_REJECTED는 과거 승인 대기·거절 이력이고 acceptedAt/terminatedAt=null |
+| decisionStatus | 현재 접수한 ACCEPTED는 이용 종료·금액 확정. LEGACY_REJECTED는 과거 승인 대기·거절 이력이고 acceptedAt/terminatedAt=null |
 | payoutStatus=PENDING | 환불금 지급 처리 중, 현재 시도의 QUERY_FAILED면 PG 취소 결과 확인 실패·재확인 중으로 별도 표시 |
 | payoutStatus=ACTION_REQUIRED | 미지급 조치 필요 또는 금액 불일치 검토 필요. 확정 환불은 유지 |
 | payoutStatus=PAID | 확정된 환불 금액의 지급 완료·필요 검토 완료. 고객 은행의 명세 반영 시각을 뜻하지 않음 |
 | payoutStatus=NOT_APPLICABLE | 과거 거절 이력만 사용, 미지급 환불로 계산하지 않음 |
 | attemptStatus | REQUESTED / QUERY_FAILED / SUCCEEDED / FAILED, 한 번의 PG 취소 요청 상태 |
 
-신규 ACCEPTED의 이용권은 모든 환불금 지급 상태에서 REVOKED다. PAYMENT 대상은 ticketId/orderItemId/terminatedAt=null이며 SYSTEM만 생성한다. 실제 환불금 지급 합계는 성공 시도·증빙 지급만 더하고, 미확정 PG 결과나 예약 금액을 0원 환불금 지급 성공으로 해석하지 않는다. 과거 기록은 policyVersion=LEGACY와 decisionStatus로 새 결정과 구별한다.
+현재 ACCEPTED로 확정한 환불의 이용권은 모든 환불금 지급 상태에서 REVOKED다. PAYMENT 대상은 ticketId/orderItemId/terminatedAt=null이며 SYSTEM만 생성한다. 실제 환불금 지급 합계는 성공 시도·증빙 지급만 더하고, 미확정 PG 결과나 예약 금액을 0원 환불금 지급 성공으로 해석하지 않는다. 과거 기록은 policyVersion=LEGACY와 decisionStatus로 새 결정과 구별한다.
 
 상세 응답은 `attempts`와 `manualPayouts` 이력을 포함한다. 운영 상세 오류·증빙 참조·검토 사유는 MANAGER에게만 노출하며 고객에게 PG 원문 오류·민감 계좌 정보를 반환하지 않는다.
 
@@ -284,7 +286,7 @@ ConfigService/Joi로 `lease>timeout`, `interval>=sweep+timeout`, `backoffCap>=ba
 
 전송 전 실패·PG 거절은 접수 후 PG 취소 요청 결과이며 HTTP 신청 거절 코드가 아니다. `actionCode`는 SEND_FAILED, PG_REJECTED, RETRY_EXHAUSTED, AMOUNT_MISMATCH, MANUAL_CONFIRMATION_REQUIRED 등을 사용한다. PG 내부 오류 원문은 운영 상세에만 보관한다. NOT_TICKET_OWNER는 폐지, TICKET_REVOKED 강제 폐기는 범위 밖이다.
 
-## 11. 추적·전환
+## 11. 추적·최초 배포
 
 | FR | 계약 |
 |---|---|
@@ -298,4 +300,4 @@ ConfigService/Joi로 `lease>timeout`, `interval>=sweep+timeout`, `backoffCap>=ba
 | 040~042 | 종료 동의·원자적 이용 종료·복구 금지(4,6절) |
 | 043~051 | 미지급 운영·별도 환불금 지급·검토·계속 추적(5,8~10절) |
 
-기존 클라이언트는 요청 동의·응답 refundId/payoutStatus·상세 키를 함께 바꿔 배포한다. 기존 PG 미확정이 남으면 데이터 전환을 차단하고 결과를 추측하지 않는다. 과거 승인 대기/실패는 LEGACY_REJECTED/NOT_APPLICABLE로 보존해 새 환불의 이용 종료와 구별한다. 실제 PG 서명·미접수 확정·최종 실패·PG 멱등 보장은 실연동 때 검증해야 한다.
+서비스 전 개발 데이터는 폐기할 수 있으므로 과거 기록 이관과 구버전 운영 서버 전환 절차는 제외한다(2026-10-30 사용자 결정). 서버·클라이언트는 요청 동의·응답 refundId/payoutStatus·상세 키가 이 계약과 일치하는 상태로 최초 배포한다. 빈 DB 재구축과 기능 회귀를 검증하며, 실제 PG 서명·미접수 확정·최종 실패·PG 멱등 보장은 실연동 때 확인한다.
