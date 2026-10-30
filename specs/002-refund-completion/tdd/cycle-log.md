@@ -2124,3 +2124,45 @@ expect(received).toMatchObject(expected)
 - tasks.md의 US9 외 별도 표현 교정이 이전 사이클의 전체 파일 staging에 섞여 있었다. 검수 최종 diff는 기준 커밋의 US9 외 문장으로 되돌려 분리하고, 작업 파일에는 사용자가 교정한 문장들을 그대로 복원한다. 별도 교정을 없애거나 새 정책을 정하는 작업이 아니다. 이후 커밋에서 사용자 문장을 다시 포함하지 않도록 파일 범위를 확인한다.
 
 - 최종 타입 정리: strictBindCallApply=false 환경에서 bind 반환이 any로 추론되어 U256 원본 함수에 메서드 타입을 명시했다. 업무 동작·테스트 단언 변경 없음. 변경 후 U256 1 passed, npx tsc --noEmit 및 US9 변경 TypeScript 파일 10개의 eslint 오류 없음, git diff --check 통과. 전체 회귀는 직전 동작 동일 상태에서 단위600/E2E178 통과했다.
+
+### US9 Astra 검수 1차 (7c52b2c, 2026-10-30 01:50 KST)
+
+- GPT-6-Astra high 판정: 수정 필요. P2: 같은 사용자의 최초 읽음이 동시에 겹치면 Prisma의 빈 update upsert가 SELECT→INSERT로 실행되어 한 요청이 P2002/409가 된다. 생성 경쟁에서도 최초 Receipt를 반환해야 한다. 검수자는 실제 Prisma·Repository와 DB 없는 어댑터 대역으로 재현했다.
+- 그 외 추가 차단 결함 없음. 검수자 직접 단위12개 통과, 공유 DB 테스트 미실행. 기존 동작 재사용과 신규 선행 실패 구분·US9 외 사용자 교정 분리를 확인했다.
+- 비차단 정정: 이전 'diff check 통과'는 작업 파일의 git diff --check 결과다. 고정 커밋 간 git diff --check dbf6b1d 7c52b2c는 cycle-log의 실제 실패 출력 끝 공백 4곳(1969·2004·2067·2107행)으로 실패한다. 과거 실행 기록은 append-only 규칙에 따라 지우지 않고 검사 범위를 바로잡는다.
+- 수정 회귀 U397을 실제 HTTP·PostgreSQL 경쟁으로 검증한다. 동시성 재검수는 같은 세션의 GPT-6-Astra xhigh로 진행한다.
+
+- U397 최초 테스트 준비 오류(유효 red 아님): 실제 PK는 text인데 ::uuid로 비교해 `operator does not exist: text = uuid`가 났다. 테스트 쿼리의 잘못된 cast만 제거하고 운영 구현은 그대로 둔 채 다시 실행한다.
+
+- U397 준비 보완(유효 red 아님): 두 번째 실행은 Jest 기본 5000ms 제한에 걸렸고, 미완료 HTTP 요청과 afterAll 정리가 겹쳐 FK 오류·열린 연결이 남았다. 제가 실행한 해당 테스트 프로세스만 SIGINT로 종료했다. 상태 통계 캐시를 비우며 대기 요청을 관찰하고, 잠금 해제 후 모든 HTTP 요청을 finally에서 기다린 뒤 정리하도록 테스트를 고친다. 경쟁 대기 상한 5초보다 긴 테스트 제한 20초를 명시한다. 운영 코드는 아직 변경하지 않았다.
+
+### U397 有効 red
+
+- 정정: 제목은 'U397 유효 red'이다. `npx jest --config ./test/jest-e2e.json test/refund-notifications.e2e-spec.ts -t U397`
+```text
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 1
+
+      Array [
+    -   200,
+    +   409,
+        200,
+      ]
+Tests:       1 failed, 8 skipped, 9 total
+```
+- 두 INSERT가 실제 PostgreSQL 잠금에서 대기한 뒤 해제했을 때 [409,200]으로 실패했다. 이 출력 기록 전에는 운영 구현을 변경하지 않았다.
+
+### U397 修正後検証
+
+- 정정: 제목은 'U397 수정 후 검증'이다. 읽음 기록은 createMany(skipDuplicates:true)로 먼저 저장하고, 같은 사용자·알림의 저장된 Receipt를 조회한다. 먼저 저장된 readAt을 바꾸지 않는다. 목은 실제 DB 동작과 같은 중복 무시·기존 조회로 바꾸고 U257/U258 단언을 보존했다.
+- 새 U397 실제 DB 경쟁: 1 passed. 두 INSERT 대기 확인 뒤 모두 200·같은 readAt·Receipt 1건이다. 전체 회귀: Test Suites: 53 passed, 53 total / Tests:       600 passed, 600 total / Time:        15.869 s; Test Suites: 14 passed, 14 total / Tests:       179 passed, 179 total / Time:        14.781 s, estimated 25 s. 코드·테스트를 서식 정리했으며 동작 추가는 이 수정뿐이다.
+
+### US9 재개 검증 (2026-10-30)
+
+- 변경된 읽음 Repository·회귀 테스트의 tsc·eslint·현재 변경 공백 검사 통과. U397을 포함한 전체 단위600개 통과.
+- 전체 E2E 병렬 재실행은 178 passed·1 failed. 기존 refund-operations의 QS-10-1d가 `Exceeded timeout of 5000 ms for a test.`로 실패했다. 새 U397은 통과했다. 테스트 단언·시간 제한을 바꾸지 않고 전체 E2E를 직렬 실행해 공유 DB 부하 영향을 구분한다.
+- 현재 도구 환경에는 HERDR_ENV가 없어 Herdr 스킬의 환경 확인 규칙에 따른 패널 제어를 중단하고, 사용자에게 기존 검수 패널 접근 예외를 요청했다. 구현·테스트는 계속 진행한다.
+
+- 재개 후 직렬 전체 회귀: 단위53 suites·600 passed(17.59초), E2E14 suites·179 passed(43.684초). 테스트 제외·단언 완화·기존 시간 제한 변경 없음. tsc 및 수정 파일 eslint 통과. 추가 코드 변경 없이 기존 검수 지적을 재검수할 수 있는 상태다.

@@ -323,6 +323,63 @@ describe('환불 상태와 수신자별 알림 (E2E)', () => {
     );
   });
 
+  it('U397 같은 사용자의 최초 읽음 두 요청이 겹쳐도 모두 200과 같은 시각을 반환한다', async () => {
+    const accepted = await accept();
+    await reject(accepted);
+    const notification = await ctx.prisma.refundNotification.findFirstOrThrow({
+      where: { refundId: accepted.refundId, audience: 'SHOP' },
+    });
+    let responses: Promise<{ status: number; readAt: string }[]> | undefined;
+    try {
+      await ctx.prisma.$transaction(
+        async (tx) => {
+          // Receipt INSERT의 FK 확인을 막아 두 요청이 모두 생성 단계에 도달하게 한다.
+          await tx.$queryRaw`
+          SELECT id FROM refund_notifications WHERE id = ${notification.id} FOR UPDATE
+        `;
+          responses = Promise.all(
+            [1, 2].map(() =>
+              request(ctx.server)
+                .patch(`/refund/notifications/${notification.id}/read`)
+                .set('Authorization', `Bearer ${ctx.owner.token}`)
+                .send({})
+                .then((res) => ({
+                  status: res.status,
+                  readAt: res.body.data?.readAt as string,
+                })),
+            ),
+          );
+          const deadline = Date.now() + 5000;
+          let waiting = 0;
+          while (waiting < 2 && Date.now() < deadline) {
+            await tx.$executeRaw`SELECT pg_stat_clear_snapshot()`;
+            const rows = await tx.$queryRaw<{ waiting: number }[]>`
+            SELECT count(*)::int AS waiting FROM pg_stat_activity
+            WHERE datname = current_database() AND wait_event_type = 'Lock'
+              AND query ILIKE '%INSERT%refund_notification_receipts%'
+          `;
+            waiting = rows[0].waiting;
+            if (waiting < 2)
+              await new Promise((resolve) => setTimeout(resolve, 10));
+          }
+          expect(waiting).toBe(2);
+        },
+        { timeout: 10000 },
+      );
+    } finally {
+      if (responses) await responses;
+    }
+    const results = await responses!;
+    expect(results.map((res) => res.status)).toEqual([200, 200]);
+    expect(results[0].readAt).toEqual(expect.any(String));
+    expect(results[1].readAt).toBe(results[0].readAt);
+    expect(
+      await ctx.prisma.refundNotificationReceipt.count({
+        where: { notificationId: notification.id, userId: ctx.owner.id },
+      }),
+    ).toBe(1);
+  }, 20000);
+
   it('읽은 알림은 본인의 미읽음에서만 빠지고 반복 읽음은 최초 시각을 보존하며 다른 수신자는 읽을 수 없다 (QS-9-4b)', async () => {
     const accepted = await accept();
     await reject(accepted);

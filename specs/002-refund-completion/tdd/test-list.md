@@ -677,3 +677,4 @@ suite_baseline: green
 | U394 | audience 필터는 현재 수신 범위와 교집합으로 적용한다 | 계약 §9 | example | DONE | `src/refund/refund-notification.service.spec.ts` / U394 |
 | U395 | 알림 조회의 계산 위치가 표현 범위를 넘으면 ORM 전에 거절한다 | 계약 §9·10 | example | DONE | `src/refund/refund-notification.service.spec.ts` / U395 |
 | U396 | 알림 응답은 사건·메시지·현재 사용자의 읽음만 노출한다 | FR-038, FR-039, 계약 §9 | example | DONE | `src/refund/refund-notification.service.spec.ts` / U396 |
+| U397 | 동일 사용자·알림의 최초 읽음 요청이 동시에 겹쳐도 모두 200과 같은 최초 readAt을 반환하며 Receipt는 1건이다 | FR-039 / 계약 §9 | example | DONE | test/refund-notifications.e2e-spec.ts / U397 |

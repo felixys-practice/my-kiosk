@@ -36,21 +36,29 @@ function receiptStore() {
       findFirst: jest.fn().mockResolvedValue(notificationRow()),
     },
     refundNotificationReceipt: {
-      upsert: jest.fn(
+      createMany: jest.fn(
+        (input: {
+          data: { notificationId: string; userId: string; readAt: Date }[];
+          skipDuplicates: boolean;
+        }) => {
+          const row = input.data[0];
+          const key = `${row.notificationId}/${row.userId}`;
+          if (receipts.has(key)) {
+            if (!input.skipDuplicates) throw new Error('중복 읽음');
+            return Promise.resolve({ count: 0 });
+          }
+          receipts.set(key, { readAt: row.readAt });
+          return Promise.resolve({ count: 1 });
+        },
+      ),
+      findUniqueOrThrow: jest.fn(
         (input: {
           where: {
             notificationId_userId: { notificationId: string; userId: string };
           };
-          create: { readAt: Date };
-          update: { readAt?: Date };
         }) => {
           const key = `${input.where.notificationId_userId.notificationId}/${input.where.notificationId_userId.userId}`;
-          const previous = receipts.get(key);
-          const result = previous
-            ? { ...previous, ...input.update }
-            : { readAt: input.create.readAt };
-          receipts.set(key, result);
-          return Promise.resolve(result);
+          return Promise.resolve(receipts.get(key));
         },
       ),
     },

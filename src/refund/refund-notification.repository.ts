@@ -12,11 +12,14 @@ export type NotificationRow = RefundNotification & {
 export class RefundNotificationRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  recordRead(notificationId: string, userId: string, readAt: Date) {
-    return this.prisma.refundNotificationReceipt.upsert({
+  async recordRead(notificationId: string, userId: string, readAt: Date) {
+    // 같은 사람의 동시 요청도 기존 행을 갱신하지 않고 최초 읽음 시각을 반환한다.
+    await this.prisma.refundNotificationReceipt.createMany({
+      data: [{ notificationId, userId, readAt }],
+      skipDuplicates: true,
+    });
+    return this.prisma.refundNotificationReceipt.findUniqueOrThrow({
       where: { notificationId_userId: { notificationId, userId } },
-      create: { notificationId, userId, readAt },
-      update: {},
     });
   }
 
