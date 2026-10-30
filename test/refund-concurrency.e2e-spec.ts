@@ -10,6 +10,8 @@ import { RefundPgStub } from './helpers/refund-pg.stub';
 import { RefundAcceptanceService } from '../src/refund/refund-acceptance.service';
 import { RefundLockingRepository } from '../src/refund/refund-locking.repository';
 import { RefundRepository } from '../src/refund/refund.repository';
+import { UsageSessionRepository } from '../src/usage-session/usage-session.repository';
+import { TicketStatus, UsageSessionStatus } from '@prisma/client';
 
 /** 환불 경로 사이의 동시 실행에서 실제 DB 제약과 PG 호출 수를 확인한다. */
 describe('환불 동시성 (E2E)', () => {
@@ -146,5 +148,112 @@ describe('환불 동시성 (E2E)', () => {
       }),
     ).toBe(1);
     expect(pgStub.sendCalls).toHaveLength(1);
+  });
+  it('U404 입실이 이용권 잠금을 먼저 잡으면 고객 환불은 사용 이력을 확인해 거절된다', async () => {
+    const issued = await ctx.issuePeriodTicket({ fixedSeat: true });
+    const sessions = ctx.app.get<UsageSessionRepository>(
+      UsageSessionRepository,
+    );
+    const locking = ctx.app.get<RefundLockingRepository>(
+      RefundLockingRepository,
+    );
+    const originalCreate: UsageSessionRepository['createSession'] =
+      sessions.createSession.bind(sessions);
+    const originalLock: RefundLockingRepository['lockForAcceptance'] =
+      locking.lockForAcceptance.bind(locking);
+    let entryLocked!: () => void;
+    const locked = new Promise<void>((resolve) => {
+      entryLocked = resolve;
+    });
+    let releaseEntry!: () => void;
+    const holdEntry = new Promise<void>((resolve) => {
+      releaseEntry = resolve;
+    });
+    let refundLockAttempted!: () => void;
+    const attempted = new Promise<void>((resolve) => {
+      refundLockAttempted = resolve;
+    });
+    const createSpy = jest
+      .spyOn(sessions, 'createSession')
+      .mockImplementation(
+        (
+          ticketId,
+          shopId,
+          seatId,
+          userId,
+          plannedEndAt,
+          startedAt,
+          firstEntryUpdate,
+          originalBeforeCreate,
+        ) => {
+          return originalCreate(
+            ticketId,
+            shopId,
+            seatId,
+            userId,
+            plannedEndAt,
+            startedAt,
+            firstEntryUpdate,
+            async (tx) => {
+              if (originalBeforeCreate) await originalBeforeCreate(tx);
+              entryLocked();
+              await holdEntry;
+            },
+          );
+        },
+      );
+    const lockSpy = jest
+      .spyOn(locking, 'lockForAcceptance')
+      .mockImplementation((...args) => {
+        refundLockAttempted();
+        return originalLock(...args);
+      });
+    try {
+      const entryPromise = request(ctx.server)
+        .post('/usage-sessions')
+        .set('Authorization', `Bearer ${ctx.customer.token}`)
+        .send({
+          ticketId: issued.ticketId,
+          shopId: ctx.shop.id,
+          seatId: issued.seatId,
+          userId: ctx.customer.id,
+        })
+        .then((response) => response);
+      await locked;
+      const refundPromise = request(ctx.server)
+        .post('/refund')
+        .set('Authorization', `Bearer ${ctx.customer.token}`)
+        .set('Idempotency-Key', randomUUID())
+        .send({ ticketId: issued.ticketId, consentToTerminateTicket: true })
+        .then((response) => response);
+      await attempted;
+      releaseEntry();
+      const [entry, refund] = await Promise.all([entryPromise, refundPromise]);
+      expect(entry.status).toBe(201);
+      expect(refund.status).toBe(409);
+      expect(refund.body.error.code).toBe('USED_TICKET');
+    } finally {
+      releaseEntry();
+      createSpy.mockRestore();
+      lockSpy.mockRestore();
+    }
+    expect(
+      await ctx.prisma.refund.count({
+        where: { orderItemId: issued.orderItemId },
+      }),
+    ).toBe(0);
+    expect(
+      await ctx.prisma.usageSession.count({
+        where: { ticketId: issued.ticketId, status: UsageSessionStatus.ACTIVE },
+      }),
+    ).toBe(1);
+    expect(
+      (
+        await ctx.prisma.ticket.findUniqueOrThrow({
+          where: { id: issued.ticketId },
+        })
+      ).status,
+    ).toBe(TicketStatus.ACTIVE);
+    expect(pgStub.sendCalls).toHaveLength(0);
   });
 });

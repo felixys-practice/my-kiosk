@@ -691,3 +691,4 @@ U17·U248의 DONE은 이전에 구현·검증한 과거 이력 호환 동작의 
 | U401 | PG 취소 시도 번호가 0 또는 음수이면 DB가 거절한다 | data-model §4, T171 | boundary | DONE | src/prisma/refund-constraints.integration.spec.ts / U401 |
 | U402 | 빈 DB 재구축 후 폐기한 refund_locks 테이블이 존재하지 않는다 | T174·T171, 개발 데이터 폐기 결정 | example | DONE | src/prisma/refund-constraints.integration.spec.ts / U402 |
 | U403 | 고객과 점주가 같은 이용권에 동시에 환불을 신청해도 확정 환불·PG 취소 요청·PG 송신은 각각 한 건이다 | T172, FR-029·FR-041 | concurrency | DONE | test/refund-concurrency.e2e-spec.ts / U403 |
+| U404 | 입실이 이용권 잠금을 먼저 잡은 상태에서 환불이 경합하면 입실만 성공하고 환불은 USED_TICKET이다 | T172, FR-029·FR-017 | concurrency | DONE | test/refund-concurrency.e2e-spec.ts / U404 |
