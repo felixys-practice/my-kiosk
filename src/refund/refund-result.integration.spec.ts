@@ -2342,22 +2342,20 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
     it('결제 전체 대상 환불도 재시도하면 대상 상품 없는 새 PG 취소 요청을 만든다', async () => {
       const failed = await createFailedRefund();
       // 같은 결제를 결제 전체 대상 시스템 환불로 바꾼다(승인 금액 불일치 자동 취소와 같은 형태)
-      await prisma.paymentCancel.update({
-        where: { id: failed.paymentCancelId },
-        data: { refundId: null },
-      });
-      await prisma.refund.update({
-        where: { id: failed.refundId },
-        data: {
-          targetKind: RefundTargetKind.PAYMENT,
-          source: RefundSource.SYSTEM,
-          orderItemId: null,
-          requestedById: null,
-        },
-      });
-      await prisma.paymentCancel.update({
-        where: { id: failed.paymentCancelId },
-        data: { refundId: failed.refundId, orderItemId: null },
+      await prisma.$transaction(async (tx) => {
+        await tx.refund.update({
+          where: { id: failed.refundId },
+          data: {
+            targetKind: RefundTargetKind.PAYMENT,
+            source: RefundSource.SYSTEM,
+            orderItemId: null,
+            requestedById: null,
+          },
+        });
+        await tx.paymentCancel.update({
+          where: { id: failed.paymentCancelId },
+          data: { refundId: failed.refundId, orderItemId: null },
+        });
       });
       pgGateway.sendCancel.mockResolvedValueOnce({ result: 'ACCEPTED' });
 

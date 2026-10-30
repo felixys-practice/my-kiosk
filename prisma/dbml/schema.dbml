@@ -232,7 +232,7 @@ Table payment_cancels {
   requestedAt DateTime [not null]
   cancelledAt DateTime
   failedAt DateTime
-  refundId String
+  refundId String [not null]
   attemptNumber Int
   actualAmount Int
   resendCount Int [not null, default: 0]
@@ -251,7 +251,7 @@ Table payment_cancels {
   requestedById String
   retryReason String
   updatedAt DateTime [default: `now()`, not null]
-  refund refunds
+  refund refunds [not null]
   requestedBy user
   payment payments [not null]
   orderItemId String

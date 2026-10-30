@@ -432,6 +432,18 @@ describe('환불 저장 모델 DB 제약', () => {
   });
 
   describe('PaymentCancel', () => {
+    it('U399 환불 연결이 없는 PG 취소 요청은 DB가 거절한다', async () => {
+      const target = await createPaidItem();
+      const id = randomUUID();
+      await expect(
+        prisma.$executeRaw`
+          INSERT INTO payment_cancels
+            (id, payment_id, order_item_id, amount, requested_at, updated_at, attempt_number)
+          VALUES (${id}, ${target.paymentId}, ${target.orderItemId}, 10000, NOW(), NOW(), 1)
+        `,
+      ).rejects.toThrow(/refund_id/);
+    });
+
     it('한 환불에 미확정 PG 취소 요청을 두 번째로 저장하면 고유 위반으로 실패한다', async () => {
       const refund = await createAcceptedRefund();
       await prisma.paymentCancel.create({

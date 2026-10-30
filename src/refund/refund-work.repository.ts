@@ -162,7 +162,6 @@ export class RefundWorkRepository {
       this.prisma.paymentCancel.count({
         where: {
           status: PaymentCancelStatus.REQUESTED,
-          refundId: { not: null },
         },
       }),
       this.prisma.paymentCancel.count({

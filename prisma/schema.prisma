@@ -496,7 +496,7 @@ model PaymentCancel {
   failedAt        DateTime?                 @map("failed_at") // 시도 실패 확정 시각(실패할 때만 기록, 일반 갱신 시각은 updatedAt)
 
   // ── 환불 확정 아래의 PG 취소 요청 (data-model §4) ──
-  refundId            String?   @map("refund_id") // 소속 환불. 새 요청은 필수, 보존할 과거 거절 이력만 이관 기간 null
+  refundId            String    @map("refund_id") // 소속 환불. 모든 PG 취소 요청은 환불에 연결된다
   attemptNumber       Int?      @map("attempt_number") // 환불 안에서 증가하는 시도 번호. 새 요청은 필수
   actualAmount        Int?      @map("actual_amount") // PG가 확인한 실제 취소액, 확인 전 null
   resendCount         Int       @default(0) @map("resend_count") // 백그라운드 자동 재전송 횟수(최초 전송·개별 확인 재전송 제외)
@@ -516,7 +516,7 @@ model PaymentCancel {
   retryReason         String?   @map("retry_reason") // 재시도 사유(운영자 직접 재시도, 개별 확인 후 재시도 등)
   updatedAt           DateTime  @default(now()) @updatedAt @map("updated_at") // 최종 갱신
 
-  refund        Refund?              @relation(fields: [refundId], references: [id], onDelete: Restrict)
+  refund        Refund               @relation(fields: [refundId], references: [id], onDelete: Restrict)
   requestedBy   User?                @relation("PaymentCancelRequestedBy", fields: [requestedById], references: [id], onDelete: Restrict)
   payment       Payment              @relation(fields: [paymentId], references: [id])
   orderItemId   String?              @map("order_item_id") // 이 취소 요청의 대상 상품. 결제 전체 대상 환불(PAYMENT)이면 null, 환불에 연결된 행은 환불의 대상 상품과 같아야 한다

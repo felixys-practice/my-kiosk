@@ -68,7 +68,7 @@ Payment에 `approvedAmount Int?`를 추가한다. 기존 amount는 원래 요청
 
 | 필드 | 설계 |
 |---|---|
-| refundId | 접수하는 취소 요청 기록은 필수 FK. 기존 코드의 nullable 연결은 최종 코드 정리와 빈 DB 제약 검증에서 확인한다 |
+| refundId | 필수 FK. 모든 PG 취소 요청은 하나의 Refund에 연결된다 |
 | amount / actualAmount | 고정 요청액 / 확인 전 null인 실제 PG 취소액 |
 | status | REQUESTED / QUERY_FAILED / SUCCEEDED / FAILED |
 | attemptNumber / requestedAt | 환불 안의 증가하는 시도 번호 / 생성 시각 |

@@ -2240,3 +2240,21 @@ Tests:       1 failed, 1 total
 - 삭제할 RefundService에 있던 사용자 미커밋 메모를 포함한 원문은 /tmp/refund-finalize-before.json에 보존했다. 신규 환불 경로의 사용자 주석·문서·설정 변경은 건드리지 않았다. RefundLock 스키마/테이블은 다음 T171 검증 사이클 전까지 유지한다.
 
 - 構造整理の確認: 정정하여 "구조 정리 검증"으로 읽는다. 전체 단위592개·E2E179개, tsc 통과. U398 단언은 유지했으며 기존 생성자·목에서 제거된 의존성만 정리했다. U50 폐기 후 T015의 유효 동작 U51~U58이 모두 DONE임을 확인해 T015를 완료 표시했고 T174도 코드 정리 범위에서 완료 표시한다. 아직 DB의 RefundLock 테이블이나 필수 FK/시도 번호 제약은 변경하지 않았다.
+
+### U399 PG 취소 요청의 환불 연결 필수 red
+
+- `npx jest src/prisma/refund-constraints.integration.spec.ts -t U399 --runInBand`
+```text
+    expect(received).rejects.toThrow()
+
+    Received promise resolved instead of rejected
+    Resolved to value: 1
+Tests:       1 failed, 38 skipped, 39 total
+```
+- 실제 PostgreSQL에서 refund_id를 생략한 INSERT가 성공하는 실패를 먼저 확인했다. 이 기록 뒤 DB NOT NULL과 Prisma 필수 관계를 적용한다.
+
+- U399의 Prisma 필수 관계를 생성하자 seed.ts가 환불 없이 PG 취소 요청을 만드는 옛 helper 때문에 타입 오류가 발생했다. 이 시드는 같은 상품의 여러 부분 환불과 RefundLock을 만드는 폐기한 예제이므로, 새 정책에 맞는 것으로 추정해 변환하지 않고 해당 helper/예제만 제거한다. 현재 환불 데이터는 실제 API를 쓰는 E2E 공용 컨텍스트가 생성한다. 일반 주문·이용권 시드는 유지한다. 원문은 /tmp/refund-seed-before-cleanup.ts에 보존했다.
+- SYSTEM 재시도 테스트의 기대값은 그대로 두고, 준비 과정에서 refundId를 잠시 null로 분리하던 부분만 같은 트랜잭션의 대상 변경으로 바꿨다. 전체 단위593개/E2E179개가 새 연결 필수 제약 아래 통과했다. required FK가 모든 행을 보장하므로 집계의 중복된 not-null 필터도 제거했다.
+
+- U399 검증 DB green: 단일1개·전체 단위593개·E2E179개 통과, 타입 검사 통과. seed.ts 서식 검사는 수정 전 원문에서도 실패하는 기존 상태여서 무관한 전체 서식 변경은 하지 않았다. 현재 변경 공백 검사와 수정 Repository/통합 테스트 eslint는 통과했다.
+- 로컬 개발 DB reset은 Prisma 자체 Codex 보호 장치가 실행 전에 차단했다. 데이터 초기화는 실행되지 않았다. 이 장치는 경고 뒤 새 명시적 동의를 요구하고 이전 메시지를 동의로 인정하지 않는다고 안내해, 정확한 명령 npx prisma migrate reset --force·로컬 my_kiosk_db 대상·데이터 삭제 효과를 설명하고 사용자에게 새 확인을 요청했다. 확인 전에는 보호 환경변수를 설정하거나 우회하지 않는다. 이 커밋의 회귀는 별도 검증 DB에서 실행한 범위다. 현재 개발 DB 반영과 최종 T171 완료 표시는 보류한다.
