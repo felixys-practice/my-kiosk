@@ -2258,3 +2258,15 @@ Tests:       1 failed, 38 skipped, 39 total
 
 - U399 검증 DB green: 단일1개·전체 단위593개·E2E179개 통과, 타입 검사 통과. seed.ts 서식 검사는 수정 전 원문에서도 실패하는 기존 상태여서 무관한 전체 서식 변경은 하지 않았다. 현재 변경 공백 검사와 수정 Repository/통합 테스트 eslint는 통과했다.
 - 로컬 개발 DB reset은 Prisma 자체 Codex 보호 장치가 실행 전에 차단했다. 데이터 초기화는 실행되지 않았다. 이 장치는 경고 뒤 새 명시적 동의를 요구하고 이전 메시지를 동의로 인정하지 않는다고 안내해, 정확한 명령 npx prisma migrate reset --force·로컬 my_kiosk_db 대상·데이터 삭제 효과를 설명하고 사용자에게 새 확인을 요청했다. 확인 전에는 보호 환경변수를 설정하거나 우회하지 않는다. 이 커밋의 회귀는 별도 검증 DB에서 실행한 범위다. 현재 개발 DB 반영과 최종 T171 완료 표시는 보류한다.
+
+### U400 PG 취소 요청의 시도 번호 필수
+
+- 별도 검증 DB에서 `node /tmp/refund-verify-db.cjs single U400`을 실행했다.
+```text
+Received promise resolved instead of rejected
+Resolved to value: 1
+Tests: 1 failed, 39 skipped, 40 total
+```
+- attempt_number를 생략한 실제 INSERT가 성공하는 실패를 먼저 확인했다. 이 기록 뒤 NOT NULL과 Prisma 필수 필드를 적용한다.
+- 필수 필드로 생성한 Prisma 타입에서는 null 정렬 옵션을 허용하지 않아 환불 조회의 시도 번호 정렬을 desc로 단순화했다. 모든 행의 번호가 필수인 조건에서 최신 시도 정렬 결과는 같다. 기존 조회 테스트 단언은 유지한다.
+- U400 green: 별도 검증 DB의 단일 테스트1개·전체 단위594개·E2E179개와 타입 검사 통과. 93개 마이그레이션 적용 상태에서 확인했다.

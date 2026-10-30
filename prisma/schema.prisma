@@ -497,7 +497,7 @@ model PaymentCancel {
 
   // ── 환불 확정 아래의 PG 취소 요청 (data-model §4) ──
   refundId            String    @map("refund_id") // 소속 환불. 모든 PG 취소 요청은 환불에 연결된다
-  attemptNumber       Int?      @map("attempt_number") // 환불 안에서 증가하는 시도 번호. 새 요청은 필수
+  attemptNumber       Int       @map("attempt_number") // 환불 안에서 1부터 증가하는 필수 시도 번호
   actualAmount        Int?      @map("actual_amount") // PG가 확인한 실제 취소액, 확인 전 null
   resendCount         Int       @default(0) @map("resend_count") // 백그라운드 자동 재전송 횟수(최초 전송·개별 확인 재전송 제외)
   manualResendCount   Int       @default(0) @map("manual_resend_count") // 개별 확인에서 미접수 확인 후 같은 요청을 다시 보낸 횟수

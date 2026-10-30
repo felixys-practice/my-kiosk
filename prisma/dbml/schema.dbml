@@ -233,7 +233,7 @@ Table payment_cancels {
   cancelledAt DateTime
   failedAt DateTime
   refundId String [not null]
-  attemptNumber Int
+  attemptNumber Int [not null]
   actualAmount Int
   resendCount Int [not null, default: 0]
   manualResendCount Int [not null, default: 0]

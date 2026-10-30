@@ -7,7 +7,7 @@ const refundQueryInclude = {
   orderItem: { include: { ticket: { select: { id: true } } } },
   paymentCancels: {
     orderBy: [
-      { attemptNumber: { sort: 'desc', nulls: 'last' } },
+      { attemptNumber: 'desc' },
       { id: 'desc' },
     ],
   },
