@@ -319,7 +319,7 @@ suite_baseline: green
 
 | id | behavior | traces | kind | state | test |
 |---|---|---|---|---|---|
-| U50 | (현재 동작 기록) PG 거래조회는 지금 어떤 입력이든 NOT_FOUND를 반환한다 | FR-024 | characterization | BASELINE | `src/pg/pg.service.spec.ts` › 현재 동작 기록(특성화) |
+| U50 | (현재 동작 기록) PG 거래조회는 지금 어떤 입력이든 NOT_FOUND를 반환한다 | FR-024 | characterization | DROPPED | 2026-10-30 사용자 승인으로 구형 PG 조회 특성화 폐기. 실제 PG 조회 분류 테스트는 유지 |
 | U51 | 일반 HTTP 404 응답은 NOT_FOUND가 아니라 QUERY_ERROR로 분류된다 | FR-024 | example | DONE | `src/pg/pg.service.spec.ts` |
 | U52 | authoritative=true인 미접수 응답만 NOT_FOUND로 분류된다 | FR-024 | example | DONE | `src/pg/pg.service.spec.ts` |
 | U53 | 조회 응답이 제한 시간을 넘으면 QUERY_ERROR로 분류된다 | FR-025 | example | DONE | `src/pg/pg.service.spec.ts` |
