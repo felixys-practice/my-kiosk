@@ -2379,3 +2379,10 @@ Tests: 1 failed, 41 skipped, 42 total
 - 자동 경로 `RefundRecoveryService.inquireAttempt`가 PG 조회 응답을 기다리게 한 뒤, 점주의 `POST /refund/:refundId/pg-check`를 실행했다. 개별 확인은 계약 §8에 따라 202 `ALREADY_RUNNING`을 반환하고, PG 조회는 한 번만 호출해야 한다. 자동 조회를 끝낸 뒤 DB 조회 횟수 1회와 PG 취소 요청 `REQUESTED`를 확인한다.
 - 최초 U407 테스트는 진행 중 응답을 200으로 잘못 기대해 `Expected: 200 / Received: 202`로 실패했다. 계약 §8의 202 `ALREADY_RUNNING`을 확인하고 테스트 기대값을 정정했다. 이 실패는 구현 결함의 red로 계산하지 않는다. 정정 후 기존 구현에서 U407이 통과했다.
 - `RefundPgCheckService`의 유효 담당 안내 분기를 임시 제거한 변이에서는 최근 조회 응답으로 바뀌어 `Expected: 202 / Received: 200`으로 실패했다. 분기를 원문과 같게 복구한 뒤 단위596개·E2E184개, `tsc --noEmit` 및 수정 E2E eslint가 통과했다. 운영 코드 변경은 없다.
+
+### T172 U407 Codex 검수 1차 수정
+
+- 고정 범위 `a24e094..01908df` 검수에서 정상 코드의 202 `ALREADY_RUNNING` 응답과 추적 근거는 수용됐다. 다만 U407의 PG 대역이 모든 조회 호출을 같은 gate에서 멈춰, 중복 조회가 발생하면 HTTP 응답과 gate 해제가 순환 대기하는 결함(P2)이 지적됐다.
+- U407은 첫 PG 조회만 대기시키고 이후 호출은 기록 후 반환하게 고쳤다. 개별 확인 HTTP가 끝나고 자동 조회도 정리된 뒤, gate 해제 전 PG 조회 호출 수를 먼저 단언한다. 기존 U403~U406 본문과 운영 코드는 바꾸지 않았다.
+- 정상 코드에서 수정된 U407 단일 E2E가 통과했다. 개별 확인의 진행 중·최근 조회 확인과 잠금 안의 담당·최근 조회 확인을 임시로 제거해 두 번째 PG 호출을 허용한 변이에서는 타임아웃 대신 `Expected: 1 / Received: 2`로 실패했다. 모든 확인 조건을 원문과 같게 복구했다.
+- 원복 후 단위596개·E2E184개, `tsc --noEmit`·수정 E2E eslint 및 `git diff --check`가 통과했다. 변경은 U407 테스트와 검증 기록뿐이다.

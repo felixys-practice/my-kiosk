@@ -421,12 +421,16 @@ describe('환불 동시성 (E2E)', () => {
     });
     const originalInquire: RefundPgStub['inquireCancel'] =
       pgStub.inquireCancel.bind(pgStub);
+    let inquiryCalls = 0;
     const inquirySpy = jest
       .spyOn(pgStub, 'inquireCancel')
       .mockImplementation(async (input) => {
         const result = await originalInquire(input);
-        inquiryReady();
-        await holdInquiry;
+        inquiryCalls += 1;
+        if (inquiryCalls === 1) {
+          inquiryReady();
+          await holdInquiry;
+        }
         return result;
       });
     try {
@@ -442,10 +446,10 @@ describe('환불 동시성 (E2E)', () => {
       const inquiriesBeforeRelease = pgStub.inquiryCalls.length;
       releaseInquiry();
       const automaticResult = await automaticPromise;
+      expect(inquiriesBeforeRelease).toBe(1);
       expect(check.status).toBe(202);
       expect(check.body.data.checkStatus).toBe('ALREADY_RUNNING');
       expect(check.body.data.inquiryResult).toBeNull();
-      expect(inquiriesBeforeRelease).toBe(1);
       expect(automaticResult).toBe('IN_PROGRESS');
     } finally {
       releaseInquiry();
