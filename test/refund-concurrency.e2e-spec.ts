@@ -461,4 +461,96 @@ describe('환불 동시성 (E2E)', () => {
     expect(attempt.inquiryCount).toBe(1);
     expect(attempt.status).toBe(PaymentCancelStatus.REQUESTED);
   });
+  it.each([
+    ['PG 재요청 먼저', true],
+    ['별도 지급 예약 먼저', false],
+  ] as const)(
+    'U408 실패한 PG 요청을 점주가 조회하는 동안 운영자는 새 PG 요청과 별도 지급을 시작할 수 없다 (%s)',
+    async (_order, retryFirst) => {
+      const issued = await ctx.issuePeriodTicket();
+      pgStub.respondToSend({ result: 'REJECTED', reason: 'PG 취소 거절' });
+      const accepted = await request(ctx.server)
+        .post('/refund')
+        .set('Authorization', `Bearer ${ctx.customer.token}`)
+        .set('Idempotency-Key', randomUUID())
+        .send({ ticketId: issued.ticketId, consentToTerminateTicket: true })
+        .expect(202);
+      const refundId = accepted.body.data.refundId as string;
+      pgStub.reset();
+      pgStub.respondToInquiry({
+        result: 'QUERY_ERROR',
+        reason: '조회 응답 없음',
+      });
+
+      let releaseInquiry!: () => void;
+      const holdInquiry = new Promise<void>((resolve) => {
+        releaseInquiry = resolve;
+      });
+      let inquiryReady!: () => void;
+      const ready = new Promise<void>((resolve) => {
+        inquiryReady = resolve;
+      });
+      const originalInquire: RefundPgStub['inquireCancel'] =
+        pgStub.inquireCancel.bind(pgStub);
+      const inquirySpy = jest
+        .spyOn(pgStub, 'inquireCancel')
+        .mockImplementation(async (input) => {
+          const result = await originalInquire(input);
+          inquiryReady();
+          await holdInquiry;
+          return result;
+        });
+      try {
+        const checkPromise = request(ctx.server)
+          .post(`/refund/${refundId}/pg-check`)
+          .set('Authorization', `Bearer ${ctx.owner.token}`)
+          .send({})
+          .then((response) => response);
+        await ready;
+        const retryRequest = () =>
+          request(ctx.server)
+            .post(`/refund/${refundId}/payout-retries`)
+            .set('Authorization', `Bearer ${ctx.manager.token}`)
+            .set('Idempotency-Key', randomUUID())
+            .send({ reason: 'PG 재요청' });
+        const reserveRequest = () =>
+          request(ctx.server)
+            .post(`/refund/${refundId}/manual-payouts`)
+            .set('Authorization', `Bearer ${ctx.manager.token}`)
+            .set('Idempotency-Key', randomUUID())
+            .send({ amount: issued.amount, reason: '별도 지급' });
+        const first = retryFirst
+          ? await retryRequest()
+          : await reserveRequest();
+        const second = retryFirst
+          ? await reserveRequest()
+          : await retryRequest();
+        const retry = retryFirst ? first : second;
+        const reserve = retryFirst ? second : first;
+        const inquiriesBeforeRelease = pgStub.inquiryCalls.length;
+        const sendsBeforeRelease = pgStub.sendCalls.length;
+        releaseInquiry();
+        const check = await checkPromise;
+        expect(retry.status).toBe(409);
+        expect(retry.body.error.code).toBe('REFUND_PAYOUT_UNRESOLVED');
+        expect(reserve.status).toBe(409);
+        expect(reserve.body.error.code).toBe('REFUND_PAYOUT_UNRESOLVED');
+        expect(inquiriesBeforeRelease).toBe(1);
+        expect(sendsBeforeRelease).toBe(0);
+        expect(check.status).toBe(200);
+        expect(check.body.data.checkStatus).toBe('CHECKED');
+        expect(check.body.data.inquiryResult).toBe('QUERY_ERROR');
+      } finally {
+        releaseInquiry();
+        inquirySpy.mockRestore();
+      }
+      expect(
+        await ctx.prisma.paymentCancel.count({ where: { refundId } }),
+      ).toBe(1);
+      expect(
+        await ctx.prisma.manualRefundPayout.count({ where: { refundId } }),
+      ).toBe(0);
+      expect(pgStub.sendCalls).toHaveLength(0);
+    },
+  );
 });

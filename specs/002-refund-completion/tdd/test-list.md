@@ -695,3 +695,4 @@ U17·U248의 DONE은 이전에 구현·검증한 과거 이력 호환 동작의 
 | U405 | 개별 PG 조회 중 성공 콜백이 먼저 확정되면 뒤늦은 조회 결과가 지급 완료·실제액·원장을 덮어쓰지 않는다 | T172, FR-018·FR-019·FR-053, 계약 §6·§7·§8 | concurrency | DONE | test/refund-concurrency.e2e-spec.ts / U405 |
 | U406 | 점주 개별 조회가 PG 응답을 기다리는 동안 자동 조회가 같은 PG 취소 요청을 다시 조회하지 않는다 | T172, FR-055, 계약 §8 | concurrency | DONE | test/refund-concurrency.e2e-spec.ts / U406 |
 | U407 | 자동 조회가 PG 응답을 기다리는 동안 점주 개별 확인은 202 ALREADY_RUNNING을 반환하고 같은 요청을 재조회하지 않는다 | T172, FR-055, 계약 §8 | concurrency | DONE | test/refund-concurrency.e2e-spec.ts / U407 |
+| U408 | 실패한 PG 취소 요청을 점주가 개별 조회하는 동안 운영자의 새 PG 요청·별도 지급 예약은 시도 순서와 관계없이 거절되고 새 지급 기록이 생기지 않는다 | T172, FR-043·FR-055, 계약 §5·§8 | concurrency | DONE | test/refund-concurrency.e2e-spec.ts / U408(2개 순서) |
