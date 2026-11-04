@@ -693,3 +693,4 @@ U17·U248의 DONE은 이전에 구현·검증한 과거 이력 호환 동작의 
 | U403 | 고객과 점주가 같은 이용권에 동시에 환불을 신청해도 확정 환불·PG 취소 요청·PG 송신은 각각 한 건이다 | T172, FR-029·FR-041 | concurrency | DONE | test/refund-concurrency.e2e-spec.ts / U403 |
 | U404 | 입실이 이용권 잠금을 먼저 잡은 상태에서 환불이 경합하면 입실만 성공하고 환불은 USED_TICKET이다 | T172, FR-003·FR-005·FR-007, 계약 §6 | concurrency | DONE | test/refund-concurrency.e2e-spec.ts / U404 |
 | U405 | 개별 PG 조회 중 성공 콜백이 먼저 확정되면 뒤늦은 조회 결과가 지급 완료·실제액·원장을 덮어쓰지 않는다 | T172, FR-018·FR-019·FR-053, 계약 §6·§7·§8 | concurrency | DONE | test/refund-concurrency.e2e-spec.ts / U405 |
+| U406 | 점주 개별 조회가 PG 응답을 기다리는 동안 자동 조회가 같은 PG 취소 요청을 다시 조회하지 않는다 | T172, FR-055, 계약 §8 | concurrency | DONE | test/refund-concurrency.e2e-spec.ts / U406 |

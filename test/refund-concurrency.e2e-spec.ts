@@ -10,6 +10,7 @@ import { RefundPgStub } from './helpers/refund-pg.stub';
 import { RefundAcceptanceService } from '../src/refund/refund-acceptance.service';
 import { RefundLockingRepository } from '../src/refund/refund-locking.repository';
 import { RefundRepository } from '../src/refund/refund.repository';
+import { RefundRecoveryService } from '../src/refund/refund-recovery.service';
 import { UsageSessionRepository } from '../src/usage-session/usage-session.repository';
 import {
   PaymentCancelStatus,
@@ -324,5 +325,76 @@ describe('환불 동시성 (E2E)', () => {
     expect(refund.paymentCancels[0].status).toBe(PaymentCancelStatus.SUCCEEDED);
     expect(refund.ledgers).toHaveLength(1);
     expect(pgStub.inquiryCalls).toHaveLength(1);
+  });
+  it('U406 점주 개별 조회가 PG 응답을 기다리는 동안 자동 조회가 같은 시도를 다시 조회하지 않는다', async () => {
+    const issued = await ctx.issuePeriodTicket();
+    pgStub.respondToSend({ result: 'UNKNOWN', reason: '응답 시간 초과' });
+    const accepted = await request(ctx.server)
+      .post('/refund')
+      .set('Authorization', `Bearer ${ctx.customer.token}`)
+      .set('Idempotency-Key', randomUUID())
+      .send({ ticketId: issued.ticketId, consentToTerminateTicket: true })
+      .expect(202);
+    const refundId = accepted.body.data.refundId as string;
+    const paymentCancelId = accepted.body.data.paymentCancelId as string;
+    const recovery = ctx.app.get<RefundRecoveryService>(RefundRecoveryService);
+    pgStub.reset();
+
+    let releaseInquiry!: () => void;
+    const holdInquiry = new Promise<void>((resolve) => {
+      releaseInquiry = resolve;
+    });
+    let inquiryReady!: () => void;
+    const ready = new Promise<void>((resolve) => {
+      inquiryReady = resolve;
+    });
+    const originalInquire: RefundPgStub['inquireCancel'] =
+      pgStub.inquireCancel.bind(pgStub);
+    let inquiryCalls = 0;
+    const inquirySpy = jest
+      .spyOn(pgStub, 'inquireCancel')
+      .mockImplementation(async (input) => {
+        const result = await originalInquire(input);
+        inquiryCalls += 1;
+        if (inquiryCalls === 1) {
+          inquiryReady();
+          await holdInquiry;
+        }
+        return result;
+      });
+    try {
+      const checkPromise = request(ctx.server)
+        .post(`/refund/${refundId}/pg-check`)
+        .set('Authorization', `Bearer ${ctx.owner.token}`)
+        .send({})
+        .then((response) => response);
+      await ready;
+      const automaticResult = await recovery.inquireAttempt(
+        paymentCancelId,
+        new Date(),
+      );
+      const inquiriesBeforeRelease = pgStub.inquiryCalls.length;
+      releaseInquiry();
+      const check = await checkPromise;
+      expect(automaticResult).toBeNull();
+      expect(inquiriesBeforeRelease).toBe(1);
+      expect(check.status).toBe(200);
+      expect(check.body.data.checkStatus).toBe('CHECKED');
+      expect(check.body.data.inquiryResult).toBe('IN_PROGRESS');
+    } finally {
+      releaseInquiry();
+      inquirySpy.mockRestore();
+    }
+    const attempt = await ctx.prisma.paymentCancel.findUniqueOrThrow({
+      where: { id: paymentCancelId },
+    });
+    const refund = await ctx.prisma.refund.findUniqueOrThrow({
+      where: { id: refundId },
+      include: { ledgers: true },
+    });
+    expect(attempt.inquiryCount).toBe(1);
+    expect(attempt.status).toBe(PaymentCancelStatus.REQUESTED);
+    expect(refund.payoutStatus).toBe(RefundPayoutStatus.PENDING);
+    expect(refund.ledgers).toHaveLength(0);
   });
 });
