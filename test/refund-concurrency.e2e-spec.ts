@@ -654,4 +654,87 @@ describe('환불 동시성 (E2E)', () => {
     expect(refund.ledgers[0].amount).toBe(-issued.amount);
     expect(pgStub.sendCalls).toHaveLength(0);
   });
+  it.each([
+    ['점주 선행', true],
+    ['운영자 선행', false],
+  ] as const)(
+    'U410 실패한 PG 시도의 개별 조회를 점주와 운영자가 동시에 요청해도 PG 조회는 한 번이다 (%s)',
+    async (_order, ownerFirst) => {
+      const issued = await ctx.issuePeriodTicket();
+      pgStub.respondToSend({ result: 'REJECTED', reason: 'PG 취소 거절' });
+      const accepted = await request(ctx.server)
+        .post('/refund')
+        .set('Authorization', `Bearer ${ctx.customer.token}`)
+        .set('Idempotency-Key', randomUUID())
+        .send({ ticketId: issued.ticketId, consentToTerminateTicket: true })
+        .expect(202);
+      const refundId = accepted.body.data.refundId as string;
+      const paymentCancelId = accepted.body.data.paymentCancelId as string;
+      pgStub.reset();
+      pgStub.respondToInquiry({
+        result: 'QUERY_ERROR',
+        reason: '조회 응답 없음',
+      });
+
+      let releaseInquiry!: () => void;
+      const holdInquiry = new Promise<void>((resolve) => {
+        releaseInquiry = resolve;
+      });
+      let inquiryReady!: () => void;
+      const ready = new Promise<void>((resolve) => {
+        inquiryReady = resolve;
+      });
+      const originalInquire: RefundPgStub['inquireCancel'] =
+        pgStub.inquireCancel.bind(pgStub);
+      let calls = 0;
+      const inquirySpy = jest
+        .spyOn(pgStub, 'inquireCancel')
+        .mockImplementation(async (input) => {
+          const result = await originalInquire(input);
+          calls += 1;
+          if (calls === 1) {
+            inquiryReady();
+            await holdInquiry;
+          }
+          return result;
+        });
+      const check = (token: string) =>
+        request(ctx.server)
+          .post(`/refund/${refundId}/pg-check`)
+          .set('Authorization', `Bearer ${token}`)
+          .send({})
+          .then((response) => response);
+      try {
+        const firstPromise = check(
+          ownerFirst ? ctx.owner.token : ctx.manager.token,
+        );
+        await ready;
+        const second = await check(
+          ownerFirst ? ctx.manager.token : ctx.owner.token,
+        );
+        const inquiriesBeforeRelease = pgStub.inquiryCalls.length;
+        releaseInquiry();
+        const first = await firstPromise;
+        expect(inquiriesBeforeRelease).toBe(1);
+        expect(second.status).toBe(202);
+        expect(second.body.data.checkStatus).toBe('ALREADY_RUNNING');
+        expect(second.body.data.inquiryResult).toBeNull();
+        expect(first.status).toBe(200);
+        expect(first.body.data.checkStatus).toBe('CHECKED');
+        expect(first.body.data.inquiryResult).toBe('QUERY_ERROR');
+      } finally {
+        releaseInquiry();
+        inquirySpy.mockRestore();
+      }
+      const attempt = await ctx.prisma.paymentCancel.findUniqueOrThrow({
+        where: { id: paymentCancelId },
+      });
+      expect(attempt.inquiryCount).toBe(1);
+      expect(attempt.status).toBe(PaymentCancelStatus.FAILED);
+      expect(
+        await ctx.prisma.paymentCancel.count({ where: { refundId } }),
+      ).toBe(1);
+      expect(pgStub.sendCalls).toHaveLength(0);
+    },
+  );
 });
