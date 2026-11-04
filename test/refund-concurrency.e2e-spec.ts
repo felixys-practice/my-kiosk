@@ -11,6 +11,7 @@ import { RefundAcceptanceService } from '../src/refund/refund-acceptance.service
 import { RefundLockingRepository } from '../src/refund/refund-locking.repository';
 import { RefundRepository } from '../src/refund/refund.repository';
 import { RefundRecoveryService } from '../src/refund/refund-recovery.service';
+import { RefundOperationsRepository } from '../src/refund/refund-operations.repository';
 import { UsageSessionRepository } from '../src/usage-session/usage-session.repository';
 import {
   PaymentCancelStatus,
@@ -553,4 +554,104 @@ describe('환불 동시성 (E2E)', () => {
       expect(pgStub.sendCalls).toHaveLength(0);
     },
   );
+  it('U409 같은 별도 지급 증빙을 서로 다른 키로 동시에 등록해도 지급액과 원장은 한 번만 반영한다', async () => {
+    const issued = await ctx.issuePeriodTicket();
+    pgStub.respondToSend({ result: 'REJECTED', reason: 'PG 취소 거절' });
+    const accepted = await request(ctx.server)
+      .post('/refund')
+      .set('Authorization', `Bearer ${ctx.customer.token}`)
+      .set('Idempotency-Key', randomUUID())
+      .send({ ticketId: issued.ticketId, consentToTerminateTicket: true })
+      .expect(202);
+    const refundId = accepted.body.data.refundId as string;
+    const reserved = await request(ctx.server)
+      .post(`/refund/${refundId}/manual-payouts`)
+      .set('Authorization', `Bearer ${ctx.manager.token}`)
+      .set('Idempotency-Key', randomUUID())
+      .send({ amount: issued.amount, reason: '계좌 이체' })
+      .expect(201);
+    const payoutId = reserved.body.data.payoutId as string;
+    pgStub.reset();
+
+    const operations = ctx.app.get<RefundOperationsRepository>(
+      RefundOperationsRepository,
+    );
+    const locking = ctx.app.get<RefundLockingRepository>(
+      RefundLockingRepository,
+    );
+    const originalMark: RefundOperationsRepository['markPayoutSucceeded'] =
+      operations.markPayoutSucceeded.bind(operations);
+    const originalLock: RefundLockingRepository['lockForPayout'] =
+      locking.lockForPayout.bind(locking);
+    let firstLocked!: () => void;
+    const locked = new Promise<void>((resolve) => {
+      firstLocked = resolve;
+    });
+    let releaseFirst!: () => void;
+    const holdFirst = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    let secondLockAttempted!: () => void;
+    const secondAttempted = new Promise<void>((resolve) => {
+      secondLockAttempted = resolve;
+    });
+    let lockCalls = 0;
+    let markCalls = 0;
+    const lockSpy = jest
+      .spyOn(locking, 'lockForPayout')
+      .mockImplementation((...args) => {
+        lockCalls += 1;
+        if (lockCalls === 2) secondLockAttempted();
+        return originalLock(...args);
+      });
+    const markSpy = jest
+      .spyOn(operations, 'markPayoutSucceeded')
+      .mockImplementation(async (...args) => {
+        markCalls += 1;
+        if (markCalls === 1) {
+          firstLocked();
+          await holdFirst;
+        }
+        return originalMark(...args);
+      });
+    const body = {
+      amount: issued.amount,
+      paidAt: new Date(Date.now() - 60_000).toISOString(),
+      externalTransactionId: `bank-${randomUUID()}`,
+      evidenceReference: '이체 확인증',
+    };
+    const confirm = () =>
+      request(ctx.server)
+        .post(`/refund/${refundId}/manual-payouts/${payoutId}/confirm`)
+        .set('Authorization', `Bearer ${ctx.manager.token}`)
+        .set('Idempotency-Key', randomUUID())
+        .send(body)
+        .then((response) => response);
+    try {
+      const firstPromise = confirm();
+      await locked;
+      const secondPromise = confirm();
+      await secondAttempted;
+      releaseFirst();
+      const [first, second] = await Promise.all([firstPromise, secondPromise]);
+      expect(first.status).toBe(200);
+      expect(second.status).toBe(200);
+      expect(first.body.data).toEqual(second.body.data);
+    } finally {
+      releaseFirst();
+      markSpy.mockRestore();
+      lockSpy.mockRestore();
+    }
+    const refund = await ctx.prisma.refund.findUniqueOrThrow({
+      where: { id: refundId },
+      include: { manualPayouts: true, ledgers: true },
+    });
+    expect(refund.payoutStatus).toBe(RefundPayoutStatus.PAID);
+    expect(refund.paidAmount).toBe(issued.amount);
+    expect(refund.manualPayouts).toHaveLength(1);
+    expect(refund.manualPayouts[0].status).toBe('SUCCEEDED');
+    expect(refund.ledgers).toHaveLength(1);
+    expect(refund.ledgers[0].amount).toBe(-issued.amount);
+    expect(pgStub.sendCalls).toHaveLength(0);
+  });
 });
