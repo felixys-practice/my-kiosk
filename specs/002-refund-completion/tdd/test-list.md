@@ -706,3 +706,4 @@ U17·U248의 DONE은 이전에 구현·검증한 과거 이력 호환 동작의 
 | U416 | PG 취소 성공 응답 뒤 결과 저장이 실패해도 새 앱은 조회로 실제 지급액과 원장을 한 번만 확정한다 | T173, FR-018·FR-019·FR-022, 계약 §6·§8 | recovery | DONE | test/refund-crash-recovery.e2e-spec.ts / U416 |
 | U417 | 별도 환불금 지급 예약 뒤 작업자가 중단돼도 새 앱의 자동 탐색은 예약을 보존하고 다른 PG 지급을 시작하지 않는다 | T173, FR-043·FR-045, 계약 §5·§8 | recovery | DONE | test/refund-crash-recovery.e2e-spec.ts / U417 |
 | U418 | 예약된 자동 작업이 유실됐다가 같은 DB 시도를 중복 탐색해도 새 앱은 PG 조회와 실제액·원장 반영을 한 번만 수행한다 | T173, FR-019·FR-022·FR-055, 계약 §8 | recovery | DONE | test/refund-crash-recovery.e2e-spec.ts / U418 |
+| U419 | 기본 대기 60초와 조회 간격 15초에서 PG가 최종 성공을 정상 응답하고 작업이 밀리지 않으면 시도 결과를 75초 이내에 판명한다 | T175, SC-004, 계약 §8 | boundary | DONE | test/refund-crash-recovery.e2e-spec.ts / U419 |

@@ -18,6 +18,7 @@ import { RefundRepository } from '../src/refund/refund.repository';
 import { RefundRecoveryService } from '../src/refund/refund-recovery.service';
 import { RefundDispatchService } from '../src/refund/refund-dispatch.service';
 import { RefundAcceptanceService } from '../src/refund/refund-acceptance.service';
+import { ConfigService } from '@nestjs/config';
 
 /** 중단된 요청의 DB 기록을 새 앱 인스턴스에서 이어받는 환불 E2E. */
 describe('환불 중단 복구 (E2E)', () => {
@@ -395,6 +396,53 @@ describe('환불 중단 복구 (E2E)', () => {
     );
     expect(recovered.ledgers).toHaveLength(1);
     expect(recovered.ledgers[0].paymentCancelId).toBe(paymentCancelId);
+    expect(pgStub.inquiryCalls).toHaveLength(1);
+    expect(pgStub.sendCalls).toHaveLength(0);
+  });
+
+  it('U419 기본 대기 60초와 조회 간격 15초 안에서 PG 최종 결과가 오면 75초 이내에 시도 결과를 판명한다', async () => {
+    const config = ctx.app.get(ConfigService);
+    expect(config.get<number>('refund.resultWaitSeconds')).toBe(60);
+    expect(config.get<number>('refund.queryIntervalSeconds')).toBe(15);
+    expect(config.get<number>('refund.sweepIntervalSeconds')).toBe(5);
+    const issued = await ctx.issuePeriodTicket();
+    pgStub.respondToSend({ result: 'UNKNOWN', reason: '응답 시간 초과' });
+    const accepted = await request(ctx.server)
+      .post('/refund')
+      .set('Authorization', `Bearer ${ctx.customer.token}`)
+      .set('Idempotency-Key', randomUUID())
+      .send({ ticketId: issued.ticketId, consentToTerminateTicket: true })
+      .expect(202);
+    const refundId = accepted.body.data.refundId as string;
+    const paymentCancelId = accepted.body.data.paymentCancelId as string;
+    const attempt = await ctx.prisma.paymentCancel.findUniqueOrThrow({
+      where: { id: paymentCancelId },
+    });
+    const sentAt = attempt.lastSendAttemptAt!;
+    expect(attempt.nextInquiryAt).not.toBeNull();
+    expect(attempt.nextInquiryAt!.getTime() - sentAt.getTime()).toBe(60_000);
+    pgStub.reset();
+    pgStub.respondToInquiry({
+      result: 'SUCCEEDED',
+      pgTransactionId: `pg-cancel-${paymentCancelId}`,
+      cancelledAmount: issued.amount,
+    });
+    const recovery = ctx.app.get(RefundRecoveryService);
+    await recovery.sweep(new Date(sentAt.getTime() + 59_999));
+    expect(pgStub.inquiryCalls).toHaveLength(0);
+    await recovery.sweep(new Date(sentAt.getTime() + 65_000));
+    const result = await ctx.prisma.paymentCancel.findUniqueOrThrow({
+      where: { id: paymentCancelId },
+    });
+    const refund = await ctx.prisma.refund.findUniqueOrThrow({
+      where: { id: refundId },
+    });
+    expect(result.status).toBe(PaymentCancelStatus.SUCCEEDED);
+    expect(result.lastInquiryAt).not.toBeNull();
+    expect(
+      result.lastInquiryAt!.getTime() - sentAt.getTime(),
+    ).toBeLessThanOrEqual(75_000);
+    expect(refund.payoutStatus).toBe(RefundPayoutStatus.PAID);
     expect(pgStub.inquiryCalls).toHaveLength(1);
     expect(pgStub.sendCalls).toHaveLength(0);
   });
