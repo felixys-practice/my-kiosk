@@ -17,4 +17,13 @@
 
 ## 2. 실행 검증
 
-T178에서 전체 단위·E2E, 빌드, 변경 파일 ESLint, 의도적 오류 검출과 원복 결과를 명령·실행 시각·환경·통과 수로 기록한다. T177의 컨트롤러 변경 뒤 `npx tsc --noEmit`과 변경한 네 컨트롤러의 ESLint는 통과했다. 이 문서의 명세 대조를 전체 기능 회귀 통과로 계산하지 않는다.
+2026-11-05에 기존 개발 DB와 분리한 `my_kiosk_refund_fresh_20261030_1647`에서 다음을 실행했다. 이 DB는 이전 T171에서 빈 상태부터 마이그레이션을 적용한 검증용 DB다. 테스트 명령은 `/tmp/refund-verify-20261104.cjs`가 검증 DB의 `DATABASE_URL`을 설정해 Jest를 한 번에 하나씩 실행한다.
+
+| 확인 항목 | 실제 실행 결과 |
+|---|---|
+| 전체 단위 | `node /tmp/refund-verify-20261104.cjs unit`: 53 suites, 596 tests 통과 |
+| 전체 HTTP E2E | `node /tmp/refund-verify-20261104.cjs e2e`: 16 suites, 200 tests 통과. T175의 U419 포함 |
+| 빌드·타입 | `npm run build`, `npx tsc --noEmit` 통과 |
+| 변경 파일 린트 | 네 환불 컨트롤러와 `test/refund-crash-recovery.e2e-spec.ts`에 `npx eslint` 통과 |
+
+의도적 오류 검출은 개발 중 작성한 `tdd/cycle-log.md`의 변이 기록을 별도로 대조한다. 이 최종 실행에서 변이를 다시 적용하지 않았으므로 **T178의 변이 검증은 아직 완료로 표시하지 않는다**. 위 전체 통과는 실제 PG·은행 연동의 확인을 뜻하지 않으며 해당 항목은 `release-checklist.md`에 미확인으로 남겨 둔다.
