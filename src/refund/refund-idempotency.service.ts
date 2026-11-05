@@ -13,7 +13,7 @@ import {
   IdempotencyRequestInProgressError,
 } from './errors';
 
-/** 기록 생성·조회 경합 시 다시 시도하는 최대 횟수 */
+/** 멱등성 record 생성·조회 경합 시 다시 시도하는 최대 횟수 */
 const maxAcquireAttempts = 3;
 
 /** Idempotency-Key 최대 길이 */
@@ -89,6 +89,7 @@ export class RefundIdempotencyService {
     handler: (tx: TransactionClient) => Promise<IdempotentResult<T>>,
     after?: IdempotentAfterCommit<T>,
   ): Promise<IdempotentResult<T>> {
+    // NOTE: "상품당 확정 환불 unique가 중복 환불을 막는다" 가 무슨 뜻이야?
     // 키가 없으면 멱등 처리 없이 실행한다(상품당 확정 환불 unique가 중복 환불을 막는다)
     if (command.key === undefined) {
       const result = await this.repository.runInTransaction(handler);
@@ -107,7 +108,7 @@ export class RefundIdempotencyService {
       );
     }
 
-    // 처리 중 기록을 먼저 만든다. 이미 있으면 저장된 최초 응답을 돌려준다
+    // 처리 중 상태의 멱등성 record를 만든다. 이미 있으면 이어받거나 저장된 응답을 확인한다
     const scope = {
       requesterId: command.requesterId,
       operation: command.operation,
@@ -118,6 +119,7 @@ export class RefundIdempotencyService {
     const claimToken = randomUUID();
     let created: IdempotencyRecord | null = null;
     for (let attempt = 0; attempt < maxAcquireAttempts; attempt++) {
+      // refund_idempotency_records에 처리 중인 멱등 요청을 생성한다
       created = await this.repository.createInProgress(
         scope,
         fingerprint,
@@ -128,7 +130,7 @@ export class RefundIdempotencyService {
 
       const existing = await this.repository.find(scope);
       if (existing) {
-        // 처리 기한이 지난 처리 중 기록은 같은 본문이면 이어받아 처리한다
+        // 처리 기한이 지난 요청은 같은 본문이면 처리를 이어받는다
         if (
           await this.tryTakeOver(
             existing,
@@ -137,8 +139,8 @@ export class RefundIdempotencyService {
             command.authorize,
           )
         ) {
-          // 처리는 커밋됐지만 커밋 뒤 단계 전에 중단된 기록이면 처리를 다시 하지 않고 저장된 결과로 응답을 만든다.
-          // 이어받기가 이전 처리 트랜잭션의 커밋을 기다렸을 수 있으므로 이어받은 뒤의 최신 기록으로 판단한다
+          // 처리는 커밋됐지만 커밋 뒤 단계 전에 중단된 요청이면 처리를 다시 하지 않고 저장된 결과로 응답을 만든다.
+          // 이어받기가 이전 처리 트랜잭션의 커밋을 기다렸을 수 있으므로 이어받은 뒤의 최신 record로 판단한다
           const current = after ? await this.repository.find(scope) : null;
           if (after && current?.refundId) {
             const rebuilt = await after.rebuild(current.refundId);
@@ -155,7 +157,7 @@ export class RefundIdempotencyService {
         // 그 밖에는 저장된 최초 응답을 돌려준다
         return this.replay<T>(existing, fingerprint, command.authorize);
       }
-      // 그 사이 최초 요청이 거절되어 기록이 지워졌다. 고유 제약으로 다시 생성을 시도한다
+      // 그 사이 최초 요청이 거절되어 record가 지워졌다. 고유 제약으로 다시 생성을 시도한다
     }
     if (!created) throw new IdempotencyRequestInProgressError();
 
@@ -164,8 +166,10 @@ export class RefundIdempotencyService {
     let handled: IdempotentResult<T>;
     try {
       handled = await this.repository.runInTransaction(async (tx) => {
-        // 트랜잭션을 시작하자마자 기록을 잡는다. 그 사이 다른 요청이 이어받았으면 처리하지 않는다
+        // 처리 중인 멱등성 record의 담당 토큰이 이 요청과 일치하는지 확인하고 행을 잠근다.
+        // 토큰이 다르거나 처리 중이 아니면 환불 처리를 중단한다.
         if (
+          // 행 잠금
           !(await this.repository.acquireInTransaction(
             tx,
             created.id,
@@ -193,22 +197,22 @@ export class RefundIdempotencyService {
         return result;
       });
     } catch (error) {
-      // 처리가 커밋되지 않았으므로 이 요청이 담당인 기록만 지워 같은 키의 이후 요청을 막지 않는다
+      // 처리가 커밋되지 않았으므로 이 요청이 담당인 record만 지워 같은 키의 이후 요청을 막지 않는다
       await this.repository.remove(created.id, claimToken);
       throw error;
     }
     if (!after) return handled;
 
-    // 커밋 뒤 단계가 실패하면 기록은 처리 중으로 남고, 처리 기한이 지난 뒤 같은 키 요청이 저장된 결과로 완료한다
+    // 커밋 뒤 단계가 실패하면 record는 처리 중 상태로 남고, 처리 기한이 지난 뒤 같은 키 요청이 저장된 결과로 완료한다
     const final = await after.afterCommit(handled);
     return this.completeOrReplay<T>(scope, created.id, claimToken, final);
   }
 
   /**
-   * 커밋 뒤 단계의 최종 응답으로 기록을 완료한다. 그 사이 담당을 잃었으면 자기 응답을 확정하지 않는다
+   * 커밋 뒤 단계의 최종 응답을 record에 저장하고 완료 상태로 변경한다. 그 사이 담당을 잃었으면 자기 응답을 확정하지 않는다
    * - 이어받은 요청이 이미 최초 응답을 저장했으면 그 응답을 돌려준다(같은 키는 같은 최초 응답)
    * @param scope 요청자·기능·키
-   * @param id 멱등 기록 ID
+   * @param id 멱등성 record ID
    * @param claimToken 이 요청의 담당 토큰
    * @param response 이 요청이 만든 최종 응답
    * @returns 저장된 최초 응답
@@ -234,8 +238,8 @@ export class RefundIdempotencyService {
   }
 
   /**
-   * 이미 있는 기록으로 최초 응답을 돌려준다
-   * @param existing 같은 요청자·기능·키의 기록
+   * 기존 record에 저장된 최초 응답을 돌려준다
+   * @param existing 같은 요청자·기능·키의 record
    * @param fingerprint 이번 요청의 본문 지문
    * @param authorize 현재 권한 재확인
    * @returns 저장된 최초 응답
@@ -277,10 +281,10 @@ export class RefundIdempotencyService {
   }
 
   /**
-   * 처리 기한이 지난 처리 중 기록을 이어받는다
-   * @param existing 같은 요청자·기능·키의 기록
-   * @param fingerprint 이번 요청의 본문 지문
-   * @param claimToken 이번 요청의 담당 토큰
+   * 처리 기한이 지난 요청의 처리를 이어받는다
+   * @param existing 같은 요청자·기능·키의 record
+   * @param fingerprint 이번 요청의 본문 지문 → 요청의 동일성 확인
+   * @param claimToken 이번 요청의 담당 토큰 → 처리 담당자 식별(누가 현재 요청을 처리할 권한을 확보했는가?)
    * @param authorize 현재 권한 재확인
    * @returns 이어받았으면 true
    */

@@ -150,9 +150,10 @@ export class RefundDispatchService {
   }
 
   /**
-   * 커밋 뒤 바로 보낼 PG 취소 요청의 담당을 만든다(확정 트랜잭션이 전송 직전 기록과 함께 저장한다)
-   * @param now 전송 시도 시각
-   * @returns 담당 토큰과 처리 기한
+   * PG 취소 요청을 전송할 작업의 식별 토큰과 처리 기한을 생성한다.
+   * 호출한 쪽에서 두 값을 환불 확정 트랜잭션에 저장하고, 커밋 후 전송한다.
+   * @param now 처리 기한을 계산할 기준 시각
+   * @returns 전송 작업을 식별하는 claimToken과 작업 처리 기한 claimUntil
    */
   newSendClaim(now: Date): { claimToken: string; claimUntil: Date } {
     return {

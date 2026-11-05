@@ -39,8 +39,8 @@
 **목적**: 환불 확정·PG 요청·외부 지급 예약을 구분하는 저장 모델과 공통 처리 계약을 만든다. 이 단계 완료 후 사용자 스토리를 시작한다.
 
 - [X] T006 [U16] [U17] [U18] [U19] [U20] [U21] [U22] [U23] [U24] [U25] [U26] [U27] [U28] [U29] [U30] [U31] [U32] [U33] [U34] `src/prisma/refund-constraints.integration.spec.ts`에 대상별 확정 환불 1건, 활성 PG 요청 1건, 활성 외부 지급 예약 1건, 실제 거래 식별자·원장 중복 금지와 음수 금지 테스트를 먼저 작성한다. 데이터 모델 §6·8의 제약을 검증용 DB에서 하나씩 확인한다.
-- [X] T007 [U16] [U17] [U18] [U19] [U20] `prisma/schema.prisma`와 신규 `prisma/migrations/20261027000100_refund_completion_expand/migration.sql`에 Refund를 추가한다. 데이터 모델 §3의 모든 필드를 반영하며 `amount`는 “Int, 0 이상, 확정 뒤 불변”, `paidAmount`는 “Int, 0 이상”, `decisionStatus`는 “ACCEPTED / LEGACY_REJECTED”, `payoutStatus`는 “PENDING / ACTION_REQUIRED / PAID / NOT_APPLICABLE”, `payoutMethod`는 “PG / MANUAL”이다. `NOT_APPLICABLE`은 과거 거절만, PAYMENT 대상 상품 ID는 null, 이용권 있는 신규 환불의 종료 시각은 필수다. 신규 CUSTOMER/STORE의 실행자·종료 동의를 보존한다.
-- [X] T008 [U21] [U22] [U23] [U24] [U25] `prisma/schema.prisma`와 동일 확장 마이그레이션에 Payment.approvedAmount “Int?”, PaymentCancel.refundId·시도 번호·실제액·실패 사유·조회/전송 횟수·일정·담당 토큰을 데이터 모델 §4대로 추가한다. 상태는 “REQUESTED / QUERY_FAILED / SUCCEEDED / FAILED”, actualAmount는 “확인 전 null”, 신규 refundId는 “필수 FK”, 과거 거절 이력만 이관 기간 null 허용이다. 기존 PK·PG 취소 거래 ID와 실패 이력을 보존한다.
+- [X] T007 [U16] [U17] [U18] [U19] [U20] `prisma/schema.prisma`와 새로 추가하는 `prisma/migrations/20261027000100_refund_completion_expand/migration.sql`에 Refund를 추가한다. 데이터 모델 §3의 모든 필드를 반영하며 `amount`는 “Int, 0 이상, 확정 뒤 불변”, `paidAmount`는 “Int, 0 이상”, `decisionStatus`는 “ACCEPTED / LEGACY_REJECTED”, `payoutStatus`는 “PENDING / ACTION_REQUIRED / PAID / NOT_APPLICABLE”, `payoutMethod`는 “PG / MANUAL”이다. `NOT_APPLICABLE`은 과거 거절만, PAYMENT 대상 상품 ID는 null, 이관 건을 제외하고 발행된 이용권을 종료하는 환불은 종료 시각이 필수다. 이관 건을 제외한 CUSTOMER/STORE 환불의 실행자·종료 동의를 보존한다.
+- [X] T008 [U21] [U22] [U23] [U24] [U25] `prisma/schema.prisma`와 동일 확장 마이그레이션에 Payment.approvedAmount “Int?”, PaymentCancel.refundId·시도 번호·실제액·실패 사유·조회/전송 횟수·일정·담당 토큰을 데이터 모델 §4대로 추가한다. 상태는 “REQUESTED / QUERY_FAILED / SUCCEEDED / FAILED”, actualAmount는 “확인 전 null”, 새로 생성하는 PG 취소 요청의 refundId는 “필수 FK”, 과거 거절 이력만 이관 기간 null 허용이다. 기존 PK·PG 취소 거래 ID와 실패 이력을 보존한다.
 - [X] T009 [U26] [U27] `prisma/schema.prisma`와 동일 확장 마이그레이션에 ManualRefundPayout의 모든 필드를 데이터 모델 §5대로 추가한다. 상태는 “RESERVED / SUCCEEDED / FAILED”, amount는 “예약 시 Refund 미지급액과 같고 이후 불변, 양수”, externalTransactionId는 “성공 기록에서 전역 unique”다. TicketPause에 종료 기록 closedAt·closeReason을 추가해 재개 없이 REFUND_TERMINATED로 닫을 수 있게 한다.
 - [X] T010 [U28] [U29] [U30] [U31] [U32] [U33] [U34] `prisma/schema.prisma`와 동일 확장 마이그레이션에 Ledger의 refundId·manualRefundPayoutId, RefundNotification·Receipt, RefundRecoveryControl, DB 멱등 요청 기록을 추가한다. 데이터 모델 §6·8의 partial unique·FK·금액 CHECK를 적용하고 Receipt `(notificationId,userId)` PK, 멱등 `(requesterId,operation,key)` unique를 보장한다. PG·외부 지급 원장은 둘 중 한 지급만 연결하고 0원은 둘 다 null·amount=0·refundId별 1건이다.
 - [X] T011 [U35] [U36] [U37] [U38] [U39] [U40] [U41] [U42] [U43] [U44] `src/refund/refund-idempotency.service.spec.ts`에 같은 키·같은 본문 재응답, 다른 본문 거절, 처리 중 응답, 현재 권한 재검사, Redis 만료 후에도 중복 환불 방지 테스트를 작성한다.
@@ -52,7 +52,7 @@
 - [X] T017 [U59] [U60] [U61] `src/refund/refund-locking.repository.ts`, `src/session-lifecycle/session-lifecycle.repository.ts`에 Payment → Ticket → TicketPause → UsageSession → SeatAssignment → Refund → PaymentCancel → ManualRefundPayout 잠금과 같은 종류 ID 순 잠금을 제공한다. Service에 직접 DB 잠금 쿼리를 두지 않고 외부 PG 호출 중에는 트랜잭션을 유지하지 않는다. `src/refund/refund-locking.repository.spec.ts`로 잠금 순서 계약을 확인한다.
 - [X] T018 `src/refund/refund.module.ts`, `src/session-lifecycle/session-lifecycle.module.ts`, `src/pg/pg.module.ts`에 공통 Repository와 PG 대역 교체 지점을 연결한다. 새 서비스는 도입되는 스토리에서 등록하고 다른 도메인과 순환 의존이 생기지 않는지 `test/refund-bootstrap.e2e-spec.ts`에서 검증한다.
 
-**체크포인트**: 검증용 DB에서 신규 모델을 쓸 수 있고 공통 권한·멱등·PG 계약이 검증됐다. 과거 개발 데이터 이관은 2026-10-30 사용자 결정으로 제외한다. 기존 RefundLock 참조 정리와 빈 DB 재구축은 마지막 검증 단계에서 수행한다.
+**체크포인트**: 검증용 DB에서 추가한 모델을 쓸 수 있고 공통 권한·멱등·PG 계약이 검증됐다. 과거 개발 데이터 이관은 2026-10-30 사용자 결정으로 제외한다. 기존 RefundLock 코드·모델·테이블 제거와 빈 검증용 DB 재구축은 마지막 검증 단계의 T174·T171에서 완료했다.
 
 **검수 관문**: T006부터 T018까지 마치면 실행 규칙의 Phase 검수 절차에 따라 Codex 검수를 받는다. "통과" 판정 전에는 다음 Phase로 넘어가지 않는다.
 
@@ -81,7 +81,7 @@
 - [X] T030 [US1] [U62] [U63] [U64] [U65] [U66] [U67] [U68] [U69] [U70] [U71] [U72] [U73] [U74] [U75] [U76] [U77] [U78] [U79] `src/refund/refund-policy.ts`에 본인 범위→결제 SUCCESS→PAID 환불→미지급 ACCEPTED→사용/기한 조건 순 판정을 구현한다. PERIOD.activationDeadline과 TIME.minuteExpireDeadline을 사용하고 기한과 같은 시각은 허용한다. 가능 조건 거절에는 CONTACT_SHOP과 violations를 반환한다.
 - [X] T031 [US1] [U80] [U81] [U82] [U83] [U84] [U85] [U86] `src/refund/dto/refund.dto.ts`와 `src/refund/dto/refund.dto.spec.ts`에 ticketId UUID와 boolean 종료 동의를 반영한다. amount·userId·shopId 주입을 거부하고 동의 false/누락은 REFUND_TERMINATION_CONSENT_REQUIRED로 처리한다.
 - [X] T034 [US1] [U87] [U88] [U89] [U90] [U91] [U92] [U93] [U94] [U95] [U96] [U97] `src/refund/refund-acceptance.service.spec.ts`에 커밋 직전 실패의 전체 롤백, 커밋 이후 호출, 같은 이용권 동시 신청의 확정 환불 1건, PG 실패 후에도 종료 유지 테스트를 추가한다.
-- [X] T032 [US1] [U87] [U88] [U89] [U90] [U91] [U92] [U93] [U94] [U95] `src/refund/refund-acceptance.service.ts`, `src/refund/refund.repository.ts`에 검증·금액/동의 저장·Ticket REVOKED·기존 정지 종료·좌석 해제·Refund ACCEPTED·최초 PaymentCancel 저장을 같은 트랜잭션으로 구현한다. 거절/저장 실패는 업무 기록과 PG 호출을 남기지 않는다. RefundLock을 신규 생성하지 않는다.
+- [X] T032 [US1] [U87] [U88] [U89] [U90] [U91] [U92] [U93] [U94] [U95] `src/refund/refund-acceptance.service.ts`, `src/refund/refund.repository.ts`에 검증·금액/동의 저장·Ticket REVOKED·기존 정지 종료·좌석 해제·Refund ACCEPTED·최초 PaymentCancel 저장을 같은 트랜잭션으로 구현한다. 거절/저장 실패는 업무 기록과 PG 호출을 남기지 않는다. 환불을 접수할 때 RefundLock을 생성하지 않는다.
 - [X] T033 [US1] [U93] [U94] [U96] [U97] `src/refund/refund.service.ts`, `src/refund/refund.controller.ts`에 고객 POST /refund를 연결하고 기존 승인 대기 분기를 제거한다. PG 최초 호출은 커밋 후 수행하며 양수 접수는 202·환불 식별자·이용 종료·지급 상태를 반환한다. 최초 응답 재반환은 공통 DB 멱등 처리를 사용한다.
 
 - [X] T179 [US1] [A1] [A2] [A3] [A4] [A5] [A6] [A7] [A8] [A9] [A10] `test/refund-customer.e2e-spec.ts`의 사용자 스토리 1 인수 테스트 A1부터 A10까지 10개가 모두 통과하는지 실행해 확인한 뒤에만 이 스토리를 완료로 표시한다.
@@ -330,7 +330,7 @@
 
 - [X] T152 [US8] [U239] [U240] [U241] [U242] [U243] [U244] [U245] [U246] [U247] [U248] [U249] `src/refund/refund-query.service.spec.ts`, `src/refund/dto/get-refund-query.dto.spec.ts`에 본인/소유 매장 범위·운영 정보 필터·정렬·페이지 경계·과거 이력 노출 테스트를 작성한다.
 - [X] T153 [US8] [U239] [U240] [U241] [U242] [U243] [U244] [U249] `src/refund/refund-query.repository.ts`, `src/refund/refund-query.service.ts`에 GET me/shop/user/:userId/:refundId를 구현한다. 정렬 requestedAt DESC,id DESC, page=1, limit=20(1~100), payoutStatus/decisionStatus 필터, MANAGER actionRequiredOnly를 적용한다. 범위 안 빈 목록은 200, 범위 밖은 404다.
-- [X] T154 [US8] [U246] [U247] [U248] `src/refund/dto/get-refund-query.dto.ts`, `src/refund/dto/refund-response.dto.ts`에 확정된 환불 금액·실제 지급액·미지급액·초과액·종료 시각·PG 요청/외부 지급 이력을 반영한다. 운영 상세 오류·증빙·검토 사유는 MANAGER에만 노출하고 LEGACY 이력을 신규 이용 종료와 구분한다.
+- [X] T154 [US8] [U246] [U247] [U248] `src/refund/dto/get-refund-query.dto.ts`, `src/refund/dto/refund-response.dto.ts`에 확정된 환불 금액·실제 지급액·미지급액·초과액·종료 시각·PG 요청/외부 지급 이력을 반영한다. 운영 상세 오류·증빙·검토 사유는 MANAGER에만 노출하고 LEGACY 이력을 이관 후 접수한 환불의 이용권 종료 기록과 구분한다.
 - [X] T155 [US8] [U245] `src/refund/refund.controller.ts`, `src/refund/refund-query.service.ts`에 고정 경로를 동적 refundId보다 먼저 연결한다. 고객이 다른 userId를 지정하지 못하게 하고 조회 때 현재 ShopOwner를 재검사한다.
 
 - [X] T187 [US8] [A64] [A65] [A66] [A67] [A68] `test/refund-history.e2e-spec.ts`의 사용자 스토리 8 인수 테스트 A64부터 A68까지 5개가 모두 통과하는지 실행해 확인한 뒤에만 이 스토리를 완료로 표시한다.
@@ -374,14 +374,14 @@
 
 - T169 [범위 제외, 2026-10-30] [U262] [U263] [U264] [U265] [U266] 과거 환불 이관 사전 점검 도구와 그 테스트는 작성하지 않는다. 개발 데이터를 폐기할 수 있다는 사용자 결정에 따른 제외이며 구현 완료로 계산하지 않는다.
 - T170 [범위 제외, 2026-10-30] [U264] [U265] [U266] 과거 환불·원장을 새 구조로 옮기는 스크립트와 이관 E2E는 작성하지 않는다. 과거 승인 대기·성공·실패 기록 보존 요구는 이번 개발 데이터 재구축에 적용하지 않는다.
-- [X] T174 `src/refund/refund.service.ts`, `src/refund/refund.repository.ts`, `src/refund/refund.module.ts`에서 신규 흐름으로 대체한 RefundLock TTL 해제·승인 대기·PG 실패 후 이용권 복구 코드를 제거하고 기존 `src/refund/refund.service.spec.ts`의 변경된 기대값을 명세와 대조한다. 테스트 기대값 변경이 필요한 항목은 헌법 III에 따라 근거와 사용자 확인을 남긴 뒤 변경한다.
+- [X] T174 `src/refund/refund.service.ts`, `src/refund/refund.repository.ts`, `src/refund/refund.module.ts`에서 이용 종료와 지급을 분리한 환불 처리로 대체한 RefundLock TTL 해제·승인 대기·PG 실패 후 이용권 복구 코드를 제거하고 기존 `src/refund/refund.service.spec.ts`의 변경된 기대값을 명세와 대조한다. 테스트 기대값 변경이 필요한 항목은 헌법 III에 따라 근거와 사용자 확인을 남긴 뒤 변경한다.
 - [X] T171 기존 마이그레이션을 빈 검증용 DB에 순서대로 적용해 최종 스키마·필수 연결·unique·금액 제약을 확인한다. T174에서 이전 코드의 참조를 정리한 뒤 필요한 최종 마이그레이션으로 RefundLock을 제거한다. 기존 마이그레이션 통합은 별도 결정 없이 수행하지 않는다. 운영 DB 복제본 이관과 구버전 중지·전환·재개 검증은 제외한다.
 - [X] T172 `test/refund-concurrency.e2e-spec.ts`에 고객/점주 동시 접수, 입실/환불, 콜백/조회, 자동/개별 조회, 점주·운영자의 실패 요청 개별 조회/MANAGER 직접 PG 재요청/외부 지급 예약, 증빙 반복 등록 경쟁을 재현한다. 확정 환불·활성 PG 요청·활성 지급 예약·지급별 원장 수와 실제 PG 호출 수를 검증한다.
 - [X] T173 `test/refund-crash-recovery.e2e-spec.ts`에 커밋 전/후·PG 전송 전/후·성공 후 저장 실패·worker 중단·담당 만료·큐 유실/중복을 재현한다. 재시작 후 DB 기록에서 조회를 재개하고 이용 종료·확정된 환불 금액·외부 지급 예약을 보존하는지 검증한다.
-- [X] T175 `specs/002-refund-completion/quickstart.md`에 실제 E2E 파일/테스트 이름 대응을 기록한다. 92개 QS 모두 HTTP 테스트가 존재하고 현재 범위의 FR·SC가 구현/테스트에 연결되는지 대조한다. 범위 제외한 FR-007a와 U262~U266은 제외 근거를 표시하고 미구현 누락으로 계산하지 않는다. 자동 최종 결과 정상·무적체 조건에서 기본 75초 목표도 테스트 시계로 검증한다.
-- [X] T176 [P] `specs/002-refund-completion/release-checklist.md`에 빈 DB 재구축·필수 설정·서버/클라이언트 API 계약 일치와 실제 PG의 authoritative NOT_FOUND·최종 실패·멱등 키·서명 보장 확인 항목을 적는다. 실제 PG와 은행 연동 검증은 미확인으로 표시한다. 과거 개발 데이터 이관·구버전 운영 서버 전환 체크리스트는 만들지 않는다.
-- [X] T177 `src/refund/refund.controller.ts`, `src/refund/refund-operations.controller.ts`, `src/refund/refund-recovery.controller.ts`, `src/refund/refund-notification.controller.ts`의 Swagger와 한글 주석을 최종 API 계약에 맞춘다. 예약 대상·외부 실제 지급·결과 등록·예약 실패 종료를 구별하고 spec·다이어그램·API의 의미 차이를 `specs/002-refund-completion/verification.md`에 기록해 해소한다.
-- [X] T178 `.specify/memory/tdd-profile.md`의 전체 단위·E2E 명령, `npm run build`, 변경 파일 ESLint를 실행하고 `specs/002-refund-completion/verification.md`에 실제 결과를 기록한다. 소유권·중복 지급·원장 중복·서명·예약 차단의 의도적 오류를 넣어 테스트가 실패하는지 확인한 뒤 원복하고 재검증한다.
+- [ ] T175 `specs/002-refund-completion/quickstart.md`에 실제 E2E 파일/테스트 이름 대응을 기록한다. 92개 QS 모두 HTTP 테스트가 존재하고 현재 범위의 FR·SC가 구현/테스트에 연결되는지 대조한다. 범위 제외한 FR-007a와 U262~U266은 제외 근거를 표시하고 미구현 누락으로 계산하지 않는다. 자동 최종 결과 정상·무적체 조건에서 기본 75초 목표도 테스트 시계로 검증한다.
+- [ ] T176 [P] `specs/002-refund-completion/release-checklist.md`에 빈 DB 재구축·필수 설정·서버/클라이언트 API 계약 일치와 실제 PG의 authoritative NOT_FOUND·최종 실패·멱등 키·서명 보장 확인 항목을 적는다. 실제 PG와 은행 연동 검증은 미확인으로 표시한다. 과거 개발 데이터 이관·구버전 운영 서버 전환 체크리스트는 만들지 않는다.
+- [ ] T177 `src/refund/refund.controller.ts`, `src/refund/refund-operations.controller.ts`, `src/refund/refund-recovery.controller.ts`, `src/refund/refund-notification.controller.ts`의 Swagger와 한글 주석을 최종 API 계약에 맞춘다. 예약 대상·외부 실제 지급·결과 등록·예약 실패 종료를 구별하고 spec·다이어그램·API의 의미 차이를 `specs/002-refund-completion/verification.md`에 기록해 해소한다.
+- [ ] T178 `.specify/memory/tdd-profile.md`의 전체 단위·E2E 명령, `npm run build`, 변경 파일 ESLint를 실행하고 `specs/002-refund-completion/verification.md`에 실제 결과를 기록한다. 소유권·중복 지급·원장 중복·서명·예약 차단의 의도적 오류를 넣어 테스트가 실패하는지 확인한 뒤 원복하고 재검증한다.
 
 **검수 관문**: 범위에 남은 T171부터 T178까지 마치면 실행 규칙의 Phase 검수 절차에 따라 Codex 검수를 받는다. "통과" 판정 전에는 구현 완료로 보고하지 않는다.
 
@@ -405,7 +405,7 @@ Phase 번호는 명세 우선순위별 문서 구성이다. 실제 실행은 다
 | US9 알림·응답 | US4 내부 사건 저장·US8 조회 | US5/US10의 실패/예약 알림까지 연결 |
 | 최종 재구축·배포 검증 | 모든 스토리 | 빈 DB 스키마·제약·동시성·중단 복구·전체 회귀·TDD 증거 확인 |
 
-각 단계 사이에는 실행 규칙의 Phase 검수 절차에 따른 Codex "통과" 판정이 필요하다. 권장 구현 순서는 기반 → US1 접수 → US4 공통 결과 → US2·US3 → US5 일반 복구 → US10 공통 PG 재요청 → US5 개별 확인 완료 → US6·US10 외부 지급 → US7 → US8·US9 → 최종 검증이다. 신규 콜백을 외부에 공개하는 배포는 US7 완료 후에만 한다.
+각 단계 사이에는 실행 규칙의 Phase 검수 절차에 따른 Codex "통과" 판정이 필요하다. 권장 구현 순서는 기반 → US1 접수 → US4 공통 결과 → US2·US3 → US5 일반 복구 → US10 공통 PG 재요청 → US5 개별 확인 완료 → US6·US10 외부 지급 → US7 → US8·US9 → 최종 검증이다. 변경된 콜백을 외부에 공개하는 배포는 US7 완료 후에만 한다.
 
 **계약 해석 시 주의**: 직접 payout-retries는 MANAGER 전용이며 고객·OWNER는 역할 제한으로 403이다. 권한 확인 후 같은 키·같은 내용이면 현재 상태와 관계없이 최초 응답을 반환한다. 새 요청의 지급 완료·재처리 불가는 REFUND_PAYOUT_NOT_ACTIONABLE, 결과 미확정·활성 예약·유효한 조회 담당·PG_RESULT_CONFLICT는 REFUND_PAYOUT_UNRESOLVED, 미지급액이 남은 일부 지급은 REFUND_PARTIAL_PAYOUT_REQUIRES_MANUAL의 409로 구분한다. 개별 확인의 세 실패 사유 확대와 미확정 요청의 기존 ID 재전송은 별도로 검증한다.
 

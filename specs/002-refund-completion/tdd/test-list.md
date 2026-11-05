@@ -250,7 +250,7 @@ suite_baseline: green
 | U340 | 매장 환불 요청에 공백만 있는 사유를 보내면 형식 오류(400)다: 제공한 사유는 trim 후 1~500자 (Phase 4 검수 1 P2) | 계약 §4 | example | DONE | `src/refund/dto/store-refund.dto.spec.ts` |
 | U341 | (실제 DB) 입실 후속 실패 처리(failSession)는 이미 종료된(환불 퇴실) 세션을 덮어쓰지 않는다 (Phase 5 검수 1 P2) | FR-042 | example | DONE | `src/refund/refund-store.integration.spec.ts`(실제 DB) |
 | U342 | PG 전송 결과가 NOT_SENT이면 그 시도는 FAILED/SEND_FAILED, 환불은 ACTION_REQUIRED가 되고 알림이 저장된다 (US5 진행 중 추가, A34 단위) | FR-021 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
-| U343 | PG 전송 결과가 즉시 REJECTED이면 그 시도는 FAILED/PG_REJECTED, 환불은 ACTION_REQUIRED다 (US5 진행 중 추가, 계약 §8) | FR-020 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
+| U343 | PG가 취소 요청을 즉시 거절하면 해당 PaymentCancel 시도를 FAILED/PG_REJECTED로 기록하고 연결된 Refund를 ACTION_REQUIRED로 바꾼다 (US5 진행 중 추가, 계약 §8) | FR-020 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
 | U344 | PG 전송 결과가 즉시 SUCCEEDED이면 공통 결과 처리로 실제액·원장을 반영한다 (US5 진행 중 추가, 계약 §8) | FR-018 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
 | U345 | 환불 접수 응답과 같은 키 재응답은 PG 전송 결과(예: ACTION_REQUIRED)를 반영한 같은 응답이다 (US5 진행 중 추가, 계약 §4) | FR-035 | example | DONE | `src/refund/refund-acceptance.integration.spec.ts`(실제 DB) |
 | U346 | 지급 처리 중(PENDING)·PG 방식이 아닌 환불(예: 조치 필요)의 미확정 시도는 정기 탐색에서 조회하지 않는다 (US5 진행 중 추가, 계약 §8 자동 대상) | FR-022 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
@@ -426,10 +426,10 @@ suite_baseline: green
 
 | id | behavior | traces | kind | state | test |
 |---|---|---|---|---|---|
-| U122 | REVOKED 이용권의 입실은 TICKET_TERMINATED로 거절된다 | FR-017 | example | DONE | `src/usage-session/usage-session.service.spec.ts` |
-| U123 | 지급 상태가 ACTION_REQUIRED인 REVOKED 이용권의 입실도 TICKET_TERMINATED로 거절된다 | FR-017 | example | DONE | `src/refund/refund-acceptance.integration.spec.ts`(실제 DB) |
-| U124 | REVOKED 이용권의 정지 재개는 TICKET_TERMINATED로 거절된다 | FR-017 | example | DONE | `src/ticket/ticket-pause/ticket-pause.service.spec.ts` |
-| U125 | REVOKED 이용권의 좌석 타입 변경은 TICKET_TERMINATED로 거절된다 | FR-017 | example | DONE | `src/ticket/ticket-seat/ticket-seat.service.spec.ts` |
+| U122 | `REVOKED` 이용권으로 입실을 요청하면 HTTP 409와 `TICKET_TERMINATED` 오류 코드를 받고 세션은 생성되지 않는다 | FR-017 | example | DONE | `src/usage-session/usage-session.service.spec.ts` |
+| U123 | 환불금 지급 조치가 필요한 상태여도 `REVOKED` 이용권의 입실 요청은 HTTP 409와 `TICKET_TERMINATED` 오류 코드로 거절된다 | FR-017 | example | DONE | `src/refund/refund-acceptance.integration.spec.ts`(실제 DB) |
+| U124 | `REVOKED` 이용권의 정지 재개 요청은 HTTP 409와 `TICKET_TERMINATED` 오류 코드로 거절된다 | FR-017 | example | DONE | `src/ticket/ticket-pause/ticket-pause.service.spec.ts` |
+| U125 | `REVOKED` 이용권의 좌석 타입 변경 요청은 HTTP 409와 `TICKET_TERMINATED` 오류 코드로 거절된다 | FR-017 | example | DONE | `src/ticket/ticket-seat/ticket-seat.service.spec.ts` |
 | U126 | 입실이 먼저 이용권 잠금을 얻으면 뒤이은 고객 환불은 USED_TICKET으로 거절된다 | FR-003 | example | DONE | `src/refund/refund-acceptance.integration.spec.ts`(실제 DB) |
 | U127 | 환불 뒤 도착한 자동 종료 작업은 세션 종료 상태를 덮어쓰지 않는다 | FR-042 | example | DONE | `src/refund/refund-store.integration.spec.ts`(실제 DB) |
 | U128 | 환불 뒤 도착한 자동 종료 작업은 사용 시간을 다시 차감하지 않는다 | FR-042 | example | DONE | `src/refund/refund-store.integration.spec.ts`(실제 DB) |

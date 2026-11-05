@@ -94,7 +94,7 @@
 
 모든 검증 뒤 한 트랜잭션에서 Refund ACCEPTED·고정 금액·동의·종료 시각, 필요한 퇴실·사용량 차감, Ticket REVOKED, 기존 정지 기록 종료, SeatAssignment 해제와 최초 PaymentCancel을 저장한다. 0원은 PG 취소 요청 대신 Refund PAID와 0원 원장을 함께 기록한다. 저장 실패 시 전부 롤백하고 PG를 호출하지 않는다.
 
-커밋 뒤 PG를 호출한다. 양수의 최초 정상 접수는 202이며 PG가 즉시 성공해도 접수 사실과 최신 상태 GET을 구분한다. 확실한 전송 전 실패·즉시 PG 거절도 202로 `decisionStatus=ACCEPTED`, `payoutStatus=ACTION_REQUIRED`, 현재 실패 시도·미지급 사유를 반환한다. 환불 신청 자체가 취소됐다는 502 응답을 사용하지 않는다. 응답 유실 뒤 같은 키로 재호출하면 최초 접수 응답을 반환하고 최신 환불금 지급 상태는 GET에서 확인한다. 0원은 200 PAID다.
+커밋 뒤 PG를 호출한다. 양수 환불의 최초 정상 접수는 202로 응답하며, PG가 즉시 취소를 완료해도 접수 응답과 최신 상태를 조회하는 GET 응답은 구분한다. 전송 전 실패가 확실하거나 PG가 요청을 즉시 거절해도 202를 반환하고, 응답의 `decisionStatus`는 `ACCEPTED`, `payoutStatus`는 `ACTION_REQUIRED`로 둔다. 이때 응답에는 실패한 취소 시도와 미지급 사유를 포함한다. 환불 신청 자체가 취소됐다는 502 응답은 사용하지 않는다. 응답 유실 뒤 같은 키로 재호출하면 최초 접수 응답을 반환하고 최신 환불금 지급 상태는 GET에서 확인한다. 환불 금액이 0원이면 PG 취소 요청 없이 `Refund.payoutStatus=PAID`로 저장하고 200으로 응답한다.
 
 ### 중복 요청
 
@@ -129,7 +129,7 @@
 
 본문 `{ "amount":12000, "paidAt":"UTC ISO 시각", "externalTransactionId":"실제 지급 거래 키", "evidenceReference":"운영 증빙 참조" }`. RESERVED·해당 환불 귀속·예약과 같은 금액·유효한 환불금 지급 시각·증빙을 검증한다. externalTransactionId 1~200자, evidenceReference 1~1000자, paidAt은 미래 불가다. 실제 지급 사실을 운영자가 확인한 뒤에만 호출한다. 외부 거래 키는 지급 기관·거래 계정 범위를 포함해 전역으로 구별할 수 있는 정규화 식별값이다.
 
-SUCCEEDED·Refund paidAmount 합산·미지급액 계산·원장을 같은 트랜잭션에서 처리한다. 부족액 지급이었다면 이 증빙 확정으로 부족 지급 검토도 함께 완료하고 검토자·시각·증빙을 남겨 reviewRequired=false로 바꾼다. 합계 충족·검토 완료면 PAID다. 같은 확정의 반복은 기존 결과를 반환하며 다른 환불에서 같은 지급 거래 키는 MANUAL_PAYOUT_REFERENCE_REUSED다. 수신 권한 없는 사람에게 증빙 원문을 노출하지 않는다.
+성공 확정 시 예약된 `ManualRefundPayout.status`를 `SUCCEEDED`로 바꾸고, 지급액을 `Refund.paidAmount`에 합산하며 미지급액을 다시 계산하고 원장을 기록한다. 이 변경은 한 트랜잭션에서 처리한다. 부족액을 지급한 경우에는 증빙 확정과 함께 부족 지급 검토를 완료하고 검토자·시각·증빙을 기록한 뒤 `Refund.reviewRequired=false`로 바꾼다. `Refund.paidAmount`가 `Refund.amount` 이상이고 검토가 완료됐으며 미확정 지급이 없으면 `Refund.payoutStatus`를 `PAID`로 변경한다. 같은 확정 요청을 반복하면 기존 결과를 반환한다. 다른 환불에서 이미 사용한 지급 거래 키는 `MANUAL_PAYOUT_REFERENCE_REUSED` 오류로 거부한다. 증빙을 볼 권한이 없는 사용자에게 증빙 원문을 노출하지 않는다.
 
 ### POST /refund/:refundId/manual-payouts/:payoutId/not-paid
 
@@ -141,7 +141,7 @@ SUCCEEDED·Refund paidAmount 합산·미지급액 계산·원장을 같은 트�
 
 ## 6. 입실·저장 순서·원장
 
-기존 입실 DTO와 소유권 검사 범위는 바꾸지 않는다. 세션 생성·첫 활성화 직전에 Ticket을 잠그고 REVOKED를 확인해 409 TICKET_TERMINATED로 거부한다. 환불금 지급 실패에도 허용하지 않는다. 기존 좌석 타입·배정·가용성 검사는 유지한다.
+기존 입실 DTO와 소유권 검사 범위는 바꾸지 않는다. 세션 생성 또는 첫 활성화 직전에 Ticket 행을 잠그고 이용권이 `REVOKED`인지 확인한다. 환불로 종료된 이용권이면 HTTP 409와 `TICKET_TERMINATED` 오류 코드를 반환해 입실을 거절한다. 이 검사는 환불금 지급 실패 여부와 관계없이 적용한다. 기존 좌석 타입·배정·가용성 검사는 유지한다.
 
 공유 잠금 순서는 Payment → Ticket → TicketPause → UsageSession → SeatAssignment → Refund → PaymentCancel → ManualRefundPayout이다. 필요한 행만 순서를 유지하고 같은 종류는 ID 순이다. PG 결과 저장·운영자 지급은 Refund 이후만 잠그며 Ticket으로 역행하지 않는다. PG 조회 담당 지정은 PaymentCancel만 갱신하고 끝내며 외부 조회 동안 잠금을 잡지 않는다. 담당 토큰·현재 상태를 결과 저장 때 다시 확인한다.
 
@@ -186,7 +186,7 @@ v1\n{timestamp}\nPOST\n{path}\n{sha256(rawBody)}
 
 자동 PG 처리는 Refund의 ACCEPTED·PENDING·PG, 별도 환불금 지급 활성 예약 없음, PaymentCancel의 REQUESTED/QUERY_FAILED를 함께 확인한다. FAILED 시도는 조회·재전송에서 제외하며 nextInquiryAt과 담당 토큰·기한을 지운다. ACTION_REQUIRED 환불은 운영자 목록에 남는다. MANAGER가 payout-retries를 명시적으로 호출하면 취소 요청을 새 PG 취소 요청 식별자로 기록하고 PENDING/PG로 바꾼다. 기존 실패 시도는 그대로 보존한다.
 
-QUERY_ERROR가 연속 한도에 도달하면 QUERY_FAILED다. 하나의 RefundRecoveryControl로 900초마다 가장 오래된 1건을 확인하고 정상 응답 뒤 20건씩 재조회한다. 오류 재발 시 1건 확인으로 돌아간다. MANAGER 재개는 동일 제어 행·시도 담당 토큰을 사용한다.
+PG 조회가 연속 실패 한도에 도달하면 해당 `PaymentCancel.status`를 `QUERY_FAILED`로 기록한다. 하나의 `RefundRecoveryControl`을 사용해 900초마다 가장 오래된 환불 취소 요청 1건을 조회하고, 정상 응답을 받으면 나머지를 최대 20건씩 조회한다. 오류가 다시 발생하면 한 번에 1건만 조회하는 방식으로 돌아간다. `MANAGER`가 복구를 재개할 때도 같은 제어 행과 시도 담당 토큰을 사용한다.
 
 `GET /refund/recovery/status`는 `{mode,running,requestedCount,queryFailedCount,actionRequiredCount,reservedManualCount,oldestQueryFailedAt,nextProbeAt}`를 반환한다. `POST /refund/recovery/resume`은 본문 없음/{}이고 202 SCHEDULED, 이미 실행 중이면 200 ALREADY_RUNNING, 대상 없으면 200 NO_WORK다. 금액·개별 최종 상태를 입력받지 않는다.
 

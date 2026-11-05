@@ -89,6 +89,9 @@ export class RefundAcceptanceService {
     command: CustomerRefundCommand,
   ): Promise<IdempotentResult<RefundAcceptance>> {
     // 고객 환불은 USER만 신청한다(API 계약 §2). 저장된 응답을 재생할 때도 같은 확인을 거친다
+    // FIXME: 역할 검사 지점을 줄이도록 컨트롤러의 @Roles(Role.USER)와 기존 RoleGuard를 재사용하는 방식으로 전환한다.
+    // 전환 시 RoleGuard의 역할 불일치 응답(현재 401)을 환불 계약의 403·REFUND_FORBIDDEN과 맞추고 관련 테스트를 조정한다.
+    // 서비스 직접 호출에도 역할 검사가 필요한지 확인한 뒤 assertCustomerRole을 제거한다.
     assertCustomerRole(actor);
 
     // 이번 요청이 실제로 확정한 PG 취소 요청(저장된 응답을 재생한 경우는 없음)
@@ -187,11 +190,11 @@ export class RefundAcceptanceService {
     pending: () => PendingSend | undefined,
   ): IdempotentAfterCommit<RefundAcceptance> {
     return {
-      afterCommit: (handled) => {
+      afterCommit: (acceptanceResult) => {
         const send = pending();
         return send
-          ? this.sendAccepted(send, handled)
-          : Promise.resolve(handled);
+          ? this.sendAccepted(send, acceptanceResult)
+          : Promise.resolve(acceptanceResult);
       },
       rebuild: (refundId) => this.rebuildAcceptance(refundId),
     };
@@ -243,7 +246,8 @@ export class RefundAcceptanceService {
     const { now } = input;
     // 이용권을 종료한다
     await this.refundRepository.terminateTicket(ticketId, now, tx);
-    // 진행 중이던 정지 기록을 재개 없이 닫는다
+
+    // 환불로 이용권이 종료되면, 진행 중인 일시정지도 종료한다(resumedAt은 null 유지)
     await this.refundRepository.closeOpenPausesForRefund(ticketId, now, tx);
     // 고정석 배정을 해제한다(자유석이면 할 일 없음)
     await this.seatAssignmentService.releaseByTicket(
@@ -252,7 +256,10 @@ export class RefundAcceptanceService {
       now,
       tx,
     );
-    // 확정된 환불과 최초 PG 취소 요청을 저장한다. 양수는 커밋 뒤 바로 보낼 전송 기록(시도·시각·담당)도 함께 저장한다
+
+    // 환불 확정 내역을 저장한다. 0원 환불은 PG 취소 요청 없이 지급 완료로 기록한다.
+    // 환불 금액이 0원보다 크면 최초 PG 취소 요청도 생성하고,
+    // 커밋 후 전송할 작업의 시도 횟수·시각·식별 토큰·처리 기한을 함께 저장한다.
     const sendClaim =
       input.amount > 0 ? this.dispatchService.newSendClaim(now) : undefined;
     const created = await this.refundRepository.createAcceptedRefund(

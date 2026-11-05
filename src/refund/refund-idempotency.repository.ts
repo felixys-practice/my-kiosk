@@ -98,7 +98,7 @@ export class RefundIdempotencyRepository {
       where: {
         id,
         status: RefundIdempotencyStatus.IN_PROGRESS,
-        claimUntil: expiredClaimUntil,
+        claimUntil: expiredClaimUntil, // 왜 기존 기한까지 조건에 넣을까요? 다른 서버 실행이 먼저 같은 기록을 맡았을 수 있기 때문
       },
       data: { claimToken, claimUntil },
     });
@@ -106,8 +106,9 @@ export class RefundIdempotencyRepository {
   }
 
   /**
-   * 처리 트랜잭션에서 기록을 담당으로 잡는다(행 잠금, 트랜잭션이 끝날 때까지 유지)
-   * - 잡은 동안 다른 요청의 이어받기는 기다린다. 기한 경과를 이전 작업 종료의 증거로 쓰지 않기 위해서다
+   * 처리 중 기록이 이 요청의 토큰과 일치하면 행을 잠근다.(행 잠금, 트랜잭션이 끝날 때까지 유지)
+   * - 잠금은 트랜잭션이 끝날 때까지 유지한다.
+   * - 잠금이 풀릴 때까지 다른 요청의 이어받기를 기다리게 해, 기한이 지났다는 이유만으로 이전 작업이 끝났다고 판단하지 않게 한다
    * @param tx 처리 트랜잭션
    * @param id 기록 ID
    * @param claimToken 이 요청의 담당 토큰
