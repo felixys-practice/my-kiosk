@@ -2453,3 +2453,8 @@ Tests: 1 failed, 41 skipped, 42 total
 - 고객 환불의 `findLockedTarget`이 이용권 잠금·재조회를 마친 뒤 트랜잭션을 대기시킨다. 그동안 입실이 미사용 이용권을 사전 조회하고 `UsageSessionRepository.createSession`에 진입한 것을 확인한다. PostgreSQL `pg_stat_activity`에서 입실의 `SELECT status FROM tickets ... FOR UPDATE`가 실제 Lock 대기 상태임을 확인한 뒤 환불을 이어 간다. 환불 202·입실 409 `TICKET_TERMINATED`, 확정 환불·PG 취소 요청·PG 송신 각 1건, 활성 세션·고정석 배정 0건과 이용권 `REVOKED`를 검증한다.
 - U413은 기존 코드에서 처음부터 통과했다. 입실 트랜잭션의 이용권 `FOR UPDATE`를 임시로 제거하면 `Expected true / Received false`로 실제 잠금 대기 단언이 실패했다(`/tmp/refund-u413-lock-mutant.log`). 잠금 뒤 `REVOKED` 재검사를 임시로 제거하면 입실이 409 대신 400으로 응답해 실패했다(`/tmp/refund-u413-mutant.log`). 두 변경을 원문과 같게 복구하고 단일 E2E가 다시 통과함을 확인했다.
 - 원복 뒤 전체 단위 596개·E2E 193개, `tsc --noEmit`과 수정 E2E 파일 eslint가 통과했다. 운영 코드·스키마는 변경하지 않았다.
+
+### T172 U413 Codex 검수 판정
+
+- 고정 범위 `27fe773..7bc21ec`, 검수 대화 `01a18afd-d56c-7270-a096-2b964ed5f290`, Sol/medium. 검수 담당은 입실의 실제 Ticket 잠금 대기와 환불 커밋 뒤 종료 상태 재검사, 환불·PG 요청·송신 및 세션·배정 수를 대조해 **통과** 판정했다. T172 전체 감사의 환불 선행 입실 경합 누락은 해소됐다.
+- 검수 담당은 DB·테스트·변이·타입·린트를 직접 실행하지 않았다. T172 전체 완료 여부는 별도 감사가 필요하다.
