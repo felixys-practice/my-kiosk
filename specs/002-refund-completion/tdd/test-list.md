@@ -698,3 +698,4 @@ U17·U248의 DONE은 이전에 구현·검증한 과거 이력 호환 동작의 
 | U408 | 실패한 PG 취소 요청을 점주가 개별 조회하는 동안 운영자의 새 PG 요청·별도 지급 예약은 시도 순서와 관계없이 거절되고 새 지급 기록이 생기지 않는다 | T172, FR-043·FR-055, 계약 §5·§8 | concurrency | DONE | test/refund-concurrency.e2e-spec.ts / U408(2개 순서) |
 | U409 | 같은 별도 지급 증빙을 서로 다른 멱등 키로 동시에 등록해도 두 요청은 저장된 결과를 받고 실제 지급액·원장은 한 번만 반영된다 | T172, FR-019·FR-046, 계약 §5 | concurrency | DONE | test/refund-concurrency.e2e-spec.ts / U409 |
 | U410 | 실패한 PG 취소 요청을 점주와 운영자가 동시에 개별 조회하면 선행 요청만 PG를 호출하고 후행 요청은 202 ALREADY_RUNNING을 받는다 | T172, FR-055, 계약 §8 | concurrency | DONE | test/refund-concurrency.e2e-spec.ts / U410(2개 순서) |
+| U411 | 실패한 PG 취소 요청만 남은 환불에서 운영자의 PG 재요청과 별도 지급 예약이 동시에 시작되면, 먼저 잠근 경로만 새 지급을 만들고 다른 경로는 REFUND_PAYOUT_UNRESOLVED로 거절된다 | T172, FR-043·FR-045, 계약 §5 | concurrency | DONE | test/refund-concurrency.e2e-spec.ts / U411(2개 순서) |

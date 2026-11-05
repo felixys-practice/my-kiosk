@@ -737,4 +737,130 @@ describe('환불 동시성 (E2E)', () => {
       expect(pgStub.sendCalls).toHaveLength(0);
     },
   );
+  it.each([
+    ['PG 재요청 선행', true],
+    ['별도 지급 예약 선행', false],
+  ] as const)(
+    'U411 PG 재요청과 별도 지급 예약이 동시에 허용될 때 한 경로만 새 지급을 만든다 (%s)',
+    async (_order, retryFirst) => {
+      const issued = await ctx.issuePeriodTicket();
+      pgStub.respondToSend({ result: 'REJECTED', reason: 'PG 취소 거절' });
+      const accepted = await request(ctx.server)
+        .post('/refund')
+        .set('Authorization', `Bearer ${ctx.customer.token}`)
+        .set('Idempotency-Key', randomUUID())
+        .send({ ticketId: issued.ticketId, consentToTerminateTicket: true })
+        .expect(202);
+      const refundId = accepted.body.data.refundId as string;
+      pgStub.reset();
+
+      const locking = ctx.app.get<RefundLockingRepository>(
+        RefundLockingRepository,
+      );
+      const refunds = ctx.app.get<RefundRepository>(RefundRepository);
+      const operations = ctx.app.get<RefundOperationsRepository>(
+        RefundOperationsRepository,
+      );
+      const originalLock: RefundLockingRepository['lockForPayout'] =
+        locking.lockForPayout.bind(locking);
+      const originalRetry: RefundRepository['createRetryAttempt'] =
+        refunds.createRetryAttempt.bind(refunds);
+      const originalReserve: RefundOperationsRepository['createReservation'] =
+        operations.createReservation.bind(operations);
+      let firstReady!: () => void;
+      const ready = new Promise<void>((resolve) => {
+        firstReady = resolve;
+      });
+      let releaseFirst!: () => void;
+      const holdFirst = new Promise<void>((resolve) => {
+        releaseFirst = resolve;
+      });
+      let secondLockAttempted!: () => void;
+      const attempted = new Promise<void>((resolve) => {
+        secondLockAttempted = resolve;
+      });
+      let lockCalls = 0;
+      const lockSpy = jest
+        .spyOn(locking, 'lockForPayout')
+        .mockImplementation((...args) => {
+          lockCalls += 1;
+          if (lockCalls === 2) secondLockAttempted();
+          return originalLock(...args);
+        });
+      const retrySpy = jest
+        .spyOn(refunds, 'createRetryAttempt')
+        .mockImplementation(async (...args) => {
+          if (retryFirst) {
+            firstReady();
+            await holdFirst;
+          }
+          return originalRetry(...args);
+        });
+      const reserveSpy = jest
+        .spyOn(operations, 'createReservation')
+        .mockImplementation(async (...args) => {
+          if (!retryFirst) {
+            firstReady();
+            await holdFirst;
+          }
+          return originalReserve(...args);
+        });
+      const retry = () =>
+        request(ctx.server)
+          .post(`/refund/${refundId}/payout-retries`)
+          .set('Authorization', `Bearer ${ctx.manager.token}`)
+          .set('Idempotency-Key', randomUUID())
+          .send({ reason: 'PG 재요청' })
+          .then((response) => response);
+      const reserve = () =>
+        request(ctx.server)
+          .post(`/refund/${refundId}/manual-payouts`)
+          .set('Authorization', `Bearer ${ctx.manager.token}`)
+          .set('Idempotency-Key', randomUUID())
+          .send({ amount: issued.amount, reason: '계좌 이체' })
+          .then((response) => response);
+      try {
+        const firstPromise = retryFirst ? retry() : reserve();
+        await ready;
+        const secondPromise = retryFirst ? reserve() : retry();
+        await attempted;
+        releaseFirst();
+        const [first, second] = await Promise.all([
+          firstPromise,
+          secondPromise,
+        ]);
+        const retryResponse = retryFirst ? first : second;
+        const reserveResponse = retryFirst ? second : first;
+        expect(retryResponse.status).toBe(retryFirst ? 202 : 409);
+        expect(reserveResponse.status).toBe(retryFirst ? 409 : 201);
+        expect(
+          (retryFirst ? reserveResponse : retryResponse).body.error.code,
+        ).toBe('REFUND_PAYOUT_UNRESOLVED');
+      } finally {
+        releaseFirst();
+        retrySpy.mockRestore();
+        reserveSpy.mockRestore();
+        lockSpy.mockRestore();
+      }
+      const activeAttempts = await ctx.prisma.paymentCancel.count({
+        where: {
+          refundId,
+          status: {
+            in: [
+              PaymentCancelStatus.REQUESTED,
+              PaymentCancelStatus.QUERY_FAILED,
+            ],
+          },
+        },
+      });
+      const reservedPayouts = await ctx.prisma.manualRefundPayout.count({
+        where: { refundId, status: 'RESERVED' },
+      });
+      const ledgers = await ctx.prisma.ledger.count({ where: { refundId } });
+      expect(activeAttempts).toBe(retryFirst ? 1 : 0);
+      expect(reservedPayouts).toBe(retryFirst ? 0 : 1);
+      expect(ledgers).toBe(0);
+      expect(pgStub.sendCalls).toHaveLength(retryFirst ? 1 : 0);
+    },
+  );
 });
