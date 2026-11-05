@@ -863,4 +863,106 @@ describe('환불 동시성 (E2E)', () => {
       expect(pgStub.sendCalls).toHaveLength(retryFirst ? 1 : 0);
     },
   );
+  it('U412 PG 조회와 성공 콜백이 같은 결과를 동시에 반영해도 지급액과 원장은 한 번만 기록된다', async () => {
+    const issued = await ctx.issuePeriodTicket();
+    pgStub.respondToSend({ result: 'UNKNOWN', reason: '응답 시간 초과' });
+    const accepted = await request(ctx.server)
+      .post('/refund')
+      .set('Authorization', `Bearer ${ctx.customer.token}`)
+      .set('Idempotency-Key', randomUUID())
+      .send({ ticketId: issued.ticketId, consentToTerminateTicket: true })
+      .expect(202);
+    const refundId = accepted.body.data.refundId as string;
+    const paymentCancelId = accepted.body.data.paymentCancelId as string;
+    const pgTransactionId = `pg-cancel-${paymentCancelId}`;
+    pgStub.reset();
+    pgStub.respondToInquiry({
+      result: 'SUCCEEDED',
+      pgTransactionId,
+      cancelledAmount: issued.amount,
+    });
+
+    const refunds = ctx.app.get<RefundRepository>(RefundRepository);
+    const locking = ctx.app.get<RefundLockingRepository>(
+      RefundLockingRepository,
+    );
+    const originalSucceeded: RefundRepository['markAttemptSucceeded'] =
+      refunds.markAttemptSucceeded.bind(refunds);
+    const originalLock: RefundLockingRepository['lockForPayout'] =
+      locking.lockForPayout.bind(locking);
+    let inquiryLocked!: () => void;
+    const locked = new Promise<void>((resolve) => {
+      inquiryLocked = resolve;
+    });
+    let releaseInquiry!: () => void;
+    const holdInquiry = new Promise<void>((resolve) => {
+      releaseInquiry = resolve;
+    });
+    let callbackLockAttempted!: () => void;
+    const attempted = new Promise<void>((resolve) => {
+      callbackLockAttempted = resolve;
+    });
+    const succeededSpy = jest
+      .spyOn(refunds, 'markAttemptSucceeded')
+      .mockImplementation(async (...args) => {
+        inquiryLocked();
+        await holdInquiry;
+        return originalSucceeded(...args);
+      });
+    try {
+      const checkPromise = request(ctx.server)
+        .post(`/refund/${refundId}/pg-check`)
+        .set('Authorization', `Bearer ${ctx.owner.token}`)
+        .send({})
+        .then((response) => response);
+      await locked;
+      const lockSpy = jest
+        .spyOn(locking, 'lockForPayout')
+        .mockImplementation((...args) => {
+          callbackLockAttempted();
+          return originalLock(...args);
+        });
+      try {
+        const callbackPromise = signedCallback(ctx.server, '/refund/callback', {
+          success: true,
+          paymentCancelId,
+          pgTransactionId,
+          orderItemId: issued.orderItemId,
+          amount: issued.amount,
+          reason: null,
+        }).then((response) => response);
+        await attempted;
+        releaseInquiry();
+        const [check, callback] = await Promise.all([
+          checkPromise,
+          callbackPromise,
+        ]);
+        expect(check.status).toBe(200);
+        expect(check.body.data.checkStatus).toBe('CHECKED');
+        expect(check.body.data.inquiryResult).toBe('SUCCEEDED');
+        expect(callback.status).toBe(200);
+      } finally {
+        releaseInquiry();
+        lockSpy.mockRestore();
+      }
+    } finally {
+      releaseInquiry();
+      succeededSpy.mockRestore();
+    }
+
+    const refund = await ctx.prisma.refund.findUniqueOrThrow({
+      where: { id: refundId },
+      include: { paymentCancels: true, ledgers: true },
+    });
+    expect(refund.payoutStatus).toBe(RefundPayoutStatus.PAID);
+    expect(refund.paidAmount).toBe(issued.amount);
+    expect(refund.paymentCancels).toHaveLength(1);
+    expect(refund.paymentCancels[0].status).toBe(PaymentCancelStatus.SUCCEEDED);
+    expect(refund.paymentCancels[0].actualAmount).toBe(issued.amount);
+    expect(refund.paymentCancels[0].pgTransactionId).toBe(pgTransactionId);
+    expect(refund.ledgers).toHaveLength(1);
+    expect(refund.ledgers[0].paymentCancelId).toBe(paymentCancelId);
+    expect(pgStub.inquiryCalls).toHaveLength(1);
+    expect(pgStub.sendCalls).toHaveLength(0);
+  });
 });
