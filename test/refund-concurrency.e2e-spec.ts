@@ -16,6 +16,7 @@ import { UsageSessionRepository } from '../src/usage-session/usage-session.repos
 import {
   PaymentCancelStatus,
   RefundPayoutStatus,
+  SeatAssignmentStatus,
   TicketStatus,
   UsageSessionStatus,
 } from '@prisma/client';
@@ -964,5 +965,119 @@ describe('환불 동시성 (E2E)', () => {
     expect(refund.ledgers[0].paymentCancelId).toBe(paymentCancelId);
     expect(pgStub.inquiryCalls).toHaveLength(1);
     expect(pgStub.sendCalls).toHaveLength(0);
+  });
+  it('U413 환불이 이용권을 먼저 잠그면 사전 조회를 마친 입실도 잠금 뒤 종료 상태를 다시 확인한다', async () => {
+    const issued = await ctx.issuePeriodTicket({ fixedSeat: true });
+    const acceptance = ctx.app.get<RefundAcceptanceService>(
+      RefundAcceptanceService,
+    );
+    const sessions = ctx.app.get<UsageSessionRepository>(
+      UsageSessionRepository,
+    );
+    const originalFind: RefundAcceptanceService['findLockedTarget'] =
+      acceptance.findLockedTarget.bind(acceptance);
+    const originalCreate: UsageSessionRepository['createSession'] =
+      sessions.createSession.bind(sessions);
+    let refundLocked!: () => void;
+    const locked = new Promise<void>((resolve) => {
+      refundLocked = resolve;
+    });
+    let releaseRefund!: () => void;
+    const holdRefund = new Promise<void>((resolve) => {
+      releaseRefund = resolve;
+    });
+    let entryReadCompleted!: () => void;
+    const readCompleted = new Promise<void>((resolve) => {
+      entryReadCompleted = resolve;
+    });
+    const findSpy = jest
+      .spyOn(acceptance, 'findLockedTarget')
+      .mockImplementation(async (...args) => {
+        const target = await originalFind(...args);
+        refundLocked();
+        await holdRefund;
+        return target;
+      });
+    const createSpy = jest
+      .spyOn(sessions, 'createSession')
+      .mockImplementation((...args) => {
+        entryReadCompleted();
+        return originalCreate(...args);
+      });
+    try {
+      const refundPromise = request(ctx.server)
+        .post('/refund')
+        .set('Authorization', `Bearer ${ctx.customer.token}`)
+        .set('Idempotency-Key', randomUUID())
+        .send({ ticketId: issued.ticketId, consentToTerminateTicket: true })
+        .then((response) => response);
+      await locked;
+      const entryPromise = request(ctx.server)
+        .post('/usage-sessions')
+        .set('Authorization', `Bearer ${ctx.customer.token}`)
+        .send({
+          ticketId: issued.ticketId,
+          shopId: ctx.shop.id,
+          seatId: issued.seatId,
+          userId: ctx.customer.id,
+        })
+        .then((response) => response);
+      await readCompleted;
+      let waitingForTicket = false;
+      for (let i = 0; i < 100; i += 1) {
+        const [activity] = await ctx.prisma.$queryRaw<
+          { waiting: number }[]
+        >`SELECT COUNT(*)::int AS waiting FROM pg_stat_activity
+          WHERE datname = current_database()
+            AND wait_event_type = 'Lock'
+            AND query LIKE '%SELECT status FROM tickets WHERE id%FOR UPDATE%'`;
+        if (activity.waiting > 0) {
+          waitingForTicket = true;
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      expect(waitingForTicket).toBe(true);
+      releaseRefund();
+      const [refund, entry] = await Promise.all([refundPromise, entryPromise]);
+      expect(refund.status).toBe(202);
+      expect(entry.status).toBe(409);
+      expect(entry.body.error.code).toBe('TICKET_TERMINATED');
+    } finally {
+      releaseRefund();
+      findSpy.mockRestore();
+      createSpy.mockRestore();
+    }
+    expect(
+      await ctx.prisma.refund.count({
+        where: { orderItemId: issued.orderItemId },
+      }),
+    ).toBe(1);
+    expect(
+      await ctx.prisma.paymentCancel.count({
+        where: { orderItemId: issued.orderItemId },
+      }),
+    ).toBe(1);
+    expect(
+      await ctx.prisma.usageSession.count({
+        where: { ticketId: issued.ticketId, status: UsageSessionStatus.ACTIVE },
+      }),
+    ).toBe(0);
+    expect(
+      await ctx.prisma.seatAssignment.count({
+        where: {
+          ticketId: issued.ticketId,
+          status: SeatAssignmentStatus.ACTIVE,
+        },
+      }),
+    ).toBe(0);
+    expect(
+      (
+        await ctx.prisma.ticket.findUniqueOrThrow({
+          where: { id: issued.ticketId },
+        })
+      ).status,
+    ).toBe(TicketStatus.REVOKED);
+    expect(pgStub.sendCalls).toHaveLength(1);
   });
 });
