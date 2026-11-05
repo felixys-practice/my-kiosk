@@ -167,12 +167,13 @@ SC-004는 PG 최종 결과 정상 응답·무적체 조건에서 60초 대기+15
 | FR-017 | `src/usage-session/usage-session.repository.ts` | `test/refund-entry.e2e-spec.ts` / QS-3-1~3-3 |
 | FR-018~020 | `src/refund/refund-result.service.ts`, `src/ledger/refund-ledger.repository.ts` | `test/refund-ledger.e2e-spec.ts` / QS-4-1~4-4 |
 | FR-021~029·FR-052~057 | `src/refund/refund-recovery.service.ts`, `refund-dispatch.service.ts`, `refund-pg-check.service.ts`, `refund-retry.service.ts` | `test/refund-recovery.e2e-spec.ts` / QS-5-1~5-20, `test/refund-concurrency.e2e-spec.ts` / U405~U410 |
+| FR-026a | 운영자가 PG 취소 결과 확인 실패 건의 전체 재조회를 예약하는 `src/refund/refund-recovery.service.ts`의 `resumeRecovery` | `test/refund-recovery.e2e-spec.ts` / QS-5-10a·QS-5-10b |
 | FR-030 | `src/payment/payment.service.ts`, `src/refund/refund-system.service.ts` | `test/refund-payment-mismatch.e2e-spec.ts` / QS-6-1~6-4 |
 | FR-031~032 | `src/pg/guards/pg-signature.guard.ts` | `test/refund-callback-auth.e2e-spec.ts` / QS-7-1~7-4 |
 | FR-033~039 | `src/refund/refund-query.service.ts`, `refund-notification.service.ts` | `test/refund-history.e2e-spec.ts` / QS-8-1~8-5, `test/refund-notifications.e2e-spec.ts` / QS-9-1~9-5 |
 | FR-040~051 | `src/refund/refund-acceptance.service.ts`, `refund-operations.service.ts`, `refund-query.service.ts` | `test/refund-operations.e2e-spec.ts` / QS-10-1~10-10, `test/refund-concurrency.e2e-spec.ts` / U403~U413, `test/refund-crash-recovery.e2e-spec.ts` / U414~U418 |
 
-성공 기준 SC-001~003은 QS-1·QS-2·QS-4·QS-10의 판정·지급별 원장, SC-004는 U419의 기본 시간 경계, SC-005~007은 QS-5의 미확정·장애 복구, SC-008~010은 QS-6·QS-7·QS-3의 자동 취소·서명·입실 거부에 연결한다. SC-011·SC-011a는 QS-8·QS-9의 조회 범위, SC-012~014는 QS-1·QS-2·QS-3·QS-5와 U403·U414~U416의 접수 응답·이용 종료 보존, SC-015~018은 QS-8·QS-9·QS-10의 미지급 추적·운영 권한·중복 지급 차단에 연결한다. SC-019~023은 QS-5·QS-10과 U405~U412의 개별 확인·담당 공유·재요청 멱등성에 연결한다. 이 연결은 테스트의 적용 범위이며 운영 환경에서 모든 요청의 100% 결과를 측정한 기록은 아니다.
+성공 기준 SC-001~003은 QS-1·QS-2·QS-4·QS-10의 판정·지급별 원장, SC-004는 U419의 기본 시간 경계, SC-005~007은 QS-5의 미확정·장애 복구, SC-006a는 QS-5-10a·QS-5-10b의 운영자 전체 재조회 예약과 권한 거절에 연결한다. SC-008~010은 QS-6·QS-7·QS-3의 자동 취소·서명·입실 거부에 연결한다. SC-011·SC-011a는 QS-8·QS-9의 조회 범위, SC-012~014는 QS-1·QS-2·QS-3·QS-5와 U403·U414~U416의 접수 응답·이용 종료 보존, SC-015~018은 QS-8·QS-9·QS-10의 미지급 추적·운영 권한·중복 지급 차단에 연결한다. SC-019~023은 QS-5·QS-10과 U405~U412의 개별 확인·담당 공유·재요청 멱등성에 연결한다. 이 연결은 테스트의 적용 범위이며 운영 환경에서 모든 요청의 100% 결과를 측정한 기록은 아니다.
 
 FR-007a와 U262~U266은 서비스 시작 전 개발 데이터를 폐기할 수 있다는 결정으로 범위에서 제외했다. 과거 환불 이관·운영 서버 전환을 미구현 누락으로 계산하지 않으며, 빈 DB 재구축과 현행 동시성·중단 복구 검증은 유지한다.
 
