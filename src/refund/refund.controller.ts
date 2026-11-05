@@ -29,7 +29,9 @@ import { RefundPgCheckService } from './refund-pg-check.service';
 import { RefundAcceptanceService } from './refund-acceptance.service';
 import { RefundResultService } from './refund-result.service';
 import { RefundQueryService } from './refund-query.service';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
 
+@ApiTags('refund')
 @Controller('refund')
 export class RefundController {
   constructor(
@@ -49,6 +51,7 @@ export class RefundController {
    * @param idempotencyKey 선택 멱등 키
    * @returns 접수 응답 본문
    */
+  @ApiOperation({ summary: '고객 본인 이용권의 종료와 환불 금액 확정' })
   @Post()
   async refund(
     @CurrentUser() user: JwtValidationResult,
@@ -78,6 +81,7 @@ export class RefundController {
    * @param idempotencyKey 선택 멱등 키
    * @returns 접수 응답 본문
    */
+  @ApiOperation({ summary: '점주 매장 이용권의 종료와 환불 금액 확정' })
   @Post('shop/:shopId')
   async storeRefund(
     @CurrentUser() user: JwtValidationResult,
@@ -110,6 +114,7 @@ export class RefundController {
    * @param res 응답 상태 지정용(진행 중 202, 그 밖 200)
    * @returns 확인 결과와 최신 환불 정보
    */
+  @ApiOperation({ summary: '점주·운영자의 환불 PG 취소 결과 개별 확인' })
   @Post(':refundId/pg-check')
   async pgCheck(
     @CurrentUser() user: JwtValidationResult,
@@ -130,6 +135,7 @@ export class RefundController {
    * PG 취소 결과 콜백을 받는다 (API 계약 §7 POST /refund/callback, 200 수신 확인)
    * @param dto 콜백 본문
    */
+  @ApiOperation({ summary: 'PG 서명으로 인증한 취소 결과 통보 수신' })
   @Post('callback')
   @HttpCode(HttpStatus.OK)
   @Public()
@@ -145,6 +151,7 @@ export class RefundController {
     });
   }
 
+  @ApiOperation({ summary: '고객 본인의 환불 내역 조회' })
   @Get('me')
   getMyRefundHistory(
     @CurrentUser() user: JwtValidationResult,
@@ -153,7 +160,8 @@ export class RefundController {
     return this.refundQueryService.byMe(user, query);
   }
 
-  // 현재 점주·운영자의 매장 환불 내역
+  /** 현재 점주는 자기 매장, 운영자는 지정 매장의 환불 내역을 조회한다. */
+  @ApiOperation({ summary: '현재 점주·운영자의 매장 환불 내역 조회' })
   @Get('/shop/:shopId')
   async getRefundHistoryByShop(
     @CurrentUser() user: JwtValidationResult,
@@ -163,7 +171,8 @@ export class RefundController {
     return this.refundQueryService.byShop(user, shopId, query);
   }
 
-  // 사용자의 환불 내역
+  /** 운영자가 지정한 고객의 환불 내역을 조회한다. */
+  @ApiOperation({ summary: '운영자의 지정 고객 환불 내역 조회' })
   @Get('/user/:userId')
   async getRefundHistoryByUser(
     @CurrentUser() user: JwtValidationResult,
@@ -174,6 +183,7 @@ export class RefundController {
   }
 
   // 고정 조회 경로 뒤에 선언하여 /me 등을 환불 식별자로 해석하지 않는다.
+  @ApiOperation({ summary: '권한 범위 안의 환불 상세·실제 지급액 조회' })
   @Get(':refundId')
   getRefundDetail(
     @CurrentUser() user: JwtValidationResult,

@@ -21,10 +21,12 @@ import {
 import { RefundOperatorGuard } from './guards/refund-operator.guard';
 import { RefundRetryService } from './refund-retry.service';
 import { RefundOperationsService } from './refund-operations.service';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
 
 /**
  * 미지급 환불금 재처리 운영 API (API 계약 §5, MANAGER 전용)
  */
+@ApiTags('refund')
 @Controller('refund')
 export class RefundOperationsController {
   constructor(
@@ -41,6 +43,9 @@ export class RefundOperationsController {
    * @param idempotencyKey 필수 멱등 키
    * @returns 접수 응답 본문(환불 ID·새 PG 취소 요청 ID·PENDING)
    */
+  @ApiOperation({
+    summary: '운영자가 확정 실패한 PG 취소를 새 요청으로 재시도',
+  })
   @Post(':refundId/payout-retries')
   @UseGuards(RefundOperatorGuard)
   async payoutRetry(
@@ -68,6 +73,7 @@ export class RefundOperationsController {
    * @param idempotencyKey 필수 멱등 키
    * @returns 예약 응답 본문
    */
+  @ApiOperation({ summary: '운영자가 PG 외 수단의 환불금 지급을 예약' })
   @Post(':refundId/manual-payouts')
   @UseGuards(RefundOperatorGuard)
   async reserveManualPayout(
@@ -96,6 +102,7 @@ export class RefundOperationsController {
    * @param idempotencyKey 필수 멱등 키
    * @returns 등록 응답 본문
    */
+  @ApiOperation({ summary: '운영자가 실제 별도 지급 증빙과 지급 결과를 확정' })
   @Post(':refundId/manual-payouts/:payoutId/confirm')
   @UseGuards(RefundOperatorGuard)
   async confirmManualPayout(
@@ -132,6 +139,9 @@ export class RefundOperationsController {
    * @param idempotencyKey 필수 멱등 키
    * @returns 종료 응답 본문
    */
+  @ApiOperation({
+    summary: '운영자가 확실한 미지급 근거로 지급 예약을 실패 종료',
+  })
   @Post(':refundId/manual-payouts/:payoutId/not-paid')
   @UseGuards(RefundOperatorGuard)
   async markManualPayoutNotPaid(
@@ -165,6 +175,7 @@ export class RefundOperationsController {
    * @param idempotencyKey 필수 멱등 키
    * @returns 등록 응답 본문
    */
+  @ApiOperation({ summary: '운영자가 PG 초과 취소액의 검토 결과를 등록' })
   @Post(':refundId/amount-review')
   @UseGuards(RefundOperatorGuard)
   async reviewRefundAmount(
