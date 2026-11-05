@@ -2479,3 +2479,8 @@ Tests: 1 failed, 41 skipped, 42 total
 - U415 전송 전 중단은 PG가 authoritative `NOT_FOUND`를 돌려준 뒤 같은 `PaymentCancel.id`·금액으로 재전송해 `SUCCEEDED`를 기록한다. 전송 후 응답 전 중단은 PG 조회 `SUCCEEDED`만 반영해 추가 송신을 하지 않는다. 두 경로 모두 중단 직후와 복구 후 `Ticket.status=REVOKED`, 활성 고정석 배정 0건, `Refund.amount` 보존을 확인한다.
 - 수정된 U415 두 순서는 정상 코드에서 통과했다. 재전송에 새 UUID를 쓰도록 임시 변경하자 전송 전 순서가 `Expected paymentCancelId=<저장 ID> / Received <새 UUID>`로 실패했다(`/tmp/refund-u415-resend-id-mutant.log`). 운영 코드 변경은 원문과 같게 복구했다.
 - 원복과 서식 정리 뒤 전체 단위 596개·E2E 199개, `tsc --noEmit` 및 수정 E2E 파일 eslint가 통과했다. 운영 코드·스키마 변경은 없다.
+
+### T173 Codex 재검수 판정
+
+- 고정 수정 범위 `6a4e4e0..f2af652`, 검수 대화 `01a1aa7f-fb9e-7e90-945d-c30ee89688a4`, Sol/medium. 검수 담당은 전송 전 미접수 확인·같은 시도 재전송과 전송 후 성공 조회의 분리, 중단 직후·복구 후 이용 종료·고정석 해제·확정 금액 보존을 대조해 **통과** 판정했다. 기존 U414·U416~U418 검증도 보존돼 T173을 완료 표시한다.
+- 검수 담당은 DB·테스트·타입·린트를 직접 실행하지 않았다. 실제 프로세스 강제 종료·큐 전달·실제 PG/은행 연동은 이번 독립 Nest 인스턴스와 수동 탐색 검증의 범위 밖이다.
