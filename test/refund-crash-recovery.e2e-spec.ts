@@ -126,11 +126,27 @@ describe('환불 중단 복구 (E2E)', () => {
         include: { paymentCancels: true },
       });
       const paymentCancelId = refund.paymentCancels[0].id;
+      expect(refund.amount).toBe(issued.amount);
       expect(refund.payoutStatus).toBe(RefundPayoutStatus.PENDING);
       expect(refund.paymentCancels[0].status).toBe(
         PaymentCancelStatus.REQUESTED,
       );
       expect(pgStub.sendCalls).toHaveLength(beforeSend ? 0 : 1);
+      expect(
+        (
+          await ctx.prisma.ticket.findUniqueOrThrow({
+            where: { id: issued.ticketId },
+          })
+        ).status,
+      ).toBe(TicketStatus.REVOKED);
+      expect(
+        await ctx.prisma.seatAssignment.count({
+          where: {
+            ticketId: issued.ticketId,
+            status: SeatAssignmentStatus.ACTIVE,
+          },
+        }),
+      ).toBe(0);
 
       const app = await newApp();
       await ctx.prisma.paymentCancel.update({
@@ -142,11 +158,20 @@ describe('환불 중단 복구 (E2E)', () => {
         data: { claimUntil: new Date(Date.now() - 1_000) },
       });
       pgStub.reset();
-      pgStub.respondToInquiry({
-        result: 'SUCCEEDED',
-        pgTransactionId: `pg-cancel-${paymentCancelId}`,
-        cancelledAmount: issued.amount,
-      });
+      if (beforeSend) {
+        pgStub.respondToInquiry({ result: 'NOT_FOUND', authoritative: true });
+        pgStub.respondToSend({
+          result: 'SUCCEEDED',
+          pgTransactionId: `pg-cancel-${paymentCancelId}`,
+          cancelledAmount: issued.amount,
+        });
+      } else {
+        pgStub.respondToInquiry({
+          result: 'SUCCEEDED',
+          pgTransactionId: `pg-cancel-${paymentCancelId}`,
+          cancelledAmount: issued.amount,
+        });
+      }
       const replay = await request(app.server)
         .post('/refund')
         .set('Authorization', `Bearer ${ctx.customer.token}`)
@@ -160,6 +185,7 @@ describe('환불 중단 복구 (E2E)', () => {
         include: { paymentCancels: true, ledgers: true },
       });
       expect(recovered.payoutStatus).toBe(RefundPayoutStatus.PAID);
+      expect(recovered.amount).toBe(issued.amount);
       expect(recovered.paidAmount).toBe(issued.amount);
       expect(recovered.paymentCancels).toHaveLength(1);
       expect(recovered.paymentCancels[0].status).toBe(
@@ -167,7 +193,13 @@ describe('환불 중단 복구 (E2E)', () => {
       );
       expect(recovered.ledgers).toHaveLength(1);
       expect(pgStub.inquiryCalls).toHaveLength(1);
-      expect(pgStub.sendCalls).toHaveLength(0);
+      expect(pgStub.sendCalls).toHaveLength(beforeSend ? 1 : 0);
+      if (beforeSend) {
+        expect(pgStub.sendCalls[0]).toMatchObject({
+          paymentCancelId,
+          amount: issued.amount,
+        });
+      }
       expect(
         (
           await app.prisma.ticket.findUniqueOrThrow({
@@ -175,6 +207,14 @@ describe('환불 중단 복구 (E2E)', () => {
           })
         ).status,
       ).toBe(TicketStatus.REVOKED);
+      expect(
+        await app.prisma.seatAssignment.count({
+          where: {
+            ticketId: issued.ticketId,
+            status: SeatAssignmentStatus.ACTIVE,
+          },
+        }),
+      ).toBe(0);
     },
   );
 
