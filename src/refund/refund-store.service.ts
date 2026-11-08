@@ -1,14 +1,11 @@
+import { RefundAcceptanceExecutionService } from './refund-acceptance-execution.service';
 import { Injectable, Logger } from '@nestjs/common';
 import { RefundSource, UserRole } from '@prisma/client';
 import { SessionLifecycleService } from 'src/session-lifecycle/session-lifecycle.service';
 import { SessionEndJobQueue } from 'src/session-lifecycle/session-end-job.queue';
 import { RefundAccessService, RefundActor } from './refund-access.service';
+import { IdempotentResult } from './refund-idempotency.service';
 import {
-  IdempotentResult,
-  RefundIdempotencyService,
-} from './refund-idempotency.service';
-import {
-  PendingSend,
   RefundAcceptance,
   RefundAcceptanceService,
 } from './refund-acceptance.service';
@@ -44,7 +41,7 @@ export class RefundStoreService {
   constructor(
     private readonly accessService: RefundAccessService,
     private readonly acceptanceService: RefundAcceptanceService,
-    private readonly idempotencyService: RefundIdempotencyService,
+    private readonly executionService: RefundAcceptanceExecutionService,
     private readonly sessionLifecycleService: SessionLifecycleService,
     private readonly sessionEndJobQueue: SessionEndJobQueue,
   ) {}
@@ -68,11 +65,9 @@ export class RefundStoreService {
     // 지금 이 매장의 점주여야 한다. 같은 키 재응답에도 먼저 확인한다(범위 밖은 404)
     await this.accessService.assertShopScope(actor, shopId);
 
-    // 이번 요청이 실제로 확정한 PG 취소 요청(저장된 응답을 재생한 경우는 없음)
-    let pending: PendingSend | undefined;
     // 이번 요청이 퇴실시킨 세션의 자동 종료 지연 작업(커밋 뒤 제거)
     let endedSessionJobId: string | null = null;
-    const result = await this.idempotencyService.execute(
+    const result = await this.executionService.executeAcceptance(
       {
         requesterId: actor.userId,
         operation: 'STORE_REFUND',
@@ -146,10 +141,8 @@ export class RefundStoreService {
           },
           tx,
         );
-        pending = confirmed.pending;
-        return confirmed.result;
+        return confirmed;
       },
-      this.acceptanceService.afterAcceptance(() => pending),
     );
 
     // 퇴실시킨 세션의 자동 종료 작업은 커밋 뒤 지운다. 실패해도 확정된 이용 종료·퇴실은 되돌리지 않는다

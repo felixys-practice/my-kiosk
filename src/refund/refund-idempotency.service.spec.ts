@@ -1,3 +1,7 @@
+import { RefundAcceptanceExecutionService } from './refund-acceptance-execution.service';
+import { RefundRepository } from './refund.repository';
+import { RefundPgGateway } from 'src/pg/refund-pg.gateway';
+import { RefundDispatchService } from './refund-dispatch.service';
 import { BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { RefundIdempotencyStatus } from '@prisma/client';
@@ -5,6 +9,7 @@ import { DomainBadRequestError } from 'src/common/errors';
 import { TransactionClient } from 'src/prisma/prisma.service';
 import {
   IdempotentResult,
+  IdempotentCommand,
   RefundIdempotencyService,
 } from './refund-idempotency.service';
 import {
@@ -111,6 +116,40 @@ class InMemoryIdempotencyRepository {
     return Promise.resolve();
   }
 
+  markHandledInTransaction(
+    tx: FakeTx,
+    id: string,
+    claimToken: string,
+    refundId: string,
+  ): Promise<void> {
+    const record = this.byId(id);
+    if (record?.claimToken !== claimToken)
+      return Promise.reject(new Error('담당이 아닌 확정'));
+    tx.afterCommit.push(() => {
+      record.refundId = refundId;
+    });
+    return Promise.resolve();
+  }
+
+  completeAfterCommit(
+    id: string,
+    claimToken: string,
+    response: { status: number; body: unknown },
+  ): Promise<boolean> {
+    const record = this.byId(id);
+    if (
+      record?.status !== RefundIdempotencyStatus.IN_PROGRESS ||
+      record.claimToken !== claimToken
+    )
+      return Promise.resolve(false);
+    record.status = RefundIdempotencyStatus.COMPLETED;
+    record.responseStatus = response.status;
+    record.responseBody = response.body;
+    record.claimToken = null;
+    record.claimUntil = null;
+    return Promise.resolve(true);
+  }
+
   takeOver(
     id: string,
     expiredClaimUntil: Date,
@@ -172,6 +211,9 @@ class InMemoryIdempotencyRepository {
   }
 }
 
+/** 대기 중인 Promise 작업이 진행되도록 한 번 양보한다 */
+const flush = () => new Promise<void>((resolve) => setImmediate(resolve));
+
 describe('RefundIdempotencyService', () => {
   const requesterId = 'user-1';
   const operation = 'CUSTOMER_REFUND';
@@ -196,23 +238,29 @@ describe('RefundIdempotencyService', () => {
     let calls = 0;
     const handler = () =>
       Promise.resolve({ status: 202, body: { refundId: `refund-${++calls}` } });
-    const command = { requesterId, operation, key, request, authorize: allow };
+    const command: IdempotentCommand = {
+      requesterId,
+      operation,
+      key,
+      request,
+      authorize: allow,
+    };
 
-    const first = await service.execute(command, handler);
-    const replay = await service.execute(command, handler);
+    const first = await service.executeInTransaction(command, handler);
+    const replay = await service.executeInTransaction(command, handler);
 
     expect(replay).toEqual(first);
   });
 
   it('같은 키·다른 본문의 요청은 IDEMPOTENCY_KEY_REUSED로 거절된다', async () => {
     const handler = () => Promise.resolve({ status: 202, body: {} });
-    await service.execute(
+    await service.executeInTransaction(
       { requesterId, operation, key, request, authorize: allow },
       handler,
     );
 
     await expect(
-      service.execute(
+      service.executeInTransaction(
         {
           requesterId,
           operation,
@@ -231,11 +279,17 @@ describe('RefundIdempotencyService', () => {
       new Promise<{ status: number; body: object }>((resolve) => {
         finishFirst = () => resolve({ status: 202, body: {} });
       });
-    const command = { requesterId, operation, key, request, authorize: allow };
-    const first = service.execute(command, firstHandler);
+    const command: IdempotentCommand = {
+      requesterId,
+      operation,
+      key,
+      request,
+      authorize: allow,
+    };
+    const first = service.executeInTransaction(command, firstHandler);
 
     await expect(
-      service.execute(command, () =>
+      service.executeInTransaction(command, () =>
         Promise.resolve({ status: 202, body: {} }),
       ),
     ).rejects.toBeInstanceOf(IdempotencyRequestInProgressError);
@@ -246,14 +300,14 @@ describe('RefundIdempotencyService', () => {
 
   it('같은 키 재요청 시점에 권한이 없으면 최초 응답 대신 REFUND_FORBIDDEN을 받는다', async () => {
     const handler = () => Promise.resolve({ status: 202, body: {} });
-    await service.execute(
+    await service.executeInTransaction(
       { requesterId, operation, key, request, authorize: allow },
       handler,
     );
     const deny = () => Promise.reject(new RefundForbiddenError());
 
     await expect(
-      service.execute(
+      service.executeInTransaction(
         { requesterId, operation, key, request, authorize: deny },
         handler,
       ),
@@ -265,13 +319,19 @@ describe('RefundIdempotencyService', () => {
     let calls = 0;
     const handler = () =>
       Promise.resolve({ status: 202, body: { refundId: `refund-${++calls}` } });
-    const command = { requesterId, operation, key, request, authorize: allow };
-    const first = await service.execute(command, handler);
+    const command: IdempotentCommand = {
+      requesterId,
+      operation,
+      key,
+      request,
+      authorize: allow,
+    };
+    const first = await service.executeInTransaction(command, handler);
     for (const record of repository.records.values()) {
       record.createdAt = new Date(Date.now() - (redisTtlSeconds + 1) * 1000);
     }
 
-    const replay = await service.execute(command, handler);
+    const replay = await service.executeInTransaction(command, handler);
 
     expect(replay).toEqual(first);
   });
@@ -281,7 +341,7 @@ describe('RefundIdempotencyService', () => {
     const rejectConsent = () =>
       Promise.reject(new DomainBadRequestError('이용 종료 동의가 필요합니다'));
     await expect(
-      service.execute(
+      service.executeInTransaction(
         {
           requesterId,
           operation,
@@ -293,7 +353,7 @@ describe('RefundIdempotencyService', () => {
       ),
     ).rejects.toBeInstanceOf(DomainBadRequestError);
 
-    const accepted = await service.execute(
+    const accepted = await service.executeInTransaction(
       { requesterId, operation, key, request, authorize: allow },
       () => Promise.resolve({ status: 202, body: { refundId: 'refund-1' } }),
     );
@@ -306,7 +366,7 @@ describe('RefundIdempotencyService', () => {
     const handler = () => Promise.resolve({ status: 202, body: {} });
 
     it('128자 ASCII 키는 허용된다', async () => {
-      const result = await service.execute(
+      const result = await service.executeInTransaction(
         {
           requesterId,
           operation,
@@ -322,7 +382,7 @@ describe('RefundIdempotencyService', () => {
 
     it('129자 키는 거절된다', async () => {
       await expect(
-        service.execute(
+        service.executeInTransaction(
           {
             requesterId,
             operation,
@@ -337,7 +397,7 @@ describe('RefundIdempotencyService', () => {
 
     it('공백이 들어간 키는 거절된다', async () => {
       await expect(
-        service.execute(
+        service.executeInTransaction(
           {
             requesterId,
             operation,
@@ -353,7 +413,7 @@ describe('RefundIdempotencyService', () => {
 
   it('사유의 앞뒤 공백만 다른 본문은 같은 본문으로 판단되어 최초 응답을 받는다', async () => {
     const storeOperation = 'STORE_REFUND';
-    const first = await service.execute(
+    const first = await service.executeInTransaction(
       {
         requesterId,
         operation: storeOperation,
@@ -364,7 +424,7 @@ describe('RefundIdempotencyService', () => {
       () => Promise.resolve({ status: 202, body: { refundId: 'refund-1' } }),
     );
 
-    const replay = await service.execute(
+    const replay = await service.executeInTransaction(
       {
         requesterId,
         operation: storeOperation,
@@ -383,7 +443,7 @@ describe('RefundIdempotencyService', () => {
     jest.spyOn(repository, 'createInProgress').mockResolvedValueOnce(null);
     jest.spyOn(repository, 'find').mockResolvedValueOnce(null);
 
-    const result = await service.execute(
+    const result = await service.executeInTransaction(
       { requesterId, operation, key, request, authorize: allow },
       () => Promise.resolve({ status: 202, body: { refundId: 'refund-1' } }),
     );
@@ -392,29 +452,41 @@ describe('RefundIdempotencyService', () => {
   });
 
   it('최초 응답 저장이 실패하면 같은 트랜잭션의 환불 확정도 커밋되지 않고 같은 키의 다음 요청이 처리된다', async () => {
-    const command = { requesterId, operation, key, request, authorize: allow };
+    const command: IdempotentCommand = {
+      requesterId,
+      operation,
+      key,
+      request,
+      authorize: allow,
+    };
     const acceptRefund = (tx: TransactionClient) => {
       (tx as unknown as FakeTx).writes.push('refund-1');
       return Promise.resolve({ status: 202, body: { refundId: 'refund-1' } });
     };
     repository.failCompletion = true;
-    await expect(service.execute(command, acceptRefund)).rejects.toThrow(
-      '최초 응답 저장 실패',
-    );
+    await expect(
+      service.executeInTransaction(command, acceptRefund),
+    ).rejects.toThrow('최초 응답 저장 실패');
     expect(repository.committed).toEqual([]);
 
     repository.failCompletion = false;
-    const retried = await service.execute(command, acceptRefund);
+    const retried = await service.executeInTransaction(command, acceptRefund);
 
     expect(retried).toEqual({ status: 202, body: { refundId: 'refund-1' } });
     expect(repository.committed).toEqual(['refund-1']);
   });
 
   it('처리 기한이 지난 처리 중 기록은 같은 본문의 다음 요청이 이어받아 처리한다', async () => {
-    const command = { requesterId, operation, key, request, authorize: allow };
+    const command: IdempotentCommand = {
+      requesterId,
+      operation,
+      key,
+      request,
+      authorize: allow,
+    };
     // 최초 요청이 처리 중 기록만 남기고 처리 트랜잭션을 시작하기 전에 멈춘 상황(서버 중단 등)
     repository.pauseNextTransaction = new Promise<void>(() => {});
-    void service.execute(
+    void service.executeInTransaction(
       command,
       () => new Promise<IdempotentResult<object>>(() => {}),
     );
@@ -423,7 +495,7 @@ describe('RefundIdempotencyService', () => {
       record.claimUntil = new Date(Date.now() - 1000);
     }
 
-    const result = await service.execute(command, () =>
+    const result = await service.executeInTransaction(command, () =>
       Promise.resolve({ status: 202, body: { refundId: 'refund-1' } }),
     );
 
@@ -450,11 +522,8 @@ describe('RefundIdempotencyService', () => {
       }
     }
 
-    /** 대기 중인 Promise 작업이 진행되도록 한 번 양보한다 */
-    const flush = () => new Promise<void>((resolve) => setImmediate(resolve));
-
     it('트랜잭션 전에 멈췄던 A를 B가 이어받아 성공하면 A의 처리는 커밋되지 않고 B의 최초 응답이 보존된다', async () => {
-      const command = {
+      const command: IdempotentCommand = {
         requesterId,
         operation,
         key,
@@ -465,11 +534,14 @@ describe('RefundIdempotencyService', () => {
       repository.pauseNextTransaction = new Promise<void>((resolve) => {
         resumeA = resolve;
       });
-      const requestA = service.execute(command, acceptRefund('refund-A'));
+      const requestA = service.executeInTransaction(
+        command,
+        acceptRefund('refund-A'),
+      );
       await flush();
       expireClaims();
 
-      const responseB = await service.execute(
+      const responseB = await service.executeInTransaction(
         command,
         acceptRefund('refund-B'),
       );
@@ -480,14 +552,14 @@ describe('RefundIdempotencyService', () => {
       );
       expect(repository.committed).toEqual(['refund-B']);
       const handlerC = jest.fn(acceptRefund('refund-C'));
-      await expect(service.execute(command, handlerC)).resolves.toEqual(
-        responseB,
-      );
+      await expect(
+        service.executeInTransaction(command, handlerC),
+      ).resolves.toEqual(responseB);
       expect(handlerC).not.toHaveBeenCalled();
     });
 
     it('처리 트랜잭션 안에서 처리 중인 요청의 기록은 기한이 지나도 다른 요청이 이어받지 못한다', async () => {
-      const command = {
+      const command: IdempotentCommand = {
         requesterId,
         operation,
         key,
@@ -495,7 +567,7 @@ describe('RefundIdempotencyService', () => {
         authorize: allow,
       };
       let finishA!: () => void;
-      const requestA = service.execute(command, (tx) => {
+      const requestA = service.executeInTransaction(command, (tx) => {
         (tx as unknown as FakeTx).writes.push('refund-A');
         return new Promise<IdempotentResult<object>>((resolve) => {
           finishA = () =>
@@ -506,7 +578,7 @@ describe('RefundIdempotencyService', () => {
       expireClaims();
 
       await expect(
-        service.execute(command, acceptRefund('refund-B')),
+        service.executeInTransaction(command, acceptRefund('refund-B')),
       ).rejects.toBeInstanceOf(IdempotencyRequestInProgressError);
       finishA();
 
@@ -518,7 +590,7 @@ describe('RefundIdempotencyService', () => {
     });
 
     it('기한이 지난 같은 기록을 두 요청이 동시에 이어받으려 하면 하나만 처리한다', async () => {
-      const command = {
+      const command: IdempotentCommand = {
         requesterId,
         operation,
         key,
@@ -526,15 +598,15 @@ describe('RefundIdempotencyService', () => {
         authorize: allow,
       };
       repository.pauseNextTransaction = new Promise<void>(() => {});
-      void service.execute(command, acceptRefund('refund-A'));
+      void service.executeInTransaction(command, acceptRefund('refund-A'));
       await flush();
       expireClaims();
       const handlerB = jest.fn(acceptRefund('refund-B'));
       const handlerC = jest.fn(acceptRefund('refund-C'));
 
       const results = await Promise.allSettled([
-        service.execute(command, handlerB),
-        service.execute(command, handlerC),
+        service.executeInTransaction(command, handlerB),
+        service.executeInTransaction(command, handlerC),
       ]);
 
       expect(handlerB.mock.calls.length + handlerC.mock.calls.length).toBe(1);
@@ -542,8 +614,174 @@ describe('RefundIdempotencyService', () => {
     });
   });
 
+  describe('환불 접수 전용 실행', () => {
+    const acceptance = {
+      refundId: 'refund-1',
+      decisionStatus: 'ACCEPTED',
+      ticketId: 'ticket-1',
+      amount: 10000,
+      payoutStatus: 'PENDING',
+      paymentCancelId: 'pc-1',
+      acceptedAt: '2026-11-05T00:00:00.000Z',
+      terminatedAt: '2026-11-05T00:00:00.000Z',
+    };
+    const result = { status: 202, refundId: 'refund-1', body: acceptance };
+    const command = {
+      requesterId,
+      operation: 'CUSTOMER_REFUND' as const,
+      key,
+      request,
+      authorize: allow,
+    };
+    const pending = {
+      paymentCancelId: 'pc-1',
+      amount: 10000,
+      claimToken: 'send-token',
+      sentAt: new Date(),
+    };
+    let execution: RefundAcceptanceExecutionService;
+    let send: jest.Mock;
+    let snapshot: jest.Mock;
+    let confirm: jest.Mock;
+
+    beforeEach(() => {
+      send = jest.fn().mockResolvedValue({ result: 'ACCEPTED' });
+      snapshot = jest.fn().mockResolvedValue({
+        ...acceptance,
+        acceptedAt: new Date(acceptance.acceptedAt),
+        terminatedAt: new Date(acceptance.terminatedAt),
+      });
+      confirm = jest.fn((tx: TransactionClient) => {
+        (tx as unknown as FakeTx).writes.push('refund-1');
+        return Promise.resolve({ result, pending });
+      });
+      execution = new RefundAcceptanceExecutionService(
+        service,
+        repository as unknown as RefundIdempotencyRepository,
+        { findAcceptanceSnapshot: snapshot } as unknown as RefundRepository,
+        { sendCancel: send } as unknown as RefundPgGateway,
+        {
+          recordSendResult: jest
+            .fn()
+            .mockResolvedValue({ payoutStatus: 'PENDING', actionCode: null }),
+        } as unknown as RefundDispatchService,
+      );
+    });
+
+    it('PG 전송 중 같은 키는 처리 중으로 거절하고, 전송 뒤에는 최초 응답을 재생한다', async () => {
+      let finish!: (value: { result: string }) => void;
+      send.mockImplementation(() => {
+        expect(repository.committed).toEqual(['refund-1']);
+        return new Promise((resolve) => {
+          finish = resolve;
+        });
+      });
+      const first = execution.executeAcceptance(command, confirm);
+      await flush();
+      await expect(
+        execution.executeAcceptance(command, confirm),
+      ).rejects.toBeInstanceOf(IdempotencyRequestInProgressError);
+      finish({ result: 'ACCEPTED' });
+      const response = await first;
+      await expect(
+        execution.executeAcceptance(command, confirm),
+      ).resolves.toMatchObject({
+        status: response.status,
+        body: response.body,
+      });
+      expect(confirm).toHaveBeenCalledTimes(1);
+      expect(send).toHaveBeenCalledTimes(1);
+    });
+
+    it('커밋 뒤 전송 실패는 기록을 남기고, 기한 뒤 같은 키는 확정·전송을 반복하지 않고 응답을 복구한다', async () => {
+      send.mockRejectedValueOnce(new Error('전송 중단'));
+      await expect(
+        execution.executeAcceptance(command, confirm),
+      ).rejects.toThrow('전송 중단');
+      const stored = [...repository.records.values()][0];
+      expect(stored.refundId).toBe('refund-1');
+      expect(stored.status).toBe(RefundIdempotencyStatus.IN_PROGRESS);
+      stored.claimUntil = new Date(Date.now() - 1000);
+      await expect(
+        execution.executeAcceptance(command, confirm),
+      ).resolves.toMatchObject({ status: 202, body: acceptance });
+      expect(confirm).toHaveBeenCalledTimes(1);
+      expect(send).toHaveBeenCalledTimes(1);
+      expect(snapshot).toHaveBeenCalledWith('refund-1');
+      expect(stored.status).toBe(RefundIdempotencyStatus.COMPLETED);
+    });
+
+    it('확정 실패는 업무 변경을 롤백하고 자기 멱등 기록만 지워 같은 키 재시도를 허용한다', async () => {
+      confirm.mockImplementationOnce((tx: TransactionClient) => {
+        (tx as unknown as FakeTx).writes.push('실패한 환불');
+        return Promise.reject(new Error('확정 실패'));
+      });
+      await expect(
+        execution.executeAcceptance(command, confirm),
+      ).rejects.toThrow('확정 실패');
+      expect(repository.committed).toEqual([]);
+      expect(repository.records.size).toBe(0);
+      expect(send).not.toHaveBeenCalled();
+      await execution.executeAcceptance(command, confirm);
+      expect(repository.committed).toEqual(['refund-1']);
+    });
+
+    it('전송 중 담당을 잃으면 이전 요청의 결과 대신 이어받은 요청이 저장한 최초 응답을 반환한다', async () => {
+      let finish!: (value: { result: string }) => void;
+      send.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          }),
+      );
+      const first = execution.executeAcceptance(command, confirm);
+      await flush();
+      [...repository.records.values()][0].claimUntil = new Date(
+        Date.now() - 1000,
+      );
+      snapshot.mockResolvedValue({
+        ...acceptance,
+        payoutStatus: 'PAID',
+        acceptedAt: new Date(acceptance.acceptedAt),
+        terminatedAt: new Date(acceptance.terminatedAt),
+      });
+      const recovered = await execution.executeAcceptance(command, confirm);
+      finish({ result: 'ACCEPTED' });
+      await expect(first).resolves.toEqual({
+        status: recovered.status,
+        body: recovered.body,
+      });
+      expect(confirm).toHaveBeenCalledTimes(1);
+    });
+
+    it('0원 접수는 PG 전송 없이 최초 응답을 저장한다', async () => {
+      confirm.mockResolvedValue({
+        result: {
+          ...result,
+          status: 200,
+          body: {
+            ...acceptance,
+            amount: 0,
+            payoutStatus: 'PAID',
+            paymentCancelId: null,
+          },
+        },
+      });
+      await expect(
+        execution.executeAcceptance(command, confirm),
+      ).resolves.toMatchObject({
+        status: 200,
+        body: { amount: 0, payoutStatus: 'PAID' },
+      });
+      expect(send).not.toHaveBeenCalled();
+      expect([...repository.records.values()][0].status).toBe(
+        RefundIdempotencyStatus.COMPLETED,
+      );
+    });
+  });
+
   describe('커밋 뒤 단계가 있는 처리', () => {
-    it('이어받기가 기다리는 동안 처리가 커밋됐으면 이어받은 뒤의 최신 기록으로 판단해 처리를 다시 하지 않고 저장 상태로 응답한다', async () => {
+    it('이전 요청의 트랜잭션을 기다린 뒤 환불이 커밋된 것을 확인하면 다시 확정하지 않고 응답을 복구한다', async () => {
       // 기록 생성은 이미 있어 실패하고, 그때 쓴 본문 해시를 기록 대역에 그대로 쓴다
       let fingerprint = '';
       const staleRecord = (refundId: string | null) => ({
@@ -575,15 +813,32 @@ describe('RefundIdempotencyService', () => {
         doubled as unknown as RefundIdempotencyRepository,
         { get: () => workLeaseSeconds } as unknown as ConfigService,
       );
-      const rebuilt = { status: 202, body: { refundId: 'refund-1' } };
-
-      const result = await isolated.execute(
-        { requesterId, operation, key, request, authorize: allow },
-        () => Promise.resolve({ status: 202, body: { refundId: 'refund-2' } }),
-        {
-          afterCommit: (handled) => Promise.resolve(handled),
-          rebuild: () => Promise.resolve(rebuilt),
+      const rebuilt = {
+        status: 202,
+        refundId: 'refund-1',
+        body: {
+          refundId: 'refund-1',
+          decisionStatus: 'ACCEPTED',
+          ticketId: 'ticket-1',
+          amount: 10000,
+          payoutStatus: 'PENDING',
+          paymentCancelId: 'pc-1',
+          acceptedAt: '2026-11-05T00:00:00.000Z',
+          terminatedAt: '2026-11-05T00:00:00.000Z',
         },
+      };
+      const execution = new RefundAcceptanceExecutionService(
+        isolated,
+        doubled as unknown as RefundIdempotencyRepository,
+        {} as RefundRepository,
+        {} as RefundPgGateway,
+        {} as RefundDispatchService,
+      );
+      jest.spyOn(execution, 'rebuildAcceptance').mockResolvedValue(rebuilt);
+
+      const result = await execution.executeAcceptance(
+        { requesterId, operation, key, request, authorize: allow },
+        jest.fn(),
       );
 
       expect({

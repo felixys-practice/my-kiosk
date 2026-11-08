@@ -1,3 +1,5 @@
+import { RefundAcceptanceExecutionService } from './refund-acceptance-execution.service';
+import { RefundIdempotencyRepository } from './refund-idempotency.repository';
 /* eslint-disable @typescript-eslint/unbound-method -- jest 목(mock) 메서드를 expect로 검증할 때 생기는 오탐 */
 import {
   PaymentStatus,
@@ -111,23 +113,28 @@ describe('RefundAcceptanceService', () => {
       events.push('pg-send');
       return Promise.resolve({ result: 'ACCEPTED' });
     });
-    const idempotency = {
-      execute: async (
-        _command: unknown,
-        handler: (t: TransactionClient) => Promise<unknown>,
-        after?: { afterCommit: (r: unknown) => Promise<unknown> },
-      ) => {
-        const result = await handler(tx);
-        events.push('commit');
-        return after ? after.afterCommit(result) : result;
-      },
-    } as unknown as RefundIdempotencyService;
+    const execution = new RefundAcceptanceExecutionService(
+      {
+        acquire: () => Promise.resolve({ kind: 'without-key' }),
+      } as unknown as RefundIdempotencyService,
+      {
+        runInTransaction: async (
+          handler: (t: TransactionClient) => Promise<unknown>,
+        ) => {
+          const result = await handler(tx);
+          events.push('commit');
+          return result;
+        },
+      } as unknown as RefundIdempotencyRepository,
+      repository as unknown as RefundRepository,
+      pgGateway,
+      dispatchService,
+    );
     service = new RefundAcceptanceService(
       repository as unknown as RefundRepository,
       locking as unknown as RefundLockingRepository,
       seatAssignment as unknown as SeatAssignmentService,
-      idempotency,
-      pgGateway,
+      execution,
       dispatchService,
     );
   });
@@ -239,21 +246,27 @@ describe('RefundAcceptanceService', () => {
   });
 
   it('확정 트랜잭션 커밋이 실패하면 PG가 호출되지 않는다', async () => {
-    const commitFailure = {
-      execute: async (
-        _command: unknown,
-        handler: (t: TransactionClient) => Promise<unknown>,
-      ) => {
-        await handler(tx);
-        throw new Error('커밋 실패');
-      },
-    } as unknown as RefundIdempotencyService;
+    const commitFailure = new RefundAcceptanceExecutionService(
+      {
+        acquire: () => Promise.resolve({ kind: 'without-key' }),
+      } as unknown as RefundIdempotencyService,
+      {
+        runInTransaction: async (
+          handler: (t: TransactionClient) => Promise<unknown>,
+        ) => {
+          await handler(tx);
+          throw new Error('커밋 실패');
+        },
+      } as unknown as RefundIdempotencyRepository,
+      repository as unknown as RefundRepository,
+      pgGateway,
+      dispatchService,
+    );
     const failingService = new RefundAcceptanceService(
       repository as unknown as RefundRepository,
       locking as unknown as RefundLockingRepository,
       seatAssignment as unknown as SeatAssignmentService,
       commitFailure,
-      pgGateway,
       dispatchService,
     );
 
@@ -303,17 +316,18 @@ describe('RefundAcceptanceService', () => {
   it('같은 멱등 키 재응답도 현재 역할이 USER가 아니면 REFUND_FORBIDDEN으로 거절된다', async () => {
     // 저장된 최초 응답을 재생하는 멱등 처리 대역(처리 함수는 실행하지 않는다)
     const replaying = {
-      execute: async (command: { authorize: () => Promise<void> }) => {
+      executeAcceptance: async (command: {
+        authorize: () => Promise<void>;
+      }) => {
         await command.authorize();
         return { status: 202, body: { refundId: 'refund-1' } };
       },
-    } as unknown as RefundIdempotencyService;
+    } as unknown as RefundAcceptanceExecutionService;
     const replayService = new RefundAcceptanceService(
       repository as unknown as RefundRepository,
       locking as unknown as RefundLockingRepository,
       seatAssignment as unknown as SeatAssignmentService,
       replaying,
-      pgGateway,
       dispatchService,
     );
 

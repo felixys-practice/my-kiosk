@@ -114,7 +114,7 @@ export class RefundIdempotencyRepository {
    * @param claimToken 이 요청의 담당 토큰
    * @returns 지금도 처리 중이고 담당이 이 요청이면 true
    */
-  async acquireInTransaction(
+  async lockClaimedRecordInTransaction(
     tx: TransactionClient,
     id: string,
     claimToken: string,
@@ -181,7 +181,7 @@ export class RefundIdempotencyRepository {
    * @param claimToken 담당 토큰
    * @param refundId 확정한 환불
    */
-  async markHandledInTransaction(
+  async updateConfirmedRefundIdInTransaction(
     tx: TransactionClient,
     id: string,
     claimToken: string,
@@ -199,13 +199,14 @@ export class RefundIdempotencyRepository {
   }
 
   /**
-   * 커밋 뒤 단계(PG 전송 등)까지 끝난 최종 응답으로 기록을 완료한다(담당 토큰일 때만)
+   * 환불 확정 커밋 후 접수 응답을 저장하고 멱등 처리를 COMPLETED로 변경한다
+   * PG 전송 완료나 환불금 지급 완료를 의미하지 않는다
    * @param id 멱등 기록 ID
    * @param claimToken 담당 토큰
    * @param response 최종 응답
    * @returns 완료했으면 true, 담당을 잃었으면 false
    */
-  async completeAfterCommit(
+  async saveResponseAndCompleteIdempotency(
     id: string,
     claimToken: string,
     response: { status: number; body: unknown },

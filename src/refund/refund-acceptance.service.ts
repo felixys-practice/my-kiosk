@@ -1,4 +1,8 @@
-import { Inject, Injectable } from '@nestjs/common';
+import {
+  ConfirmedRefundAcceptance,
+  RefundAcceptanceExecutionService,
+} from './refund-acceptance-execution.service';
+import { Injectable } from '@nestjs/common';
 import {
   RefundDecisionStatus,
   RefundPayoutStatus,
@@ -6,8 +10,6 @@ import {
   SeatReleaseReason,
   UserRole,
 } from '@prisma/client';
-import { REFUND_PG_GATEWAY } from 'src/pg/refund-pg.gateway';
-import type { RefundPgGateway } from 'src/pg/refund-pg.gateway';
 import { SeatAssignmentService } from 'src/seat-assignment/seat-assignment.service';
 import {
   AcceptedRefundInput,
@@ -16,11 +18,7 @@ import {
 } from './refund.repository';
 import { TransactionClient } from 'src/prisma/prisma.service';
 import { RefundLockingRepository } from './refund-locking.repository';
-import {
-  IdempotentAfterCommit,
-  IdempotentResult,
-  RefundIdempotencyService,
-} from './refund-idempotency.service';
+import { IdempotentResult } from './refund-idempotency.service';
 import { RefundActor } from './refund-access.service';
 import { RefundDispatchService } from './refund-dispatch.service';
 import {
@@ -52,14 +50,14 @@ export type PendingSend = {
 /** 환불 접수 응답 본문 (API 계약 §3 일부) */
 export type RefundAcceptance = {
   refundId: string;
-  decisionStatus: string;
+  decisionStatus: string; // 환불 확정 상태(ACCEPTED: 환불 금액과 이용 종료 확정)
   ticketId: string;
-  amount: number;
+  amount: number; // 확정된 환불 금액
   payoutStatus: string;
   paymentCancelId: string | null; // 현재 PG 취소 요청, 0원 환불이면 null
   actionCode?: string | null; // 미지급 조치 사유(전송 전 실패·PG 거절 등), 없으면 null
-  acceptedAt: string;
-  terminatedAt: string;
+  acceptedAt: string; // 환불 확정 시각
+  terminatedAt: string; // 환불 확정에 따른 이용권 이용 종료 시각(ISO 8601)
 };
 
 /**
@@ -73,8 +71,7 @@ export class RefundAcceptanceService {
     private readonly refundRepository: RefundRepository,
     private readonly lockingRepository: RefundLockingRepository,
     private readonly seatAssignmentService: SeatAssignmentService,
-    private readonly idempotencyService: RefundIdempotencyService,
-    @Inject(REFUND_PG_GATEWAY) private readonly pgGateway: RefundPgGateway,
+    private readonly executionService: RefundAcceptanceExecutionService,
     private readonly dispatchService: RefundDispatchService,
   ) {}
 
@@ -89,14 +86,11 @@ export class RefundAcceptanceService {
     command: CustomerRefundCommand,
   ): Promise<IdempotentResult<RefundAcceptance>> {
     // 고객 환불은 USER만 신청한다(API 계약 §2). 저장된 응답을 재생할 때도 같은 확인을 거친다
-    // FIXME: 역할 검사 지점을 줄이도록 컨트롤러의 @Roles(Role.USER)와 기존 RoleGuard를 재사용하는 방식으로 전환한다.
     // 전환 시 RoleGuard의 역할 불일치 응답(현재 401)을 환불 계약의 403·REFUND_FORBIDDEN과 맞추고 관련 테스트를 조정한다.
     // 서비스 직접 호출에도 역할 검사가 필요한지 확인한 뒤 assertCustomerRole을 제거한다.
     assertCustomerRole(actor);
 
-    // 이번 요청이 실제로 확정한 PG 취소 요청(저장된 응답을 재생한 경우는 없음)
-    let accepted: PendingSend | undefined;
-    const result = await this.idempotencyService.execute(
+    const result = await this.executionService.executeAcceptance(
       {
         requesterId: actor.userId,
         operation: 'CUSTOMER_REFUND',
@@ -139,92 +133,11 @@ export class RefundAcceptanceService {
           },
           tx,
         );
-        accepted = confirmed.pending;
-        return confirmed.result;
+        return confirmed;
       },
-      this.afterAcceptance(() => accepted),
     );
 
     return result;
-  }
-
-  /**
-   * 커밋된 환불의 최초 PG 취소 요청을 보내고 결과를 응답·멱등 기록에 반영한다(고객·매장 공통)
-   * @param pending 커밋 뒤 보낼 PG 취소 요청과 그 전송 담당
-   * @param result 확정 트랜잭션이 만든 접수 응답
-   * @returns 전송 결과(지급 상태·조치 사유)를 반영한 접수 응답
-   */
-  async sendAccepted(
-    pending: PendingSend,
-    result: IdempotentResult<RefundAcceptance>,
-  ): Promise<IdempotentResult<RefundAcceptance>> {
-    const sendResult = await this.pgGateway.sendCancel({
-      paymentCancelId: pending.paymentCancelId,
-      amount: pending.amount,
-    });
-    const state = await this.dispatchService.recordSendResult(
-      pending.paymentCancelId,
-      pending.claimToken,
-      pending.sentAt,
-      sendResult,
-    );
-    // 이용 종료 완료와 미지급 상태를 구분해 응답한다(전송 전 실패·즉시 거절도 202 접수, API 계약 §4)
-    const updated = {
-      ...result,
-      body: {
-        ...result.body,
-        payoutStatus: state.payoutStatus,
-        actionCode: state.actionCode,
-      },
-    };
-    return updated;
-  }
-
-  /**
-   * 환불 접수의 커밋 뒤 단계(최초 PG 전송)와 중단 복구를 멱등 처리에 넘길 형태로 만든다(고객·매장 공통)
-   * - 최초 응답은 전송 결과를 반영한 뒤 정해지고, 그 전까지 같은 키 요청은 처리 중으로 거절된다(API 계약 §4)
-   * @param pending 처리 함수가 확정한 PG 취소 요청을 돌려주는 함수(0원이면 없음)
-   * @returns 커밋 뒤 전송·중단 뒤 응답 재구성
-   */
-  afterAcceptance(
-    pending: () => PendingSend | undefined,
-  ): IdempotentAfterCommit<RefundAcceptance> {
-    return {
-      afterCommit: (acceptanceResult) => {
-        const send = pending();
-        return send
-          ? this.sendAccepted(send, acceptanceResult)
-          : Promise.resolve(acceptanceResult);
-      },
-      rebuild: (refundId) => this.rebuildAcceptance(refundId),
-    };
-  }
-
-  /**
-   * 저장된 환불 상태로 접수 응답을 다시 만든다(커밋 뒤 전송 단계 전에 중단된 요청을 이어받을 때)
-   * @param refundId 확정된 환불
-   * @returns 접수 응답(0원 지급 완료면 200, 그 밖 202)
-   */
-  async rebuildAcceptance(
-    refundId: string,
-  ): Promise<IdempotentResult<RefundAcceptance>> {
-    const stored = await this.refundRepository.findAcceptanceSnapshot(refundId);
-    const isZero = stored.amount === 0;
-    return {
-      status: isZero ? 200 : 202,
-      refundId,
-      body: {
-        refundId,
-        decisionStatus: stored.decisionStatus,
-        ticketId: stored.ticketId,
-        amount: stored.amount,
-        payoutStatus: stored.payoutStatus,
-        paymentCancelId: stored.paymentCancelId,
-        actionCode: stored.actionCode,
-        acceptedAt: stored.acceptedAt.toISOString(),
-        terminatedAt: stored.terminatedAt.toISOString(),
-      },
-    };
   }
 
   /**
@@ -238,10 +151,7 @@ export class RefundAcceptanceService {
   async confirmAcceptedRefund(
     input: AcceptedRefundInput & { ticketId: string },
     tx: TransactionClient,
-  ): Promise<{
-    result: IdempotentResult<RefundAcceptance>;
-    pending?: PendingSend;
-  }> {
+  ): Promise<ConfirmedRefundAcceptance> {
     const { ticketId, ...refundInput } = input;
     const { now } = input;
     // 이용권을 종료한다

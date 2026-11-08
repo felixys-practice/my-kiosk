@@ -122,7 +122,11 @@ describe('RefundIdempotencyRepository (실제 DB)', () => {
 
     await repository.runInTransaction(async (tx) => {
       expect(
-        await repository.acquireInTransaction(tx, record!.id, 'token-a'),
+        await repository.lockClaimedRecordInTransaction(
+          tx,
+          record!.id,
+          'token-a',
+        ),
       ).toBe(true);
       // 기록을 잡은 상태에서 다른 연결의 이어받기를 시작한다
       takeOver = repository

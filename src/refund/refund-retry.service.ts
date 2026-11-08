@@ -89,62 +89,61 @@ export class RefundRetryService {
 
     // 2. 같은 키·같은 내용이면 최초 응답을 돌려주고, 새 요청만 3·4단계로 상태를 검사한다
     let pending: PendingSend | undefined;
-    const result = await this.idempotencyService.execute<PayoutRetryAcceptance>(
-      {
-        requesterId: actor.userId,
-        operation: 'PAYOUT_RETRY',
-        key: command.idempotencyKey,
-        request: { refundId, reason: command.reason },
-        authorize: () => Promise.resolve(),
-      },
-      async (tx) => {
-        const now = new Date();
-        // 3. Refund → PG 취소 요청 → 별도 지급 순서로 잠근 뒤 다시 읽어 판정한다
-        const unlocked = (await this.refundRepository.findPayoutRetryTarget(
-          refundId,
-          tx,
-        ))!;
-        await this.lockingRepository.lockForPayout(tx, {
-          refundId,
-          paymentCancelIds: unlocked.paymentCancelIds,
-          manualRefundPayoutIds: unlocked.manualRefundPayoutIds,
-        });
-        const target = (await this.refundRepository.findPayoutRetryTarget(
-          refundId,
-          tx,
-        ))!;
-        const decision = evaluatePayoutRetry(target.state, now);
-        if (!decision.allowed) throw retryRejectionError(decision.code);
-
-        // 4. 이전 실패를 보존한 채 같은 금액의 새 요청과 커밋 뒤 전송 기록을 저장한다
-        const sendClaim = this.dispatchService.newSendClaim(now);
-        const paymentCancelId = await this.refundRepository.createRetryAttempt(
-          tx,
-          {
+    const result =
+      await this.idempotencyService.executeInTransaction<PayoutRetryAcceptance>(
+        {
+          requesterId: actor.userId,
+          operation: 'PAYOUT_RETRY',
+          key: command.idempotencyKey,
+          request: { refundId, reason: command.reason },
+          authorize: () => Promise.resolve(),
+        },
+        async (tx) => {
+          const now = new Date();
+          // 3. Refund → PG 취소 요청 → 별도 지급 순서로 잠근 뒤 다시 읽어 판정한다
+          const unlocked = (await this.refundRepository.findPayoutRetryTarget(
             refundId,
-            paymentId: target.paymentId,
-            orderItemId: target.orderItemId,
-            attemptNumber: target.nextAttemptNumber,
+            tx,
+          ))!;
+          await this.lockingRepository.lockForPayout(tx, {
+            refundId,
+            paymentCancelIds: unlocked.paymentCancelIds,
+            manualRefundPayoutIds: unlocked.manualRefundPayoutIds,
+          });
+          const target = (await this.refundRepository.findPayoutRetryTarget(
+            refundId,
+            tx,
+          ))!;
+          const decision = evaluatePayoutRetry(target.state, now);
+          if (!decision.allowed) throw retryRejectionError(decision.code);
+
+          // 4. 이전 실패를 보존한 채 같은 금액의 새 요청과 커밋 뒤 전송 기록을 저장한다
+          const sendClaim = this.dispatchService.newSendClaim(now);
+          const paymentCancelId =
+            await this.refundRepository.createRetryAttempt(tx, {
+              refundId,
+              paymentId: target.paymentId,
+              orderItemId: target.orderItemId,
+              attemptNumber: target.nextAttemptNumber,
+              amount: target.state.amount,
+              requestedById: actor.userId,
+              retryReason: command.reason,
+              now,
+              sendClaim,
+            });
+          pending = {
+            paymentCancelId,
             amount: target.state.amount,
-            requestedById: actor.userId,
-            retryReason: command.reason,
-            now,
-            sendClaim,
-          },
-        );
-        pending = {
-          paymentCancelId,
-          amount: target.state.amount,
-          claimToken: sendClaim.claimToken,
-          sentAt: now,
-        };
-        return {
-          status: 202,
-          refundId,
-          body: { refundId, paymentCancelId, payoutStatus: 'PENDING' },
-        };
-      },
-    );
+            claimToken: sendClaim.claimToken,
+            sentAt: now,
+          };
+          return {
+            status: 202,
+            refundId,
+            body: { refundId, paymentCancelId, payoutStatus: 'PENDING' },
+          };
+        },
+      );
 
     // 이번 요청이 만든 새 요청만 커밋 뒤 보낸다(최초 응답 반환·거절은 PG를 호출하지 않는다)
     if (pending) await this.dispatchService.sendPrepared(pending);

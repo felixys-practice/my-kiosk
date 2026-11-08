@@ -17,7 +17,7 @@ import { RefundPgStub } from './helpers/refund-pg.stub';
 import { RefundRepository } from '../src/refund/refund.repository';
 import { RefundRecoveryService } from '../src/refund/refund-recovery.service';
 import { RefundDispatchService } from '../src/refund/refund-dispatch.service';
-import { RefundAcceptanceService } from '../src/refund/refund-acceptance.service';
+import { RefundAcceptanceExecutionService } from '../src/refund/refund-acceptance-execution.service';
 import { ConfigService } from '@nestjs/config';
 
 /** 중단된 요청의 DB 기록을 새 앱 인스턴스에서 이어받는 환불 E2E. */
@@ -104,8 +104,8 @@ describe('환불 중단 복구 (E2E)', () => {
       const issued = await ctx.issuePeriodTicket({ fixedSeat: true });
       const key = randomUUID();
       if (!beforeSend) pgStub.interruptNext('send');
-      const acceptance = ctx.app.get<RefundAcceptanceService>(
-        RefundAcceptanceService,
+      const acceptance = ctx.app.get<RefundAcceptanceExecutionService>(
+        RefundAcceptanceExecutionService,
       );
       const sendSpy = beforeSend
         ? jest

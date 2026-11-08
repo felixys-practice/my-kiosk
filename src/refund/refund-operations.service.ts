@@ -138,7 +138,7 @@ export class RefundOperationsService {
       refundId,
       command.idempotencyKey,
     );
-    return this.idempotencyService.execute<ManualReservationResponse>(
+    return this.idempotencyService.executeInTransaction<ManualReservationResponse>(
       {
         requesterId: actor.userId,
         operation: 'MANUAL_PAYOUT_RESERVE',
@@ -200,7 +200,7 @@ export class RefundOperationsService {
     const evidenceReference = command.evidenceReference?.trim();
     if (!evidenceReference) throw new ManualPayoutEvidenceRequiredError();
     return this.idempotencyService
-      .execute<ManualConfirmResponse>(
+      .executeInTransaction<ManualConfirmResponse>(
         {
           requesterId: actor.userId,
           operation: 'MANUAL_PAYOUT_CONFIRM',
@@ -335,7 +335,7 @@ export class RefundOperationsService {
     // 지급하지 않았다는 확실한 근거가 있어야 예약을 종료한다(지급 여부를 모르면 종료하지 않는다)
     const evidenceReference = command.evidenceReference?.trim();
     if (!evidenceReference) throw new ManualPayoutEvidenceRequiredError();
-    return this.idempotencyService.execute<ManualNotPaidResponse>(
+    return this.idempotencyService.executeInTransaction<ManualNotPaidResponse>(
       {
         requesterId: actor.userId,
         operation: 'MANUAL_PAYOUT_NOT_PAID',
@@ -401,7 +401,7 @@ export class RefundOperationsService {
     );
     const evidenceReference = command.evidenceReference?.trim();
     if (!evidenceReference) throw new ManualPayoutEvidenceRequiredError();
-    return this.idempotencyService.execute<AmountReviewResponse>(
+    return this.idempotencyService.executeInTransaction<AmountReviewResponse>(
       {
         requesterId: actor.userId,
         operation: 'REFUND_AMOUNT_REVIEW',

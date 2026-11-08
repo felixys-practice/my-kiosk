@@ -1,3 +1,4 @@
+import { RefundAcceptanceExecutionService } from './refund-acceptance-execution.service';
 import { Module } from '@nestjs/common';
 import { RefundController } from './refund.controller';
 import { RefundRepository } from './refund.repository';
@@ -53,6 +54,7 @@ import { RefundNotificationController } from './refund-notification.controller';
     RefundLockingRepository,
     // 환불 확정(US1~)
     RefundAcceptanceService,
+    RefundAcceptanceExecutionService,
     // 환불금 지급 결과 공통 처리(US4~)
     RefundResultService,
     RefundLedgerRepository,
