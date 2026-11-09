@@ -1,9 +1,10 @@
+import { vi, type Mocked } from 'vitest';
 import { SeatType, TicketStatus, TicketType } from '@prisma/client';
 import { TicketRepository } from './ticket.repository';
 import { TicketService } from './ticket.service';
 
 describe('TicketService', () => {
-  let repository: jest.Mocked<TicketRepository>;
+  let repository: Mocked<TicketRepository>;
   let service: TicketService;
 
   /** 미사용 시간권 기본값 */
@@ -24,8 +25,8 @@ describe('TicketService', () => {
 
   beforeEach(() => {
     repository = {
-      getTicketById: jest.fn(),
-    } as unknown as jest.Mocked<TicketRepository>;
+      getTicketById: vi.fn(),
+    } as unknown as Mocked<TicketRepository>;
     service = new TicketService(repository);
   });
 

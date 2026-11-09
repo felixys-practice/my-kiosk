@@ -1,4 +1,5 @@
-/* eslint-disable @typescript-eslint/unbound-method -- jest 목(mock) 메서드를 expect로 검증할 때 생기는 오탐 */
+/* eslint-disable @typescript-eslint/unbound-method -- Vitest 목(mock) 메서드를 expect로 검증할 때 생기는 오탐 */
+import { vi, type Mocked } from 'vitest';
 import { ConfigService } from '@nestjs/config';
 import {
   PaymentStatus,
@@ -26,10 +27,10 @@ describe('OrderService', () => {
   const shopId = 'shop-1';
   const userId = 'user-1';
 
-  let repository: jest.Mocked<OrderRepository>;
-  let prisma: jest.Mocked<PrismaService>;
-  let seatAssignmentService: jest.Mocked<SeatAssignmentService>;
-  let configService: jest.Mocked<ConfigService>;
+  let repository: Mocked<OrderRepository>;
+  let prisma: Mocked<PrismaService>;
+  let seatAssignmentService: Mocked<SeatAssignmentService>;
+  let configService: Mocked<ConfigService>;
   let service: OrderService;
 
   /**
@@ -55,28 +56,28 @@ describe('OrderService', () => {
 
   beforeEach(() => {
     repository = {
-      findActiveProducts: jest.fn(),
-      findSeats: jest.fn().mockResolvedValue([]),
-      findOrderWithPayments: jest.fn().mockResolvedValue({
+      findActiveProducts: vi.fn(),
+      findSeats: vi.fn().mockResolvedValue([]),
+      findOrderWithPayments: vi.fn().mockResolvedValue({
         id: 'order-1',
         orderItems: [{ id: 'item-1' }, { id: 'item-2' }],
         payments: [{ status: PaymentStatus.REQUESTED }],
       }),
-      createOrderWithItems: jest.fn().mockResolvedValue({ id: 'order-1' }),
-      getOrder: jest.fn(),
-    } as unknown as jest.Mocked<OrderRepository>;
+      createOrderWithItems: vi.fn().mockResolvedValue({ id: 'order-1' }),
+      getOrder: vi.fn(),
+    } as unknown as Mocked<OrderRepository>;
     prisma = {
-      executeTransaction: jest.fn((work: (tx: TransactionClient) => unknown) =>
+      executeTransaction: vi.fn((work: (tx: TransactionClient) => unknown) =>
         Promise.resolve(work(tx)),
       ),
-    } as unknown as jest.Mocked<PrismaService>;
+    } as unknown as Mocked<PrismaService>;
     seatAssignmentService = {
-      hold: jest.fn(),
-      releaseByOrderItems: jest.fn(),
-    } as unknown as jest.Mocked<SeatAssignmentService>;
+      hold: vi.fn(),
+      releaseByOrderItems: vi.fn(),
+    } as unknown as Mocked<SeatAssignmentService>;
     configService = {
-      get: jest.fn().mockReturnValue(10),
-    } as unknown as jest.Mocked<ConfigService>;
+      get: vi.fn().mockReturnValue(10),
+    } as unknown as Mocked<ConfigService>;
     service = new OrderService(
       repository,
       {} as TicketService,
@@ -176,7 +177,7 @@ describe('OrderService', () => {
     });
 
     it('고정석 줄마다 선점 유효시간만큼 좌석을 선점한다', async () => {
-      jest.useFakeTimers().setSystemTime(new Date('2026-10-22T10:00:00Z'));
+      vi.useFakeTimers().setSystemTime(new Date('2026-10-22T10:00:00Z'));
       repository.findActiveProducts.mockResolvedValue([
         product('fixed-1', SeatType.FIXED),
         product('free-1', SeatType.FREE),
@@ -205,7 +206,7 @@ describe('OrderService', () => {
         new Date('2026-10-22T10:00:00Z'),
         tx,
       );
-      jest.useRealTimers();
+      vi.useRealTimers();
     });
 
     it('주문 항목에 구매 시점 상품의 좌석 타입을 저장한다', async () => {

@@ -1,4 +1,5 @@
-/* eslint-disable @typescript-eslint/unbound-method -- jest 목(mock) 메서드를 expect로 검증할 때 생기는 오탐 */
+/* eslint-disable @typescript-eslint/unbound-method -- Vitest 목(mock) 메서드를 expect로 검증할 때 생기는 오탐 */
+import { vi, type Mocked } from 'vitest';
 import {
   PaymentCancelStatus,
   SeatReleaseReason,
@@ -18,10 +19,10 @@ describe('RefundService', () => {
   const tx = {} as TransactionClient;
   const ticketId = 'ticket-1';
 
-  let repository: jest.Mocked<RefundRepository>;
-  let transactionLogger: jest.Mocked<TransactionLoggerService>;
-  let pgService: jest.Mocked<PgService>;
-  let seatAssignmentService: jest.Mocked<SeatAssignmentService>;
+  let repository: Mocked<RefundRepository>;
+  let transactionLogger: Mocked<TransactionLoggerService>;
+  let pgService: Mocked<PgService>;
+  let seatAssignmentService: Mocked<SeatAssignmentService>;
   let service: RefundService;
 
   /** 미사용 시간권(사용자 user-1 소유) */
@@ -41,39 +42,39 @@ describe('RefundService', () => {
 
   beforeEach(() => {
     repository = {
-      getTicketById: jest.fn().mockResolvedValue(unusedTicket),
-      runInTransaction: jest.fn((work: (tx: TransactionClient) => unknown) =>
+      getTicketById: vi.fn().mockResolvedValue(unusedTicket),
+      runInTransaction: vi.fn((work: (tx: TransactionClient) => unknown) =>
         Promise.resolve(work(tx)),
       ),
-      getRefundLock: jest.fn().mockResolvedValue(null),
-      calculateRefundableAmount: jest
+      getRefundLock: vi.fn().mockResolvedValue(null),
+      calculateRefundableAmount: vi
         .fn()
         .mockResolvedValue({ already_refunded: false, refund_amount: 10000 }),
-      createPaymentCancel: jest
+      createPaymentCancel: vi
         .fn()
         .mockResolvedValue({ id: 'cancel-1', amount: 10000 }),
-      createRefundLock: jest.fn(),
-      getPaymentCancelById: jest.fn().mockResolvedValue({
+      createRefundLock: vi.fn(),
+      getPaymentCancelById: vi.fn().mockResolvedValue({
         id: 'cancel-1',
         amount: 10000,
         status: PaymentCancelStatus.REQUESTED,
       }),
-      confirmRefundSuccess: jest.fn(),
-      deleteRefundLock: jest.fn(),
-      failPaymentCancel: jest.fn(),
-      findTicketIdByOrderItem: jest.fn().mockResolvedValue('ticket-1'),
-      extendRefundLock: jest.fn().mockResolvedValue(1),
-    } as unknown as jest.Mocked<RefundRepository>;
+      confirmRefundSuccess: vi.fn(),
+      deleteRefundLock: vi.fn(),
+      failPaymentCancel: vi.fn(),
+      findTicketIdByOrderItem: vi.fn().mockResolvedValue('ticket-1'),
+      extendRefundLock: vi.fn().mockResolvedValue(1),
+    } as unknown as Mocked<RefundRepository>;
     transactionLogger = {
-      logRefund: jest.fn(),
-    } as unknown as jest.Mocked<TransactionLoggerService>;
+      logRefund: vi.fn(),
+    } as unknown as Mocked<TransactionLoggerService>;
     pgService = {
-      requestPaymentCancel: jest.fn(),
-      inquiryPaymentCancel: jest.fn(),
-    } as unknown as jest.Mocked<PgService>;
+      requestPaymentCancel: vi.fn(),
+      inquiryPaymentCancel: vi.fn(),
+    } as unknown as Mocked<PgService>;
     seatAssignmentService = {
-      releaseByTicket: jest.fn(),
-    } as unknown as jest.Mocked<SeatAssignmentService>;
+      releaseByTicket: vi.fn(),
+    } as unknown as Mocked<SeatAssignmentService>;
     service = new RefundService(
       repository,
       transactionLogger,

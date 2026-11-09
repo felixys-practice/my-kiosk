@@ -1,4 +1,5 @@
-/* eslint-disable @typescript-eslint/unbound-method -- jest 목(mock) 메서드를 expect로 검증할 때 생기는 오탐 */
+/* eslint-disable @typescript-eslint/unbound-method -- Vitest 목(mock) 메서드를 expect로 검증할 때 생기는 오탐 */
+import { vi, type Mock, type Mocked } from 'vitest';
 import { SeatReleaseReason, TicketStatus } from '@prisma/client';
 import { TransactionClient } from 'src/prisma/prisma.service';
 import { SeatAssignmentService } from 'src/seat-assignment/seat-assignment.service';
@@ -8,11 +9,11 @@ describe('SessionLifecycleService', () => {
   const now = new Date('2026-10-23T12:00:00Z');
 
   let tx: {
-    $queryRaw: jest.Mock;
-    $executeRaw: jest.Mock;
-    usageSession: { update: jest.Mock };
+    $queryRaw: Mock;
+    $executeRaw: Mock;
+    usageSession: { update: Mock };
   };
-  let seatAssignmentService: jest.Mocked<SeatAssignmentService>;
+  let seatAssignmentService: Mocked<SeatAssignmentService>;
   let service: SessionLifecycleService;
 
   /** 이용 중인 시간권 세션(2분 전 시작) */
@@ -27,13 +28,13 @@ describe('SessionLifecycleService', () => {
 
   beforeEach(() => {
     tx = {
-      $queryRaw: jest.fn(),
-      $executeRaw: jest.fn(),
-      usageSession: { update: jest.fn() },
+      $queryRaw: vi.fn(),
+      $executeRaw: vi.fn(),
+      usageSession: { update: vi.fn() },
     };
     seatAssignmentService = {
-      releaseByTicket: jest.fn(),
-    } as unknown as jest.Mocked<SeatAssignmentService>;
+      releaseByTicket: vi.fn(),
+    } as unknown as Mocked<SeatAssignmentService>;
     service = new SessionLifecycleService(seatAssignmentService);
   });
 

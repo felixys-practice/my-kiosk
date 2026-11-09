@@ -1,4 +1,5 @@
-/* eslint-disable @typescript-eslint/unbound-method -- jest 목(mock) 메서드를 expect로 검증할 때 생기는 오탐 */
+/* eslint-disable @typescript-eslint/unbound-method -- Vitest 목(mock) 메서드를 expect로 검증할 때 생기는 오탐 */
+import { vi, type Mocked } from 'vitest';
 import {
   Prisma,
   SeatAssignmentStatus,
@@ -25,7 +26,7 @@ describe('SeatAssignmentService', () => {
   const shopId = 'shop-1';
   const seatId = 'seat-1';
 
-  let repository: jest.Mocked<SeatAssignmentRepository>;
+  let repository: Mocked<SeatAssignmentRepository>;
   let service: SeatAssignmentService;
 
   /**
@@ -65,15 +66,15 @@ describe('SeatAssignmentService', () => {
 
   beforeEach(() => {
     repository = {
-      lockSeat: jest.fn(),
-      findOpenBySeat: jest.fn(),
-      findOpenBySeatIds: jest.fn(),
-      findActiveByTicket: jest.fn(),
-      findHeldByOrderItems: jest.fn(),
-      findLatestByOrderItem: jest.fn(),
-      create: jest.fn(),
-      updateStatus: jest.fn(),
-    } as unknown as jest.Mocked<SeatAssignmentRepository>;
+      lockSeat: vi.fn(),
+      findOpenBySeat: vi.fn(),
+      findOpenBySeatIds: vi.fn(),
+      findActiveByTicket: vi.fn(),
+      findHeldByOrderItems: vi.fn(),
+      findLatestByOrderItem: vi.fn(),
+      create: vi.fn(),
+      updateStatus: vi.fn(),
+    } as unknown as Mocked<SeatAssignmentRepository>;
     service = new SeatAssignmentService(repository);
 
     // 기본: 같은 매장의 고정석

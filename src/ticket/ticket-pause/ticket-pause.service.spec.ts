@@ -1,4 +1,5 @@
-/* eslint-disable @typescript-eslint/unbound-method -- jest 목(mock) 메서드를 expect로 검증할 때 생기는 오탐 */
+/* eslint-disable @typescript-eslint/unbound-method -- Vitest 목(mock) 메서드를 expect로 검증할 때 생기는 오탐 */
+import { vi, type Mocked } from 'vitest';
 import { Queue } from 'bullmq';
 import {
   SeatReleaseReason,
@@ -19,10 +20,10 @@ describe('TicketPauseService', () => {
   const shopId = 'shop-1';
   const ownerId = 'owner-1';
 
-  let repository: jest.Mocked<TicketPauseRepository>;
-  let sessionLifecycle: jest.Mocked<SessionLifecycleService>;
-  let queue: jest.Mocked<Queue>;
-  let seatAssignmentService: jest.Mocked<SeatAssignmentService>;
+  let repository: Mocked<TicketPauseRepository>;
+  let sessionLifecycle: Mocked<SessionLifecycleService>;
+  let queue: Mocked<Queue>;
+  let seatAssignmentService: Mocked<SeatAssignmentService>;
   let service: TicketPauseService;
 
   /**
@@ -45,28 +46,28 @@ describe('TicketPauseService', () => {
 
   beforeEach(() => {
     repository = {
-      runInTransaction: jest.fn((work: (tx: TransactionClient) => unknown) =>
+      runInTransaction: vi.fn((work: (tx: TransactionClient) => unknown) =>
         Promise.resolve(work(tx)),
       ),
-      getTicketForUpdate: jest
+      getTicketForUpdate: vi
         .fn()
         .mockResolvedValue(activePeriodTicket(SeatType.FIXED)),
-      findActivePause: jest.fn().mockResolvedValue(null),
-      findActiveSessionId: jest.fn().mockResolvedValue(null),
-      createPause: jest.fn(),
-      resumePause: jest.fn(),
-      extendTicketDeadline: jest.fn(),
-    } as unknown as jest.Mocked<TicketPauseRepository>;
+      findActivePause: vi.fn().mockResolvedValue(null),
+      findActiveSessionId: vi.fn().mockResolvedValue(null),
+      createPause: vi.fn(),
+      resumePause: vi.fn(),
+      extendTicketDeadline: vi.fn(),
+    } as unknown as Mocked<TicketPauseRepository>;
     sessionLifecycle = {
-      endSession: jest.fn(),
-    } as unknown as jest.Mocked<SessionLifecycleService>;
+      endSession: vi.fn(),
+    } as unknown as Mocked<SessionLifecycleService>;
     queue = {
-      remove: jest.fn().mockResolvedValue(1),
-    } as unknown as jest.Mocked<Queue>;
+      remove: vi.fn().mockResolvedValue(1),
+    } as unknown as Mocked<Queue>;
     seatAssignmentService = {
-      releaseByTicket: jest.fn(),
-      assign: jest.fn(),
-    } as unknown as jest.Mocked<SeatAssignmentService>;
+      releaseByTicket: vi.fn(),
+      assign: vi.fn(),
+    } as unknown as Mocked<SeatAssignmentService>;
     service = new TicketPauseService(
       repository,
       sessionLifecycle,
