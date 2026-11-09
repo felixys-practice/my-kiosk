@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 import { ConfigService } from '@nestjs/config';
 import { Job } from 'bullmq';
 import { RefundRecoveryProcessor } from './refund-recovery.processor';
@@ -11,8 +12,8 @@ describe('RefundRecoveryProcessor', () => {
    */
   function processorWith(enabled: boolean) {
     const recovery = {
-      sweep: jest.fn().mockResolvedValue(undefined),
-      recoverQueryFailed: jest.fn().mockResolvedValue(undefined),
+      sweep: vi.fn().mockResolvedValue(undefined),
+      recoverQueryFailed: vi.fn().mockResolvedValue(undefined),
     };
     const config = {
       get: () => enabled,

@@ -1,3 +1,4 @@
+import { vi, type Mock } from 'vitest';
 import { ArgumentsHost } from '@nestjs/common';
 import {
   DomainBadRequestError,
@@ -37,14 +38,14 @@ function codedError(
 
 describe('HttpExceptionFilter', () => {
   let filter: HttpExceptionFilter;
-  let status: jest.Mock;
-  let json: jest.Mock;
+  let status: Mock;
+  let json: Mock;
   let host: ArgumentsHost;
 
   beforeEach(() => {
     filter = new HttpExceptionFilter();
-    json = jest.fn();
-    status = jest.fn().mockReturnValue({ json });
+    json = vi.fn();
+    status = vi.fn().mockReturnValue({ json });
     host = {
       switchToHttp: () => ({
         getResponse: () => ({ status }),

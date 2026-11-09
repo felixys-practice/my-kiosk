@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 import { ConfigService } from '@nestjs/config';
 import { TransactionLoggerService } from '../logger/transaction-logger.service';
 import { PgService } from './pg.service';
@@ -48,7 +49,7 @@ describe('PgService', () => {
   let service: PgService;
 
   afterEach(() => {
-    jest.useRealTimers();
+    vi.useRealTimers();
   });
 
   beforeEach(() => {
@@ -58,9 +59,9 @@ describe('PgService', () => {
         path === 'refund.pgTimeoutSeconds' ? pgTimeoutSeconds : undefined,
     } as unknown as ConfigService;
     const transactionLogger = {
-      logTransaction: jest.fn(),
-      logPaymentRequest: jest.fn(),
-      logRefundRequest: jest.fn(),
+      logTransaction: vi.fn(),
+      logPaymentRequest: vi.fn(),
+      logRefundRequest: vi.fn(),
     } as unknown as TransactionLoggerService;
     service = new PgService(transactionLogger, client, configService);
   });
@@ -172,11 +173,11 @@ describe('PgService', () => {
     });
 
     it('조회 응답이 제한 시간(REFUND_PG_TIMEOUT_SECONDS)을 넘으면 QUERY_ERROR로 분류된다', async () => {
-      jest.useFakeTimers();
+      vi.useFakeTimers();
       client.inquireResponse = () => new Promise<PgRawResponse>(() => {});
 
       const pending = service.inquireCancel(cancelRequest);
-      await jest.advanceTimersByTimeAsync(pgTimeoutSeconds * 1000);
+      await vi.advanceTimersByTimeAsync(pgTimeoutSeconds * 1000);
 
       await expect(pending).resolves.toMatchObject({ result: 'QUERY_ERROR' });
     });
@@ -216,11 +217,11 @@ describe('PgService', () => {
     );
 
     it('중단 신호에 반응해 거부하는 전송 계층이라도 조회 시간 초과는 시간 초과 사유의 QUERY_ERROR다', async () => {
-      jest.useFakeTimers();
+      vi.useFakeTimers();
       client.inquireResponse = rejectOnAbort;
 
       const pending = service.inquireCancel(cancelRequest);
-      await jest.advanceTimersByTimeAsync(pgTimeoutSeconds * 1000);
+      await vi.advanceTimersByTimeAsync(pgTimeoutSeconds * 1000);
 
       await expect(pending).resolves.toEqual({
         result: 'QUERY_ERROR',
@@ -285,11 +286,11 @@ describe('PgService', () => {
     });
 
     it('취소 전송 응답이 제한 시간을 넘으면 결과 불명(UNKNOWN)이다', async () => {
-      jest.useFakeTimers();
+      vi.useFakeTimers();
       client.sendResponse = () => new Promise<PgRawResponse>(() => {});
 
       const pending = service.sendCancel(sendRequest);
-      await jest.advanceTimersByTimeAsync(pgTimeoutSeconds * 1000);
+      await vi.advanceTimersByTimeAsync(pgTimeoutSeconds * 1000);
 
       await expect(pending).resolves.toMatchObject({ result: 'UNKNOWN' });
     });
@@ -317,11 +318,11 @@ describe('PgService', () => {
     );
 
     it('중단 신호에 반응해 거부하는 전송 계층이라도 송신 시간 초과는 시간 초과 사유의 UNKNOWN이다', async () => {
-      jest.useFakeTimers();
+      vi.useFakeTimers();
       client.sendResponse = rejectOnAbort;
 
       const pending = service.sendCancel(sendRequest);
-      await jest.advanceTimersByTimeAsync(pgTimeoutSeconds * 1000);
+      await vi.advanceTimersByTimeAsync(pgTimeoutSeconds * 1000);
 
       await expect(pending).resolves.toEqual({
         result: 'UNKNOWN',

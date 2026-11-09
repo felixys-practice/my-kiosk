@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 // src/refund/refund-result.integration.spec.ts
 import 'dotenv/config';
 import { INestApplication } from '@nestjs/common';
@@ -53,7 +54,7 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
   let prisma: PrismaService;
   let service: RefundResultService;
   /** 환불 PG 포트 대역(전송·조회 응답을 테스트마다 정한다) */
-  const pgGateway = { sendCancel: jest.fn(), inquireCancel: jest.fn() };
+  const pgGateway = { sendCancel: vi.fn(), inquireCancel: vi.fn() };
   let customerId: string;
   /** PG 재시도 실행자(MANAGER, PaymentCancel.requestedById 외래 키 대상) */
   let managerId: string;
@@ -486,7 +487,7 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
     const pending = await createPendingRefund();
     // 마지막 단계(환불 지급 상태 갱신)에서 저장이 중단된 상황
     const repository = app.get(RefundRepository);
-    const interrupted = jest
+    const interrupted = vi
       .spyOn(repository, 'updateRefundPayout')
       .mockRejectedValueOnce(new Error('저장 중단'));
 
@@ -683,7 +684,7 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
     ) as RefundEventRepository['recordNotification'];
     let insideCount = 0;
     const failure = new Error('알림 저장 뒤 후속 처리 실패');
-    const spy = jest
+    const spy = vi
       .spyOn(events, 'recordNotification')
       .mockImplementation(async (tx, input) => {
         await original(tx, input);
@@ -841,7 +842,7 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
     '%s는 거래 로그에 환불·PG 취소 요청과 함께 기록된다',
     async (_label, status, apply) => {
       const pending = await createPendingRefund();
-      const txLog = jest.spyOn(
+      const txLog = vi.spyOn(
         app.get(TransactionLoggerService),
         'logTransaction',
       );
@@ -926,7 +927,7 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
 
   it('콜백 결과 저장이 실패하면 REFUND_STORAGE_UNAVAILABLE(503)로 응답해 PG가 다시 보내게 한다', async () => {
     const pending = await createPendingRefund();
-    const storageFailure = jest
+    const storageFailure = vi
       .spyOn(app.get(RefundRepository), 'runInTransaction')
       .mockRejectedValueOnce(new Error('connection terminated unexpectedly'));
 
@@ -990,7 +991,7 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       },
     });
     // 두 콜백이 사전 확인을 함께 통과한 경쟁 상황: 사전 확인은 사용 중이 아니라고 답한다
-    const raced = jest
+    const raced = vi
       .spyOn(app.get(RefundRepository), 'isCancelTransactionUsedByOther')
       .mockResolvedValueOnce(false);
 
@@ -1029,7 +1030,7 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
         actualAmount: refundAmount,
       },
     });
-    const txLog = jest.spyOn(
+    const txLog = vi.spyOn(
       app.get(TransactionLoggerService),
       'logTransaction',
     );
@@ -1671,7 +1672,7 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       data: { nextProbeAt: new Date(now.getTime() + 900_000) },
     });
     const queue = app.get<Queue>(getQueueToken('refund-recovery'));
-    const enqueue = jest.spyOn(queue, 'add').mockResolvedValue({} as Job);
+    const enqueue = vi.spyOn(queue, 'add').mockResolvedValue({} as Job);
 
     const outcome = await app.get(RefundRecoveryService).resumeRecovery(now);
 
@@ -1707,7 +1708,7 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       },
     });
     const queue = app.get<Queue>(getQueueToken('refund-recovery'));
-    const enqueue = jest.spyOn(queue, 'add').mockResolvedValue({} as Job);
+    const enqueue = vi.spyOn(queue, 'add').mockResolvedValue({} as Job);
 
     const outcome = await app.get(RefundRecoveryService).resumeRecovery(now);
 
@@ -2093,7 +2094,7 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       .get(RefundRepository)
       .findPendingAttemptOfRefund(target.refundId);
     await pgCheck.check(operator, target.refundId, target.now);
-    const staleRead = jest
+    const staleRead = vi
       .spyOn(app.get(RefundRepository), 'findPendingAttemptOfRefund')
       .mockResolvedValueOnce(stale);
 
@@ -2178,7 +2179,7 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       authoritative: true,
     });
     pgGateway.sendCancel.mockResolvedValueOnce({ result: 'ACCEPTED' });
-    const txLog = jest.spyOn(
+    const txLog = vi.spyOn(
       app.get(TransactionLoggerService),
       'logTransaction',
     );
@@ -3287,7 +3288,7 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
         'MANUAL_CONFIRMATION_REQUIRED',
       );
       await confirm(reserved);
-      const scan = jest
+      const scan = vi
         .spyOn(repository, 'findUnalertedReservations')
         .mockResolvedValueOnce(staleScan);
 
@@ -3305,7 +3306,7 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
 
     it('새 장기 미확인 알림을 저장하면 거래 로그를 한 번 남기고, 다시 탐색해도 거래 로그를 더 남기지 않는다', async () => {
       const reserved = await oldReservation();
-      const txLog = jest.spyOn(
+      const txLog = vi.spyOn(
         app.get(TransactionLoggerService),
         'logTransaction',
       );

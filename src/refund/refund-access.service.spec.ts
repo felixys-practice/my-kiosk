@@ -1,3 +1,4 @@
+import { vi, type Mocked } from 'vitest';
 import { UserRole } from '@prisma/client';
 import { RefundAccessService } from './refund-access.service';
 import { RefundRepository } from './refund.repository';
@@ -8,11 +9,11 @@ describe('RefundAccessService', () => {
   const owner = { userId: 'owner-1', role: UserRole.OWNER };
   const shopId = 'shop-1';
 
-  let repository: jest.Mocked<Pick<RefundRepository, 'isCurrentShopOwner'>>;
+  let repository: Mocked<Pick<RefundRepository, 'isCurrentShopOwner'>>;
   let service: RefundAccessService;
 
   beforeEach(() => {
-    repository = { isCurrentShopOwner: jest.fn() };
+    repository = { isCurrentShopOwner: vi.fn() };
     service = new RefundAccessService(
       repository as unknown as RefundRepository,
     );

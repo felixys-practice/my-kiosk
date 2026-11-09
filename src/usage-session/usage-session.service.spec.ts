@@ -1,4 +1,5 @@
-/* eslint-disable @typescript-eslint/unbound-method -- jest 목(mock) 메서드를 expect로 검증할 때 생기는 오탐 */
+/* eslint-disable @typescript-eslint/unbound-method -- Vitest 목(mock) 메서드를 expect로 검증할 때 생기는 오탐 */
+import { vi, type Mocked } from 'vitest';
 import { Queue } from 'bullmq';
 import { TransactionClient } from 'src/prisma/prisma.service';
 import { DomainConflictError } from 'src/common/errors';
@@ -15,10 +16,10 @@ describe('UsageSessionService', () => {
   const shopId = 'shop-1';
   const userId = 'user-1';
 
-  let repository: jest.Mocked<UsageSessionRepository>;
-  let ticketRepository: jest.Mocked<TicketRepository>;
-  let jobQueue: jest.Mocked<Queue<{ sessionId: string }>>;
-  let seatAssignmentService: jest.Mocked<SeatAssignmentService>;
+  let repository: Mocked<UsageSessionRepository>;
+  let ticketRepository: Mocked<TicketRepository>;
+  let jobQueue: Mocked<Queue<{ sessionId: string }>>;
+  let seatAssignmentService: Mocked<SeatAssignmentService>;
   let service: UsageSessionService;
 
   /**
@@ -50,22 +51,22 @@ describe('UsageSessionService', () => {
 
   beforeEach(() => {
     repository = {
-      createSession: jest.fn().mockResolvedValue('session-1'),
-      registerJobId: jest.fn(),
-      failSession: jest.fn(),
-      findSeatType: jest.fn(),
-      findAssignedSeatIdForUpdate: jest.fn(),
-    } as unknown as jest.Mocked<UsageSessionRepository>;
+      createSession: vi.fn().mockResolvedValue('session-1'),
+      registerJobId: vi.fn(),
+      failSession: vi.fn(),
+      findSeatType: vi.fn(),
+      findAssignedSeatIdForUpdate: vi.fn(),
+    } as unknown as Mocked<UsageSessionRepository>;
     ticketRepository = {
-      getTicketById: jest.fn(),
-    } as unknown as jest.Mocked<TicketRepository>;
+      getTicketById: vi.fn(),
+    } as unknown as Mocked<TicketRepository>;
     jobQueue = {
-      add: jest.fn().mockResolvedValue({ id: 'job-1' }),
-      getJob: jest.fn(),
-    } as unknown as jest.Mocked<Queue<{ sessionId: string }>>;
+      add: vi.fn().mockResolvedValue({ id: 'job-1' }),
+      getJob: vi.fn(),
+    } as unknown as Mocked<Queue<{ sessionId: string }>>;
     seatAssignmentService = {
-      getActiveByTicket: jest.fn(),
-    } as unknown as jest.Mocked<SeatAssignmentService>;
+      getActiveByTicket: vi.fn(),
+    } as unknown as Mocked<SeatAssignmentService>;
     service = new UsageSessionService(
       repository,
       ticketRepository,
@@ -130,7 +131,7 @@ describe('UsageSessionService', () => {
 
     it('고정석 이용권으로 배정 좌석에 입실하면 세션을 만든다', async () => {
       // 외부 API 스텁(무작위 실패)이 항상 성공하도록 고정한다
-      jest.spyOn(Math, 'random').mockReturnValue(0.99);
+      vi.spyOn(Math, 'random').mockReturnValue(0.99);
       ticketRepository.getTicketById.mockResolvedValue(
         timeTicket(SeatType.FIXED, 'seat-assigned'),
       );
@@ -142,7 +143,7 @@ describe('UsageSessionService', () => {
       await service.createSession('ticket-1', shopId, 'seat-assigned', userId);
 
       expect(repository.createSession).toHaveBeenCalled();
-      jest.restoreAllMocks();
+      vi.restoreAllMocks();
     }, 10000);
 
     it('배정 좌석이 없는 고정석 이용권으로 입실하면 TicketSeatUnassignedError다', async () => {
@@ -191,7 +192,7 @@ describe('UsageSessionService', () => {
 
     it('미사용 기간권으로 처음 입실하면 activatedAt과 expiresAt을 함께 넘긴다', async () => {
       // 외부 API 스텁(무작위 실패)이 항상 성공하도록 고정한다
-      jest.spyOn(Math, 'random').mockReturnValue(0.99);
+      vi.spyOn(Math, 'random').mockReturnValue(0.99);
       ticketRepository.getTicketById.mockResolvedValue({
         ...timeTicket(SeatType.FREE),
         type: TicketType.PERIOD,
@@ -212,12 +213,12 @@ describe('UsageSessionService', () => {
         (firstEntryUpdate?.expiresAt?.getTime() ?? 0) -
           (firstEntryUpdate?.activatedAt.getTime() ?? 0),
       ).toBe(30 * 24 * 60 * 60 * 1000);
-      jest.restoreAllMocks();
+      vi.restoreAllMocks();
     }, 10000);
 
     it('미사용 시간권으로 처음 입실하면 activatedAt만 넘기고 expiresAt은 넘기지 않는다', async () => {
       // 외부 API 스텁(무작위 실패)이 항상 성공하도록 고정한다
-      jest.spyOn(Math, 'random').mockReturnValue(0.99);
+      vi.spyOn(Math, 'random').mockReturnValue(0.99);
       ticketRepository.getTicketById.mockResolvedValue(
         timeTicket(SeatType.FREE),
       );
@@ -229,12 +230,12 @@ describe('UsageSessionService', () => {
       const firstEntryUpdate = repository.createSession.mock.calls[0][6];
       expect(firstEntryUpdate?.activatedAt).toBeInstanceOf(Date);
       expect(firstEntryUpdate).not.toHaveProperty('expiresAt');
-      jest.restoreAllMocks();
+      vi.restoreAllMocks();
     }, 10000);
 
     it('이미 ACTIVE인 시간권으로 다시 입실하면 7번째 인자를 넘기지 않는다', async () => {
       // 외부 API 스텁(무작위 실패)이 항상 성공하도록 고정한다
-      jest.spyOn(Math, 'random').mockReturnValue(0.99);
+      vi.spyOn(Math, 'random').mockReturnValue(0.99);
       ticketRepository.getTicketById.mockResolvedValue({
         ...timeTicket(SeatType.FREE),
         status: TicketStatus.ACTIVE,
@@ -246,12 +247,12 @@ describe('UsageSessionService', () => {
 
       // 첫 입실 시각(activatedAt)을 덮어쓰지 않는다
       expect(repository.createSession.mock.calls[0][6]).toBeUndefined();
-      jest.restoreAllMocks();
+      vi.restoreAllMocks();
     }, 10000);
 
     it('자유석 이용권으로 자유석에 입실하면 세션을 만든다', async () => {
       // 외부 API 스텁(무작위 실패)이 항상 성공하도록 고정한다
-      jest.spyOn(Math, 'random').mockReturnValue(0.99);
+      vi.spyOn(Math, 'random').mockReturnValue(0.99);
       ticketRepository.getTicketById.mockResolvedValue(
         timeTicket(SeatType.FREE),
       );
@@ -260,7 +261,7 @@ describe('UsageSessionService', () => {
       await service.createSession('ticket-1', shopId, 'seat-free', userId);
 
       expect(repository.createSession).toHaveBeenCalled();
-      jest.restoreAllMocks();
+      vi.restoreAllMocks();
     }, 10000);
   });
 });

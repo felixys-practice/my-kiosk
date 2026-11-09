@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 // src/refund/refund-acceptance.integration.spec.ts
 import 'dotenv/config';
 import { INestApplication } from '@nestjs/common';
@@ -33,8 +34,8 @@ import { UsageSessionRepository } from 'src/usage-session/usage-session.reposito
  */
 describe('환불 확정 저장 (실제 DB)', () => {
   const pgGateway = {
-    sendCancel: jest.fn(),
-    inquireCancel: jest.fn(),
+    sendCancel: vi.fn(),
+    inquireCancel: vi.fn(),
   };
   let app: INestApplication;
   let prisma: PrismaService;
@@ -314,7 +315,7 @@ describe('환불 확정 저장 (실제 DB)', () => {
       },
     });
     const repository = app.get(RefundRepository);
-    jest
+    vi
       .spyOn(repository, 'createAcceptedRefund')
       .mockRejectedValueOnce(new Error('환불 저장 실패'));
 

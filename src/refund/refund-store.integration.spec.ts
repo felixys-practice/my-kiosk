@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 // src/refund/refund-store.integration.spec.ts
 import 'dotenv/config';
 import { INestApplication } from '@nestjs/common';
@@ -31,8 +32,8 @@ import { ShopNotFoundError, TicketNotFoundError } from './errors';
  */
 describe('매장 환불 확정 저장 (실제 DB)', () => {
   const pgGateway = {
-    sendCancel: jest.fn(),
-    inquireCancel: jest.fn(),
+    sendCancel: vi.fn(),
+    inquireCancel: vi.fn(),
   };
   let app: INestApplication;
   let prisma: PrismaService;
@@ -574,7 +575,7 @@ describe('매장 환불 확정 저장 (실제 DB)', () => {
       where: { id: sessionId },
       data: { bullmqJobId: `job-${sessionId}` },
     });
-    const jobRemoval = jest
+    const jobRemoval = vi
       .spyOn(app.get(SessionEndJobQueue), 'remove')
       .mockRejectedValueOnce(new Error('redis unavailable'));
 

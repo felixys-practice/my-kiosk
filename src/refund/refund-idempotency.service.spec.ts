@@ -1,3 +1,4 @@
+import { vi, type Mock } from 'vitest';
 import { RefundAcceptanceExecutionService } from './refund-acceptance-execution.service';
 import { RefundRepository } from './refund.repository';
 import { RefundPgGateway } from 'src/pg/refund-pg.gateway';
@@ -34,7 +35,7 @@ type FakeTx = {
  * 멱등 기록 저장소의 메모리 대역
  * - (requesterId, operation, key) 고유성을 실제 DB 제약처럼 흉내 낸다
  * - 담당 토큰 조건부 갱신·삭제를 흉내 낸다
- * - 처리 트랜잭션이 기록을 잡으면(acquireInTransaction) 그 트랜잭션이 끝날 때까지 이어받기가 실패한다.
+ * - 처리 트랜잭션이 기록을 잡으면(lockClaimedRecordInTransaction) 그 트랜잭션이 끝날 때까지 이어받기가 실패한다.
  *   실제 DB에서는 이어받기가 행 잠금을 기다린 뒤 조건 불일치로 실패하는데, 대역은 기다림 없이 바로 실패로 흉내 낸다
  */
 class InMemoryIdempotencyRepository {
@@ -75,7 +76,7 @@ class InMemoryIdempotencyRepository {
     }
   }
 
-  acquireInTransaction(
+  lockClaimedRecordInTransaction(
     tx: FakeTx,
     id: string,
     claimToken: string,
@@ -116,7 +117,7 @@ class InMemoryIdempotencyRepository {
     return Promise.resolve();
   }
 
-  markHandledInTransaction(
+  updateConfirmedRefundIdInTransaction(
     tx: FakeTx,
     id: string,
     claimToken: string,
@@ -131,7 +132,7 @@ class InMemoryIdempotencyRepository {
     return Promise.resolve();
   }
 
-  completeAfterCommit(
+  saveResponseAndCompleteIdempotency(
     id: string,
     claimToken: string,
     response: { status: number; body: unknown },
@@ -440,8 +441,8 @@ describe('RefundIdempotencyService', () => {
 
   it('기록 생성이 실패한 뒤 기록이 사라져 있으면(최초 요청 거절로 삭제) 다시 기록을 만들어 처리한다', async () => {
     // 최초 요청의 기록이 있어 생성이 실패했지만, 조회 직전에 그 요청이 거절되어 기록이 지워진 경합
-    jest.spyOn(repository, 'createInProgress').mockResolvedValueOnce(null);
-    jest.spyOn(repository, 'find').mockResolvedValueOnce(null);
+    vi.spyOn(repository, 'createInProgress').mockResolvedValueOnce(null);
+    vi.spyOn(repository, 'find').mockResolvedValueOnce(null);
 
     const result = await service.executeInTransaction(
       { requesterId, operation, key, request, authorize: allow },
@@ -551,7 +552,7 @@ describe('RefundIdempotencyService', () => {
         IdempotencyRequestInProgressError,
       );
       expect(repository.committed).toEqual(['refund-B']);
-      const handlerC = jest.fn(acceptRefund('refund-C'));
+      const handlerC = vi.fn(acceptRefund('refund-C'));
       await expect(
         service.executeInTransaction(command, handlerC),
       ).resolves.toEqual(responseB);
@@ -601,8 +602,8 @@ describe('RefundIdempotencyService', () => {
       void service.executeInTransaction(command, acceptRefund('refund-A'));
       await flush();
       expireClaims();
-      const handlerB = jest.fn(acceptRefund('refund-B'));
-      const handlerC = jest.fn(acceptRefund('refund-C'));
+      const handlerB = vi.fn(acceptRefund('refund-B'));
+      const handlerC = vi.fn(acceptRefund('refund-C'));
 
       const results = await Promise.allSettled([
         service.executeInTransaction(command, handlerB),
@@ -640,18 +641,18 @@ describe('RefundIdempotencyService', () => {
       sentAt: new Date(),
     };
     let execution: RefundAcceptanceExecutionService;
-    let send: jest.Mock;
-    let snapshot: jest.Mock;
-    let confirm: jest.Mock;
+    let send: Mock;
+    let snapshot: Mock;
+    let confirm: Mock;
 
     beforeEach(() => {
-      send = jest.fn().mockResolvedValue({ result: 'ACCEPTED' });
-      snapshot = jest.fn().mockResolvedValue({
+      send = vi.fn().mockResolvedValue({ result: 'ACCEPTED' });
+      snapshot = vi.fn().mockResolvedValue({
         ...acceptance,
         acceptedAt: new Date(acceptance.acceptedAt),
         terminatedAt: new Date(acceptance.terminatedAt),
       });
-      confirm = jest.fn((tx: TransactionClient) => {
+      confirm = vi.fn((tx: TransactionClient) => {
         (tx as unknown as FakeTx).writes.push('refund-1');
         return Promise.resolve({ result, pending });
       });
@@ -661,7 +662,7 @@ describe('RefundIdempotencyService', () => {
         { findAcceptanceSnapshot: snapshot } as unknown as RefundRepository,
         { sendCancel: send } as unknown as RefundPgGateway,
         {
-          recordSendResult: jest
+          recordSendResult: vi
             .fn()
             .mockResolvedValue({ payoutStatus: 'PENDING', actionCode: null }),
         } as unknown as RefundDispatchService,
@@ -795,19 +796,19 @@ describe('RefundIdempotencyService', () => {
         createdAt: new Date(),
       });
       const doubled = {
-        createInProgress: jest.fn((_scope: unknown, hash: string) => {
+        createInProgress: vi.fn((_scope: unknown, hash: string) => {
           fingerprint = hash;
           return Promise.resolve(null);
         }),
         // 이어받기 전 조회에는 아직 커밋 전(환불 없음), 이어받은 뒤 조회에는 커밋된 환불이 보인다
-        find: jest
+        find: vi
           .fn()
           .mockImplementationOnce(() => Promise.resolve(staleRecord(null)))
           .mockImplementation(() => Promise.resolve(staleRecord('refund-1'))),
-        takeOver: jest.fn(() => Promise.resolve(true)),
-        completeAfterCommit: jest.fn(() => Promise.resolve(true)),
-        runInTransaction: jest.fn(),
-        remove: jest.fn(),
+        takeOver: vi.fn(() => Promise.resolve(true)),
+        saveResponseAndCompleteIdempotency: vi.fn(() => Promise.resolve(true)),
+        runInTransaction: vi.fn(),
+        remove: vi.fn(),
       };
       const isolated = new RefundIdempotencyService(
         doubled as unknown as RefundIdempotencyRepository,
@@ -834,11 +835,11 @@ describe('RefundIdempotencyService', () => {
         {} as RefundPgGateway,
         {} as RefundDispatchService,
       );
-      jest.spyOn(execution, 'rebuildAcceptance').mockResolvedValue(rebuilt);
+      vi.spyOn(execution, 'makeAcceptanceResponse').mockResolvedValue(rebuilt);
 
       const result = await execution.executeAcceptance(
         { requesterId, operation, key, request, authorize: allow },
-        jest.fn(),
+        vi.fn(),
       );
 
       expect({

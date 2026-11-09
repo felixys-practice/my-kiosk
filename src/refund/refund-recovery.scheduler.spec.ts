@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 import { ConfigService } from '@nestjs/config';
 import { Queue } from 'bullmq';
 import {
@@ -12,7 +13,7 @@ describe('RefundRecoveryScheduler', () => {
    * @returns 스케줄러와 큐 대역
    */
   function schedulerWith(enabled: boolean) {
-    const queue = { upsertJobScheduler: jest.fn() };
+    const queue = { upsertJobScheduler: vi.fn() };
     const values: Record<string, unknown> = {
       'refund.recoveryWorkerEnabled': enabled,
       'refund.sweepIntervalSeconds': 5,

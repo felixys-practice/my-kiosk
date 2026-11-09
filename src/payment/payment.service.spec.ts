@@ -1,4 +1,5 @@
-/* eslint-disable @typescript-eslint/unbound-method -- jest 목(mock) 메서드를 expect로 검증할 때 생기는 오탐 */
+/* eslint-disable @typescript-eslint/unbound-method -- Vitest 목(mock) 메서드를 expect로 검증할 때 생기는 오탐 */
+import { vi, type Mocked } from 'vitest';
 import {
   PaymentStatus,
   SeatReleaseReason,
@@ -18,12 +19,12 @@ import { PeriodPaymentData, TimePaymentData } from './payment.types';
 describe('PaymentService', () => {
   const tx = {} as TransactionClient;
 
-  let paymentRepository: jest.Mocked<PaymentRepository>;
-  let orderItemRepository: jest.Mocked<OrderItemRepository>;
-  let prisma: jest.Mocked<PrismaService>;
-  let seatAssignmentService: jest.Mocked<SeatAssignmentService>;
-  let transactionLogger: jest.Mocked<TransactionLoggerService>;
-  let refundSystemService: jest.Mocked<RefundSystemService>;
+  let paymentRepository: Mocked<PaymentRepository>;
+  let orderItemRepository: Mocked<OrderItemRepository>;
+  let prisma: Mocked<PrismaService>;
+  let seatAssignmentService: Mocked<SeatAssignmentService>;
+  let transactionLogger: Mocked<TransactionLoggerService>;
+  let refundSystemService: Mocked<RefundSystemService>;
   /** 트랜잭션 안에서 실행 중인지(커밋 후 호출 검증용) */
   let inTransaction: boolean;
   let service: PaymentService;
@@ -72,29 +73,29 @@ describe('PaymentService', () => {
 
   beforeEach(() => {
     paymentRepository = {
-      getPaymentByPgTransactionId: jest.fn().mockResolvedValue({
+      getPaymentByPgTransactionId: vi.fn().mockResolvedValue({
         id: 'payment-1',
         amount: 20000,
         status: PaymentStatus.REQUESTED,
         order: { id: 'order-1', userId: 'user-1' },
       }),
-      approvePayment: jest.fn(),
-      createTickets: jest.fn(),
-      failedPayment: jest.fn(),
-      failApprovalMismatch: jest.fn(),
-      lockForApproval: jest.fn().mockResolvedValue({
+      approvePayment: vi.fn(),
+      createTickets: vi.fn(),
+      failedPayment: vi.fn(),
+      failApprovalMismatch: vi.fn(),
+      lockForApproval: vi.fn().mockResolvedValue({
         status: PaymentStatus.REQUESTED,
         approvedAmount: null,
       }),
-      createPayment: jest.fn().mockResolvedValue({ id: 'payment-1' }),
-      requestedPayment: jest.fn(),
-    } as unknown as jest.Mocked<PaymentRepository>;
+      createPayment: vi.fn().mockResolvedValue({ id: 'payment-1' }),
+      requestedPayment: vi.fn(),
+    } as unknown as Mocked<PaymentRepository>;
     orderItemRepository = {
-      getOrderItem: jest.fn().mockResolvedValue([fixedItem, freeItem]),
-    } as unknown as jest.Mocked<OrderItemRepository>;
+      getOrderItem: vi.fn().mockResolvedValue([fixedItem, freeItem]),
+    } as unknown as Mocked<OrderItemRepository>;
     inTransaction = false;
     prisma = {
-      executeTransaction: jest.fn(
+      executeTransaction: vi.fn(
         async (work: (tx: TransactionClient) => Promise<unknown>) => {
           inTransaction = true;
           try {
@@ -104,20 +105,20 @@ describe('PaymentService', () => {
           }
         },
       ),
-    } as unknown as jest.Mocked<PrismaService>;
+    } as unknown as Mocked<PrismaService>;
     seatAssignmentService = {
-      activateByOrderItem: jest.fn().mockResolvedValue(true),
-      releaseByOrderItems: jest.fn(),
-      releaseEndedHolds: jest.fn().mockResolvedValue([]),
-    } as unknown as jest.Mocked<SeatAssignmentService>;
+      activateByOrderItem: vi.fn().mockResolvedValue(true),
+      releaseByOrderItems: vi.fn(),
+      releaseEndedHolds: vi.fn().mockResolvedValue([]),
+    } as unknown as Mocked<SeatAssignmentService>;
     transactionLogger = {
-      logTransaction: jest.fn(),
-    } as unknown as jest.Mocked<TransactionLoggerService>;
+      logTransaction: vi.fn(),
+    } as unknown as Mocked<TransactionLoggerService>;
     refundSystemService = {
-      acceptPaymentMismatch: jest.fn(),
-      acceptSeatAssignmentFailure: jest.fn(),
-      sendAfterCommit: jest.fn(),
-    } as unknown as jest.Mocked<RefundSystemService>;
+      acceptPaymentMismatch: vi.fn(),
+      acceptSeatAssignmentFailure: vi.fn(),
+      sendAfterCommit: vi.fn(),
+    } as unknown as Mocked<RefundSystemService>;
     service = new PaymentService(
       paymentRepository,
       orderItemRepository,

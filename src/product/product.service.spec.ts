@@ -1,4 +1,5 @@
-/* eslint-disable @typescript-eslint/unbound-method -- jest 목(mock) 메서드를 expect로 검증할 때 생기는 오탐 */
+/* eslint-disable @typescript-eslint/unbound-method -- Vitest 목(mock) 메서드를 expect로 검증할 때 생기는 오탐 */
+import { vi, type Mocked } from 'vitest';
 import { SeatType, TicketType } from '@prisma/client';
 import { ProductFieldMismatchError } from './errors/product-field-mismatch.error';
 import { ProductNotFoundError } from './errors/product-not-found.error';
@@ -10,7 +11,7 @@ describe('ProductService', () => {
   const productId = 'product-1';
   const userId = 'user-1';
 
-  let repository: jest.Mocked<ProductRepository>;
+  let repository: Mocked<ProductRepository>;
   let service: ProductService;
 
   /** 수정 전 시간권 상품 */
@@ -28,11 +29,11 @@ describe('ProductService', () => {
 
   beforeEach(() => {
     repository = {
-      createProduct: jest.fn(),
-      getProduct: jest.fn(),
-      findProductForUpdate: jest.fn().mockResolvedValue(timeProduct),
-      updateProductWithHistories: jest.fn(),
-    } as unknown as jest.Mocked<ProductRepository>;
+      createProduct: vi.fn(),
+      getProduct: vi.fn(),
+      findProductForUpdate: vi.fn().mockResolvedValue(timeProduct),
+      updateProductWithHistories: vi.fn(),
+    } as unknown as Mocked<ProductRepository>;
     service = new ProductService(repository);
   });
 

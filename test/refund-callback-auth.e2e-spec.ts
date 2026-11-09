@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
+import { vi } from 'vitest';
 import request from 'supertest';
 import { PaymentCancelStatus, RefundPayoutStatus } from '@prisma/client';
 import { REFUND_PG_GATEWAY } from '../src/pg/refund-pg.gateway';
@@ -280,10 +281,10 @@ describe('PG 콜백 서명 인증 (E2E)', () => {
   it('서명이 맞는 콜백의 저장이 실패하면 환불·결제 콜백 모두 503 REFUND_STORAGE_UNAVAILABLE로 응답해 PG가 다시 보내게 한다', async () => {
     const pending = await pendingRefund();
     const awaiting = await ctx.orderPeriodAwaitingApproval();
-    const refundFailure = jest
+    const refundFailure = vi
       .spyOn(ctx.app.get(RefundResultService), 'applyPgResult')
       .mockRejectedValueOnce(new Error('DB 연결 끊김'));
-    const paymentFailure = jest
+    const paymentFailure = vi
       .spyOn(ctx.app.get(PaymentRepository), 'approvePayment')
       .mockRejectedValueOnce(new Error('DB 연결 끊김'));
 
@@ -317,7 +318,7 @@ describe('PG 콜백 서명 인증 (E2E)', () => {
 
   it('서명 비밀값과 서명 값은 거래 로그에 남지 않는다', async () => {
     const pending = await pendingRefund();
-    const txLog = jest.spyOn(
+    const txLog = vi.spyOn(
       ctx.app.get(TransactionLoggerService),
       'logTransaction',
     );

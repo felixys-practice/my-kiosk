@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
+import { vi } from 'vitest';
 import request from 'supertest';
 import { randomUUID } from 'crypto';
 import {
@@ -54,7 +55,7 @@ describe('환불 중단 복구 (E2E)', () => {
   it('U414 환불 확정 트랜잭션이 커밋 전에 실패하면 이용권과 PG 호출은 그대로다', async () => {
     const issued = await ctx.issuePeriodTicket({ fixedSeat: true });
     const refunds = ctx.app.get<RefundRepository>(RefundRepository);
-    const createSpy = jest
+    const createSpy = vi
       .spyOn(refunds, 'createAcceptedRefund')
       .mockRejectedValueOnce(new Error('확정 저장 중단'));
     try {
@@ -108,7 +109,7 @@ describe('환불 중단 복구 (E2E)', () => {
         RefundAcceptanceExecutionService,
       );
       const sendSpy = beforeSend
-        ? jest
+        ? vi
             .spyOn(acceptance, 'sendAccepted')
             .mockRejectedValueOnce(new Error('PG 전송 전 중단'))
         : null;
@@ -227,7 +228,7 @@ describe('환불 중단 복구 (E2E)', () => {
       pgTransactionId: `pg-crash-${issued.ticketId}`,
       cancelledAmount: issued.amount,
     });
-    const recordSpy = jest
+    const recordSpy = vi
       .spyOn(dispatch, 'recordSendResult')
       .mockRejectedValueOnce(new Error('결과 저장 중단'));
     try {
@@ -359,7 +360,7 @@ describe('환불 중단 복구 (E2E)', () => {
       releaseInquiry = resolve;
     });
     let calls = 0;
-    const inquirySpy = jest
+    const inquirySpy = vi
       .spyOn(pgStub, 'inquireCancel')
       .mockImplementation(async (input) => {
         const result = await originalInquire(input);

@@ -1,3 +1,4 @@
+import { vi, type Mocked } from 'vitest';
 import { RefundAcceptanceExecutionService } from './refund-acceptance-execution.service';
 import { RefundIdempotencyRepository } from './refund-idempotency.repository';
 /* eslint-disable @typescript-eslint/unbound-method -- jest 목(mock) 메서드를 expect로 검증할 때 생기는 오탐 */
@@ -28,7 +29,7 @@ describe('RefundAcceptanceService', () => {
   const ticketId = 'ticket-1';
   const tx = {} as TransactionClient;
 
-  let repository: jest.Mocked<
+  let repository: Mocked<
     Pick<
       RefundRepository,
       | 'findCustomerRefundTarget'
@@ -37,11 +38,11 @@ describe('RefundAcceptanceService', () => {
       | 'createAcceptedRefund'
     >
   >;
-  let locking: jest.Mocked<Pick<RefundLockingRepository, 'lockForAcceptance'>>;
-  let seatAssignment: jest.Mocked<
+  let locking: Mocked<Pick<RefundLockingRepository, 'lockForAcceptance'>>;
+  let seatAssignment: Mocked<
     Pick<SeatAssignmentService, 'releaseByTicket'>
   >;
-  let pgGateway: jest.Mocked<RefundPgGateway>;
+  let pgGateway: Mocked<RefundPgGateway>;
   let service: RefundAcceptanceService;
   /** 전송 결과 반영 대역(전송 결과를 저장하고 지급 처리 중 상태를 돌려준다) */
   const dispatchService = {
@@ -49,7 +50,7 @@ describe('RefundAcceptanceService', () => {
       claimToken: 'claim-1',
       claimUntil: new Date('2026-10-28T12:00:30Z'),
     }),
-    recordSendResult: jest.fn().mockResolvedValue({
+    recordSendResult: vi.fn().mockResolvedValue({
       payoutStatus: RefundPayoutStatus.PENDING,
       actionCode: null,
     }),
@@ -94,18 +95,18 @@ describe('RefundAcceptanceService', () => {
 
   beforeEach(() => {
     repository = {
-      findCustomerRefundTarget: jest.fn().mockResolvedValue(eligibleTarget()),
-      terminateTicket: jest.fn().mockResolvedValue(undefined),
-      closeOpenPausesForRefund: jest.fn().mockResolvedValue(undefined),
-      createAcceptedRefund: jest
+      findCustomerRefundTarget: vi.fn().mockResolvedValue(eligibleTarget()),
+      terminateTicket: vi.fn().mockResolvedValue(undefined),
+      closeOpenPausesForRefund: vi.fn().mockResolvedValue(undefined),
+      createAcceptedRefund: vi
         .fn()
         .mockResolvedValue({ refundId: 'refund-1', paymentCancelId: 'pc-1' }),
     };
-    locking = { lockForAcceptance: jest.fn().mockResolvedValue(undefined) };
-    seatAssignment = { releaseByTicket: jest.fn().mockResolvedValue(null) };
+    locking = { lockForAcceptance: vi.fn().mockResolvedValue(undefined) };
+    seatAssignment = { releaseByTicket: vi.fn().mockResolvedValue(null) };
     pgGateway = {
-      sendCancel: jest.fn().mockResolvedValue({ result: 'ACCEPTED' }),
-      inquireCancel: jest.fn(),
+      sendCancel: vi.fn().mockResolvedValue({ result: 'ACCEPTED' }),
+      inquireCancel: vi.fn(),
     };
     // 멱등 처리 대역: 처리를 트랜잭션 안에서 실행하고, 끝나면 커밋으로 기록한다
     events = [];

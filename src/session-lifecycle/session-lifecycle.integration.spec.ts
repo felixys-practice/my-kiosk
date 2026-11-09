@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 // src/session-lifecycle/session-lifecycle.integration.spec.ts
 import 'dotenv/config';
 import { Test, TestingModule } from '@nestjs/testing';
@@ -101,7 +102,7 @@ describe('SessionLifecycleService 잠금 순서 (실제 DB)', () => {
     prisma = module.get(PrismaService);
     // 소진되지 않는 시나리오라 좌석 배정 해제는 호출되지 않는다
     service = new SessionLifecycleService({
-      releaseByTicket: jest.fn(),
+      releaseByTicket: vi.fn(),
     } as unknown as SeatAssignmentService);
 
     const suffix = randomUUID().slice(0, 8);

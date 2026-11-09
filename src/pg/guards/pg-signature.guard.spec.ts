@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 import { createHash, createHmac } from 'crypto';
 import { ExecutionContext } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -98,11 +99,11 @@ describe('PgSignatureGuard', () => {
   }
 
   beforeEach(() => {
-    jest.useFakeTimers().setSystemTime(nowSeconds * 1000);
+    vi.useFakeTimers().setSystemTime(nowSeconds * 1000);
   });
 
   afterEach(() => {
-    jest.useRealTimers();
+    vi.useRealTimers();
   });
 
   it('올바른 서명과 현재 시각의 콜백은 로그인 없이 통과한다', () => {

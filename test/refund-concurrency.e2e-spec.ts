@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
+import { vi } from 'vitest';
 import request from 'supertest';
 import { randomUUID } from 'crypto';
 import { REFUND_PG_GATEWAY } from '../src/pg/refund-pg.gateway';
@@ -66,7 +67,7 @@ describe('환불 동시성 (E2E)', () => {
     });
     let calls = 0;
     let storeCallStarted = false;
-    const spy = jest
+    const spy = vi
       .spyOn(acceptance, 'findLockedTarget')
       .mockImplementation(async (...args) => {
         calls += 1;
@@ -82,7 +83,7 @@ describe('환불 동시성 (E2E)', () => {
       repository.findCustomerRefundTarget.bind(repository);
     let delayedStoreRead = false;
     let storeReadCompleted = false;
-    const readSpy = jest
+    const readSpy = vi
       .spyOn(repository, 'findCustomerRefundTarget')
       .mockImplementation(async (...args) => {
         if (storeCallStarted && !delayedStoreRead) {
@@ -96,7 +97,7 @@ describe('환불 동시성 (E2E)', () => {
     const originalLock: RefundLockingRepository['lockForAcceptance'] =
       locking.lockForAcceptance.bind(locking);
     let lockCalls = 0;
-    const lockSpy = jest
+    const lockSpy = vi
       .spyOn(locking, 'lockForAcceptance')
       .mockImplementation(async (...args) => {
         lockCalls += 1;
@@ -182,7 +183,7 @@ describe('환불 동시성 (E2E)', () => {
     const attempted = new Promise<void>((resolve) => {
       refundLockAttempted = resolve;
     });
-    const createSpy = jest
+    const createSpy = vi
       .spyOn(sessions, 'createSession')
       .mockImplementation(
         (
@@ -211,7 +212,7 @@ describe('환불 동시성 (E2E)', () => {
           );
         },
       );
-    const lockSpy = jest
+    const lockSpy = vi
       .spyOn(locking, 'lockForAcceptance')
       .mockImplementation((...args) => {
         refundLockAttempted();
@@ -288,7 +289,7 @@ describe('환불 동시성 (E2E)', () => {
     });
     const originalInquire: RefundPgStub['inquireCancel'] =
       pgStub.inquireCancel.bind(pgStub);
-    const inquirySpy = jest
+    const inquirySpy = vi
       .spyOn(pgStub, 'inquireCancel')
       .mockImplementation(async (input) => {
         const result = await originalInquire(input);
@@ -353,7 +354,7 @@ describe('환불 동시성 (E2E)', () => {
     const originalInquire: RefundPgStub['inquireCancel'] =
       pgStub.inquireCancel.bind(pgStub);
     let inquiryCalls = 0;
-    const inquirySpy = jest
+    const inquirySpy = vi
       .spyOn(pgStub, 'inquireCancel')
       .mockImplementation(async (input) => {
         const result = await originalInquire(input);
@@ -424,7 +425,7 @@ describe('환불 동시성 (E2E)', () => {
     const originalInquire: RefundPgStub['inquireCancel'] =
       pgStub.inquireCancel.bind(pgStub);
     let inquiryCalls = 0;
-    const inquirySpy = jest
+    const inquirySpy = vi
       .spyOn(pgStub, 'inquireCancel')
       .mockImplementation(async (input) => {
         const result = await originalInquire(input);
@@ -494,7 +495,7 @@ describe('환불 동시성 (E2E)', () => {
       });
       const originalInquire: RefundPgStub['inquireCancel'] =
         pgStub.inquireCancel.bind(pgStub);
-      const inquirySpy = jest
+      const inquirySpy = vi
         .spyOn(pgStub, 'inquireCancel')
         .mockImplementation(async (input) => {
           const result = await originalInquire(input);
@@ -598,14 +599,14 @@ describe('환불 동시성 (E2E)', () => {
     });
     let lockCalls = 0;
     let markCalls = 0;
-    const lockSpy = jest
+    const lockSpy = vi
       .spyOn(locking, 'lockForPayout')
       .mockImplementation((...args) => {
         lockCalls += 1;
         if (lockCalls === 2) secondLockAttempted();
         return originalLock(...args);
       });
-    const markSpy = jest
+    const markSpy = vi
       .spyOn(operations, 'markPayoutSucceeded')
       .mockImplementation(async (...args) => {
         markCalls += 1;
@@ -688,7 +689,7 @@ describe('환불 동시성 (E2E)', () => {
       const originalInquire: RefundPgStub['inquireCancel'] =
         pgStub.inquireCancel.bind(pgStub);
       let calls = 0;
-      const inquirySpy = jest
+      const inquirySpy = vi
         .spyOn(pgStub, 'inquireCancel')
         .mockImplementation(async (input) => {
           const result = await originalInquire(input);
@@ -781,14 +782,14 @@ describe('환불 동시성 (E2E)', () => {
         secondLockAttempted = resolve;
       });
       let lockCalls = 0;
-      const lockSpy = jest
+      const lockSpy = vi
         .spyOn(locking, 'lockForPayout')
         .mockImplementation((...args) => {
           lockCalls += 1;
           if (lockCalls === 2) secondLockAttempted();
           return originalLock(...args);
         });
-      const retrySpy = jest
+      const retrySpy = vi
         .spyOn(refunds, 'createRetryAttempt')
         .mockImplementation(async (...args) => {
           if (retryFirst) {
@@ -797,7 +798,7 @@ describe('환불 동시성 (E2E)', () => {
           }
           return originalRetry(...args);
         });
-      const reserveSpy = jest
+      const reserveSpy = vi
         .spyOn(operations, 'createReservation')
         .mockImplementation(async (...args) => {
           if (!retryFirst) {
@@ -903,7 +904,7 @@ describe('환불 동시성 (E2E)', () => {
     const attempted = new Promise<void>((resolve) => {
       callbackLockAttempted = resolve;
     });
-    const succeededSpy = jest
+    const succeededSpy = vi
       .spyOn(refunds, 'markAttemptSucceeded')
       .mockImplementation(async (...args) => {
         inquiryLocked();
@@ -917,7 +918,7 @@ describe('환불 동시성 (E2E)', () => {
         .send({})
         .then((response) => response);
       await locked;
-      const lockSpy = jest
+      const lockSpy = vi
         .spyOn(locking, 'lockForPayout')
         .mockImplementation((...args) => {
           callbackLockAttempted();
@@ -990,7 +991,7 @@ describe('환불 동시성 (E2E)', () => {
     const readCompleted = new Promise<void>((resolve) => {
       entryReadCompleted = resolve;
     });
-    const findSpy = jest
+    const findSpy = vi
       .spyOn(acceptance, 'findLockedTarget')
       .mockImplementation(async (...args) => {
         const target = await originalFind(...args);
@@ -998,7 +999,7 @@ describe('환불 동시성 (E2E)', () => {
         await holdRefund;
         return target;
       });
-    const createSpy = jest
+    const createSpy = vi
       .spyOn(sessions, 'createSession')
       .mockImplementation((...args) => {
         entryReadCompleted();

@@ -1,4 +1,5 @@
-/* eslint-disable @typescript-eslint/unbound-method -- jest 목(mock) 메서드를 expect로 검증할 때 생기는 오탐 */
+/* eslint-disable @typescript-eslint/unbound-method -- Vitest 목(mock) 메서드를 expect로 검증할 때 생기는 오탐 */
+import { vi, type Mocked } from 'vitest';
 import { SeatStatus, SeatType } from '@prisma/client';
 import { TransactionClient } from 'src/prisma/prisma.service';
 import { SeatAssignmentService } from 'src/seat-assignment/seat-assignment.service';
@@ -13,8 +14,8 @@ describe('SeatService', () => {
   const tx = {} as TransactionClient;
   const seatId = 'seat-1';
 
-  let repository: jest.Mocked<SeatRepository>;
-  let seatAssignmentService: jest.Mocked<SeatAssignmentService>;
+  let repository: Mocked<SeatRepository>;
+  let seatAssignmentService: Mocked<SeatAssignmentService>;
   let service: SeatService;
 
   /** 점유 중인 배정 1건 */
@@ -30,21 +31,21 @@ describe('SeatService', () => {
 
   beforeEach(() => {
     repository = {
-      getSeat: jest.fn(),
-      createSeat: jest.fn(),
-      updateSeat: jest.fn(),
-      deleteSeat: jest.fn(),
-      getLastSeatNumber: jest.fn(),
-      findByIdForUpdate: jest.fn(),
-      hasActiveSession: jest.fn(),
-      runInTransaction: jest.fn((work: (tx: TransactionClient) => unknown) =>
+      getSeat: vi.fn(),
+      createSeat: vi.fn(),
+      updateSeat: vi.fn(),
+      deleteSeat: vi.fn(),
+      getLastSeatNumber: vi.fn(),
+      findByIdForUpdate: vi.fn(),
+      hasActiveSession: vi.fn(),
+      runInTransaction: vi.fn((work: (tx: TransactionClient) => unknown) =>
         Promise.resolve(work(tx)),
       ),
-    } as unknown as jest.Mocked<SeatRepository>;
+    } as unknown as Mocked<SeatRepository>;
     seatAssignmentService = {
-      findOccupyingBySeat: jest.fn(),
-      getAssignableMap: jest.fn(),
-    } as unknown as jest.Mocked<SeatAssignmentService>;
+      findOccupyingBySeat: vi.fn(),
+      getAssignableMap: vi.fn(),
+    } as unknown as Mocked<SeatAssignmentService>;
     service = new SeatService(repository, seatAssignmentService);
 
     // 기본: 이용 중이 아닌 사용 가능한 고정석, 점유 중인 배정 없음

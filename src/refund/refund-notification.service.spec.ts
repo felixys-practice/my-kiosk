@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 import {
   notificationScope,
   RefundNotificationRepository,
@@ -33,10 +34,10 @@ function receiptStore() {
   const receipts = new Map<string, { readAt: Date }>();
   const prisma = {
     refundNotification: {
-      findFirst: jest.fn().mockResolvedValue(notificationRow()),
+      findFirst: vi.fn().mockResolvedValue(notificationRow()),
     },
     refundNotificationReceipt: {
-      createMany: jest.fn(
+      createMany: vi.fn(
         (input: {
           data: { notificationId: string; userId: string; readAt: Date }[];
           skipDuplicates: boolean;
@@ -51,7 +52,7 @@ function receiptStore() {
           return Promise.resolve({ count: 1 });
         },
       ),
-      findUniqueOrThrow: jest.fn(
+      findUniqueOrThrow: vi.fn(
         (input: {
           where: {
             notificationId_userId: { notificationId: string; userId: string };
@@ -107,7 +108,7 @@ describe('환불 알림 수신 범위', () => {
     ]);
   });
   it('U260 수신할 수 없는 알림은 읽음 전 조회 단계에서 찾을 수 없음으로 거절한다', async () => {
-    const findVisible = jest.fn().mockResolvedValue(null);
+    const findVisible = vi.fn().mockResolvedValue(null);
     const service = new RefundNotificationService({
       findVisible,
     } as unknown as RefundNotificationRepository);
@@ -124,7 +125,7 @@ describe('환불 알림 수신 범위', () => {
   });
   it('U396 알림은 공개 사건 필드와 본인의 읽음만 응답하고 내부 사건 키를 노출하지 않는다', async () => {
     const repository = {
-      list: jest.fn().mockResolvedValue({
+      list: vi.fn().mockResolvedValue({
         items: [
           notificationRow(),
           notificationRow({
@@ -170,7 +171,7 @@ describe('환불 알림 수신 범위', () => {
     expect(JSON.stringify(result)).not.toContain('내부 사건 키');
   });
   it('U395 계산 위치가 안전한 정수 범위를 넘으면 목록 쿼리 전에 거절한다', async () => {
-    const list = jest.fn();
+    const list = vi.fn();
     const repository = { list } as unknown as RefundNotificationRepository;
     await expect(
       new RefundNotificationService(repository).list(
@@ -184,9 +185,9 @@ describe('환불 알림 수신 범위', () => {
     expect(list).not.toHaveBeenCalled();
   });
   it('U394 audience를 지정해도 현재 역할·매장 범위를 확장하지 않는다', async () => {
-    const findMany = jest.fn().mockResolvedValue([]);
+    const findMany = vi.fn().mockResolvedValue([]);
     const prisma = {
-      refundNotification: { findMany, count: jest.fn().mockResolvedValue(0) },
+      refundNotification: { findMany, count: vi.fn().mockResolvedValue(0) },
       $transaction: (queries: Promise<unknown>[]) => Promise.all(queries),
     } as unknown as PrismaService;
     const actor = { userId: 'owner', role: 'OWNER' };
@@ -203,9 +204,9 @@ describe('환불 알림 수신 범위', () => {
     );
   });
   it('U259 미읽음 필터는 요청자에게 읽음 기록이 없는 알림만 조회한다', async () => {
-    const findMany = jest.fn().mockResolvedValue([]);
+    const findMany = vi.fn().mockResolvedValue([]);
     const prisma = {
-      refundNotification: { findMany, count: jest.fn().mockResolvedValue(0) },
+      refundNotification: { findMany, count: vi.fn().mockResolvedValue(0) },
       $transaction: (queries: Promise<unknown>[]) => Promise.all(queries),
     } as unknown as PrismaService;
     const actor = { userId: 'owner', role: 'OWNER' };
@@ -225,9 +226,9 @@ describe('환불 알림 수신 범위', () => {
     );
   });
   it('U393 목록은 수신 범위·정렬·페이지와 본인 읽음만 DB에서 조회한다', async () => {
-    const findMany = jest.fn().mockResolvedValue([]);
+    const findMany = vi.fn().mockResolvedValue([]);
     const prisma = {
-      refundNotification: { findMany, count: jest.fn().mockResolvedValue(0) },
+      refundNotification: { findMany, count: vi.fn().mockResolvedValue(0) },
       $transaction: (queries: Promise<unknown>[]) => Promise.all(queries),
     } as unknown as PrismaService;
     const actor = { userId: 'owner', role: 'OWNER' };

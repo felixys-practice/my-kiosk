@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 import { TransactionClient } from 'src/prisma/prisma.service';
 import { TransactionLoggerService } from 'src/logger/transaction-logger.service';
 import { RefundLedgerRepository } from 'src/ledger/refund-ledger.repository';
@@ -10,7 +11,7 @@ import { RefundResultService } from './refund-result.service';
 describe('환불 콜백의 필수 연결', () => {
   it('U398 환불 기록에 연결되지 않은 취소 요청은 옛 경로로 처리하지 않고 대상 없음으로 거절한다', async () => {
     const repository = {
-      findAttemptForResult: jest.fn().mockResolvedValue(null),
+      findAttemptForResult: vi.fn().mockResolvedValue(null),
       runInTransaction: (work: (tx: TransactionClient) => Promise<unknown>) =>
         work({} as TransactionClient),
     } as unknown as RefundRepository;

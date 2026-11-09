@@ -1,3 +1,4 @@
+import { vi, type Mocked } from 'vitest';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { RefundQueryRepository } from './refund-query.repository';
 import type { RefundQueryRow } from './refund-query.repository';
@@ -42,11 +43,11 @@ describe('환불 조회', () => {
         { id: 'failed', status: 'FAILED' },
       ] as RefundQueryRow['paymentCancels'],
     });
-    const findMany = jest.fn().mockResolvedValue({ items: [row], total: 1 });
+    const findMany = vi.fn().mockResolvedValue({ items: [row], total: 1 });
     const repository = {
-      findUser: jest.fn().mockResolvedValue({ id: 'customer' }),
+      findUser: vi.fn().mockResolvedValue({ id: 'customer' }),
       findMany,
-    } as unknown as jest.Mocked<RefundQueryRepository>;
+    } as unknown as Mocked<RefundQueryRepository>;
     const query = Object.assign(new GetRefundQueryDto(), {
       actionRequiredOnly: true,
       payoutStatus: 'ACTION_REQUIRED',
@@ -112,10 +113,10 @@ describe('환불 조회', () => {
       ] as RefundQueryRow['manualPayouts'],
     });
     const repository = {
-      findById: jest.fn().mockResolvedValue(row),
-      findShop: jest.fn().mockResolvedValue({ id: 'shop' }),
-      findMany: jest.fn().mockResolvedValue({ items: [row], total: 1 }),
-    } as unknown as jest.Mocked<RefundQueryRepository>;
+      findById: vi.fn().mockResolvedValue(row),
+      findShop: vi.fn().mockResolvedValue({ id: 'shop' }),
+      findMany: vi.fn().mockResolvedValue({ items: [row], total: 1 }),
+    } as unknown as Mocked<RefundQueryRepository>;
     const service = new RefundQueryService(repository);
     const manager = await service.detail(
       { userId: 'manager', role: 'MANAGER' },
@@ -160,8 +161,8 @@ describe('환불 조회', () => {
       terminatedAt: null,
     });
     const repository = {
-      findMany: jest.fn().mockResolvedValue({ items: [row], total: 1 }),
-    } as unknown as jest.Mocked<RefundQueryRepository>;
+      findMany: vi.fn().mockResolvedValue({ items: [row], total: 1 }),
+    } as unknown as Mocked<RefundQueryRepository>;
     const result = await new RefundQueryService(repository).byMe({
       userId: 'customer',
       role: 'USER',
@@ -179,8 +180,8 @@ describe('환불 조회', () => {
   it('U246 지급 합계로 미지급액과 초과액을 계산하고 음수를 표시하지 않는다', async () => {
     const items = [0, 700, 1300].map((paidAmount) => refundRow({ paidAmount }));
     const repository = {
-      findMany: jest.fn().mockResolvedValue({ items, total: items.length }),
-    } as unknown as jest.Mocked<RefundQueryRepository>;
+      findMany: vi.fn().mockResolvedValue({ items, total: items.length }),
+    } as unknown as Mocked<RefundQueryRepository>;
     const result = await new RefundQueryService(repository).byMe({
       userId: 'customer',
       role: 'USER',
@@ -198,9 +199,9 @@ describe('환불 조회', () => {
   });
   it('U244 권한 있는 매장에 환불이 없으면 빈 목록과 페이지 메타를 반환한다', async () => {
     const repository = {
-      findShop: jest.fn().mockResolvedValue({ id: 'shop' }),
-      findMany: jest.fn().mockResolvedValue({ items: [], total: 0 }),
-    } as unknown as jest.Mocked<RefundQueryRepository>;
+      findShop: vi.fn().mockResolvedValue({ id: 'shop' }),
+      findMany: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+    } as unknown as Mocked<RefundQueryRepository>;
     await expect(
       new RefundQueryService(repository).byShop(
         { userId: 'owner', role: 'OWNER' },
@@ -212,9 +213,9 @@ describe('환불 조회', () => {
     });
   });
   it('U239 페이지를 자르기 전에 신청 시각과 환불 ID 내림차순을 DB에 지정한다', async () => {
-    const findMany = jest.fn().mockResolvedValue([]);
+    const findMany = vi.fn().mockResolvedValue([]);
     const prisma = {
-      refund: { findMany, count: jest.fn().mockResolvedValue(0) },
+      refund: { findMany, count: vi.fn().mockResolvedValue(0) },
       $transaction: (queries: Promise<unknown>[]) => Promise.all(queries),
     } as unknown as PrismaService;
     await new RefundQueryRepository(prisma).findMany({}, 2, 20);

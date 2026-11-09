@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
+import { vi } from 'vitest';
 import { signedCallback } from './helpers/pg-callback';
 import {
   PaymentCancelStatus,
@@ -205,7 +206,7 @@ describe('승인 금액 불일치의 자동 취소 (E2E)', () => {
 
   it('자동 취소 환불 저장 중 오류로 중단되면 결제·좌석 선점·환불 어느 것도 바뀌지 않는다', async () => {
     const awaiting = await ctx.orderPeriodAwaitingApproval({ fixedSeat: true });
-    const failing = jest
+    const failing = vi
       .spyOn(ctx.app.get(RefundSystemService), 'acceptPaymentMismatch')
       .mockRejectedValueOnce(new Error('저장 중단'));
 
