@@ -1,3 +1,4 @@
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import { Transform } from 'class-transformer';
 
@@ -19,6 +20,13 @@ export class ReviewRefundAmountDto {
   @IsString()
   @MinLength(1)
   @MaxLength(500)
+  @ApiProperty({
+    type: String,
+    description: '처리 사유. 앞뒤 공백을 제거합니다.',
+    minLength: 1,
+    maxLength: 500,
+    example: '고객 요청으로 환불 처리',
+  })
   reason!: string;
 
   // 확인 근거 1~1000자
@@ -26,5 +34,12 @@ export class ReviewRefundAmountDto {
   @Transform(trimmed)
   @IsString()
   @MaxLength(1000)
+  @ApiPropertyOptional({
+    type: String,
+    description:
+      '운영 증빙 참조. DTO에서는 생략할 수 있지만 서비스에서 증빙 누락을 거절합니다.',
+    maxLength: 1000,
+    example: 'evidence/refund/2026-11-12/001',
+  })
   evidenceReference?: string;
 }

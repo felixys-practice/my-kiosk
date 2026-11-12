@@ -1,3 +1,4 @@
+import { ApiProperty } from '@nestjs/swagger';
 import { IsString, MaxLength, MinLength } from 'class-validator';
 import { Transform } from 'class-transformer';
 
@@ -12,5 +13,12 @@ export class RetryRefundDto {
   @IsString()
   @MinLength(1)
   @MaxLength(500)
+  @ApiProperty({
+    type: String,
+    description: '처리 사유. 앞뒤 공백을 제거합니다.',
+    minLength: 1,
+    maxLength: 500,
+    example: '고객 요청으로 환불 처리',
+  })
   reason!: string;
 }

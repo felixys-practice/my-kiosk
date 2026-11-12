@@ -1,3 +1,4 @@
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   isISO8601,
   IsDate,
@@ -31,6 +32,12 @@ export class ConfirmManualPayoutDto {
   // 실제 지급액(원 단위 양의 정수, 예약 금액과 같은지는 서비스에서 확인)
   @IsInt()
   @IsPositive()
+  @ApiProperty({
+    type: Number,
+    description: '실제 지급액(원 단위 양의 정수). 예약 금액과 같아야 합니다.',
+    minimum: 1,
+    example: 10000,
+  })
   amount!: number;
 
   // 실제 지급 시각(날짜·시각·시간대가 모두 있는 ISO 문자열, 저장은 UTC), 미래 불가.
@@ -44,6 +51,13 @@ export class ConfirmManualPayoutDto {
   )
   @IsDate()
   @MaxDate(() => new Date())
+  @ApiProperty({
+    type: String,
+    description:
+      '실제 지급 시각. 시간대가 포함된 ISO 8601 문자열이며 미래 시각은 허용하지 않습니다.',
+    format: 'date-time',
+    example: '2026-11-11T10:00:00+09:00',
+  })
   paidAt!: Date;
 
   // 실제 지급 거래 식별자 1~200자(지급 기관 범위를 포함해 전역으로 구별되는 값)
@@ -51,6 +65,13 @@ export class ConfirmManualPayoutDto {
   @IsString()
   @MinLength(1)
   @MaxLength(200)
+  @ApiProperty({
+    type: String,
+    description: '지급 기관 범위를 포함하는 전역 고유 거래 식별자',
+    minLength: 1,
+    maxLength: 200,
+    example: 'bank:transfer:20261111:001',
+  })
   externalTransactionId!: string;
 
   // 운영 증빙 참조 1~1000자
@@ -58,5 +79,12 @@ export class ConfirmManualPayoutDto {
   @Transform(trimmed)
   @IsString()
   @MaxLength(1000)
+  @ApiPropertyOptional({
+    type: String,
+    description:
+      '운영 증빙 참조. DTO에서는 생략할 수 있지만 서비스에서 증빙 누락을 거절합니다.',
+    maxLength: 1000,
+    example: 'evidence/refund/2026-11-12/001',
+  })
   evidenceReference?: string;
 }

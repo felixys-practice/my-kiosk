@@ -29,7 +29,22 @@ import { RefundPgCheckService } from './refund-pg-check.service';
 import { RefundAcceptanceService } from './refund-acceptance.service';
 import { RefundResultService } from './refund-result.service';
 import { RefundQueryService } from './refund-query.service';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiOperation,
+  ApiTags,
+  ApiBearerAuth,
+  ApiParam,
+  ApiHeader,
+  ApiBody,
+} from '@nestjs/swagger';
+import {
+  ApiRefundResponse,
+  ApiRefundErrors,
+  pgCheckSchema,
+  refundAcceptanceSchema,
+  refundDetailSchema,
+  refundListSchema,
+} from './refund.swagger';
 
 @ApiTags('refund')
 @Controller('refund')
@@ -51,6 +66,26 @@ export class RefundController {
    * @param idempotencyKey 선택 멱등 키
    * @returns 접수 응답 본문
    */
+  @ApiBearerAuth('access-token')
+  @ApiHeader({
+    name: 'idempotency-key',
+    required: false,
+    description:
+      '동일 요청 재전송 시 같은 키를 사용합니다. 다른 요청 내용으로 재사용하면 충돌합니다.',
+    schema: {
+      type: 'string',
+      minLength: 1,
+      maxLength: 128,
+      pattern: '^[!-~]+$',
+    },
+  })
+  @ApiRefundResponse(200, '0원 환불 확정', refundAcceptanceSchema)
+  @ApiRefundResponse(
+    202,
+    '환불 접수. 실제 지급 완료를 의미하지 않습니다.',
+    refundAcceptanceSchema,
+  )
+  @ApiRefundErrors(400, 401, 403, 404, 409, 503)
   @ApiOperation({ summary: '고객 본인 이용권의 종료와 환불 금액 확정' })
   @Post()
   async refund(
@@ -81,6 +116,27 @@ export class RefundController {
    * @param idempotencyKey 선택 멱등 키
    * @returns 접수 응답 본문
    */
+  @ApiBearerAuth('access-token')
+  @ApiParam({ name: 'shopId', format: 'uuid', description: 'shopId (UUID)' })
+  @ApiHeader({
+    name: 'idempotency-key',
+    required: false,
+    description:
+      '동일 요청 재전송 시 같은 키를 사용합니다. 다른 요청 내용으로 재사용하면 충돌합니다.',
+    schema: {
+      type: 'string',
+      minLength: 1,
+      maxLength: 128,
+      pattern: '^[!-~]+$',
+    },
+  })
+  @ApiRefundResponse(200, '0원 환불 확정', refundAcceptanceSchema)
+  @ApiRefundResponse(
+    202,
+    '환불 접수. 실제 지급 완료를 의미하지 않습니다.',
+    refundAcceptanceSchema,
+  )
+  @ApiRefundErrors(400, 401, 403, 404, 409, 503)
   @ApiOperation({ summary: '점주 매장 이용권의 종료와 환불 금액 확정' })
   @Post('shop/:shopId')
   async storeRefund(
@@ -114,6 +170,20 @@ export class RefundController {
    * @param res 응답 상태 지정용(진행 중 202, 그 밖 200)
    * @returns 확인 결과와 최신 환불 정보
    */
+  @ApiBearerAuth('access-token')
+  @ApiParam({
+    name: 'refundId',
+    format: 'uuid',
+    description: 'refundId (UUID)',
+  })
+  @ApiBody({
+    required: false,
+    description: '본문 생략 또는 빈 객체만 허용합니다.',
+    schema: { type: 'object', additionalProperties: false },
+  })
+  @ApiRefundResponse(200, '확인 결과', pgCheckSchema)
+  @ApiRefundResponse(202, '이미 확인 작업이 진행 중', pgCheckSchema)
+  @ApiRefundErrors(400, 401, 403, 404, 409, 503)
   @ApiOperation({ summary: '점주·운영자의 환불 PG 취소 결과 개별 확인' })
   @Post(':refundId/pg-check')
   async pgCheck(
@@ -135,6 +205,24 @@ export class RefundController {
    * PG 취소 결과 콜백을 받는다 (API 계약 §7 POST /refund/callback, 200 수신 확인)
    * @param dto 콜백 본문
    */
+  @ApiHeader({
+    name: 'X-Pg-Timestamp',
+    required: true,
+    description: '서명 시각(십진 Unix 초)',
+    schema: { type: 'string', pattern: '^[0-9]+$' },
+  })
+  @ApiHeader({
+    name: 'X-Pg-Signature',
+    required: true,
+    description:
+      'v1= 접두사와 HMAC-SHA256 서명. 파싱 전 JSON 본문과 시각·메서드·경로로 계산합니다.',
+    schema: {
+      type: 'string',
+      pattern: '^v1=[a-f0-9]{64}$',
+    },
+  })
+  @ApiRefundResponse(200, 'PG 취소 결과 수신 확인')
+  @ApiRefundErrors(400, 401, 404)
   @ApiOperation({ summary: 'PG 서명으로 인증한 취소 결과 통보 수신' })
   @Post('callback')
   @HttpCode(HttpStatus.OK)
@@ -151,6 +239,9 @@ export class RefundController {
     });
   }
 
+  @ApiBearerAuth('access-token')
+  @ApiRefundResponse(200, '본인 환불 내역', refundListSchema)
+  @ApiRefundErrors(400, 401, 403, 404)
   @ApiOperation({ summary: '고객 본인의 환불 내역 조회' })
   @Get('me')
   getMyRefundHistory(
@@ -161,6 +252,10 @@ export class RefundController {
   }
 
   /** 현재 점주는 자기 매장, 운영자는 지정 매장의 환불 내역을 조회한다. */
+  @ApiBearerAuth('access-token')
+  @ApiParam({ name: 'shopId', format: 'uuid', description: 'shopId (UUID)' })
+  @ApiRefundResponse(200, '매장 환불 내역', refundListSchema)
+  @ApiRefundErrors(400, 401, 403, 404)
   @ApiOperation({ summary: '현재 점주·운영자의 매장 환불 내역 조회' })
   @Get('/shop/:shopId')
   async getRefundHistoryByShop(
@@ -172,6 +267,10 @@ export class RefundController {
   }
 
   /** 운영자가 지정한 고객의 환불 내역을 조회한다. */
+  @ApiBearerAuth('access-token')
+  @ApiParam({ name: 'userId', format: 'uuid', description: 'userId (UUID)' })
+  @ApiRefundResponse(200, '고객 환불 내역', refundListSchema)
+  @ApiRefundErrors(400, 401, 403, 404)
   @ApiOperation({ summary: '운영자의 지정 고객 환불 내역 조회' })
   @Get('/user/:userId')
   async getRefundHistoryByUser(
@@ -183,6 +282,18 @@ export class RefundController {
   }
 
   // 고정 조회 경로 뒤에 선언하여 /me 등을 환불 식별자로 해석하지 않는다.
+  @ApiBearerAuth('access-token')
+  @ApiParam({
+    name: 'refundId',
+    format: 'uuid',
+    description: 'refundId (UUID)',
+  })
+  @ApiRefundResponse(
+    200,
+    '환불 상세. 운영자 전용 정보는 MANAGER에게만 반환합니다.',
+    refundDetailSchema,
+  )
+  @ApiRefundErrors(400, 401, 403, 404)
   @ApiOperation({ summary: '권한 범위 안의 환불 상세·실제 지급액 조회' })
   @Get(':refundId')
   getRefundDetail(

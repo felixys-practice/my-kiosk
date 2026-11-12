@@ -20,6 +20,11 @@ async function bootstrap() {
     .setTitle('키오스크')
     .setDescription('키오스크 플랫폼 백앤드 API 문서')
     .setVersion('1.0')
+    .addBearerAuth(
+      { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
+      'access-token',
+    )
+    .addTag('refund', '환불 접수·조회 및 지급 운영')
     .addTag('shop', '매장 관리')
     .addTag('seat', '좌석 관리')
     .build();

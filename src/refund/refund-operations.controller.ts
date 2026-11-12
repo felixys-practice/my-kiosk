@@ -21,12 +21,28 @@ import {
 import { RefundOperatorGuard } from './guards/refund-operator.guard';
 import { RefundRetryService } from './refund-retry.service';
 import { RefundOperationsService } from './refund-operations.service';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiOperation,
+  ApiTags,
+  ApiBearerAuth,
+  ApiParam,
+  ApiHeader,
+} from '@nestjs/swagger';
+import {
+  ApiRefundResponse,
+  ApiRefundErrors,
+  confirmationSchema,
+  notPaidSchema,
+  reservationSchema,
+  retrySchema,
+  reviewSchema,
+} from './refund.swagger';
 
 /**
  * 미지급 환불금 재처리 운영 API (API 계약 §5, MANAGER 전용)
  */
 @ApiTags('refund')
+@ApiBearerAuth('access-token')
 @Controller('refund')
 export class RefundOperationsController {
   constructor(
@@ -43,6 +59,25 @@ export class RefundOperationsController {
    * @param idempotencyKey 필수 멱등 키
    * @returns 접수 응답 본문(환불 ID·새 PG 취소 요청 ID·PENDING)
    */
+  @ApiParam({
+    name: 'refundId',
+    format: 'uuid',
+    description: 'refundId (UUID)',
+  })
+  @ApiHeader({
+    name: 'idempotency-key',
+    required: true,
+    description:
+      '동일 요청 재전송 시 같은 키를 사용합니다. 다른 요청 내용으로 재사용하면 충돌합니다.',
+    schema: {
+      type: 'string',
+      minLength: 1,
+      maxLength: 128,
+      pattern: '^[!-~]+$',
+    },
+  })
+  @ApiRefundResponse(202, 'PG 취소 재시도 접수', retrySchema)
+  @ApiRefundErrors(400, 401, 403, 404, 409, 503)
   @ApiOperation({
     summary: '운영자가 확정 실패한 PG 취소를 새 요청으로 재시도',
   })
@@ -73,6 +108,29 @@ export class RefundOperationsController {
    * @param idempotencyKey 필수 멱등 키
    * @returns 예약 응답 본문
    */
+  @ApiParam({
+    name: 'refundId',
+    format: 'uuid',
+    description: 'refundId (UUID)',
+  })
+  @ApiHeader({
+    name: 'idempotency-key',
+    required: true,
+    description:
+      '동일 요청 재전송 시 같은 키를 사용합니다. 다른 요청 내용으로 재사용하면 충돌합니다.',
+    schema: {
+      type: 'string',
+      minLength: 1,
+      maxLength: 128,
+      pattern: '^[!-~]+$',
+    },
+  })
+  @ApiRefundResponse(
+    201,
+    '별도 지급 예약. 실제 송금은 수행하지 않습니다.',
+    reservationSchema,
+  )
+  @ApiRefundErrors(400, 401, 403, 404, 409, 503)
   @ApiOperation({ summary: '운영자가 PG 외 수단의 환불금 지급을 예약' })
   @Post(':refundId/manual-payouts')
   @UseGuards(RefundOperatorGuard)
@@ -102,6 +160,30 @@ export class RefundOperationsController {
    * @param idempotencyKey 필수 멱등 키
    * @returns 등록 응답 본문
    */
+  @ApiParam({
+    name: 'payoutId',
+    format: 'uuid',
+    description: 'payoutId (UUID)',
+  })
+  @ApiParam({
+    name: 'refundId',
+    format: 'uuid',
+    description: 'refundId (UUID)',
+  })
+  @ApiHeader({
+    name: 'idempotency-key',
+    required: true,
+    description:
+      '동일 요청 재전송 시 같은 키를 사용합니다. 다른 요청 내용으로 재사용하면 충돌합니다.',
+    schema: {
+      type: 'string',
+      minLength: 1,
+      maxLength: 128,
+      pattern: '^[!-~]+$',
+    },
+  })
+  @ApiRefundResponse(200, '실제 지급 증빙 등록 완료', confirmationSchema)
+  @ApiRefundErrors(400, 401, 403, 404, 409, 503)
   @ApiOperation({ summary: '운영자가 실제 별도 지급 증빙과 지급 결과를 확정' })
   @Post(':refundId/manual-payouts/:payoutId/confirm')
   @UseGuards(RefundOperatorGuard)
@@ -139,6 +221,30 @@ export class RefundOperationsController {
    * @param idempotencyKey 필수 멱등 키
    * @returns 종료 응답 본문
    */
+  @ApiParam({
+    name: 'payoutId',
+    format: 'uuid',
+    description: 'payoutId (UUID)',
+  })
+  @ApiParam({
+    name: 'refundId',
+    format: 'uuid',
+    description: 'refundId (UUID)',
+  })
+  @ApiHeader({
+    name: 'idempotency-key',
+    required: true,
+    description:
+      '동일 요청 재전송 시 같은 키를 사용합니다. 다른 요청 내용으로 재사용하면 충돌합니다.',
+    schema: {
+      type: 'string',
+      minLength: 1,
+      maxLength: 128,
+      pattern: '^[!-~]+$',
+    },
+  })
+  @ApiRefundResponse(200, '미지급 확인 및 예약 실패 종료', notPaidSchema)
+  @ApiRefundErrors(400, 401, 403, 404, 409, 503)
   @ApiOperation({
     summary: '운영자가 확실한 미지급 근거로 지급 예약을 실패 종료',
   })
@@ -175,6 +281,25 @@ export class RefundOperationsController {
    * @param idempotencyKey 필수 멱등 키
    * @returns 등록 응답 본문
    */
+  @ApiParam({
+    name: 'refundId',
+    format: 'uuid',
+    description: 'refundId (UUID)',
+  })
+  @ApiHeader({
+    name: 'idempotency-key',
+    required: true,
+    description:
+      '동일 요청 재전송 시 같은 키를 사용합니다. 다른 요청 내용으로 재사용하면 충돌합니다.',
+    schema: {
+      type: 'string',
+      minLength: 1,
+      maxLength: 128,
+      pattern: '^[!-~]+$',
+    },
+  })
+  @ApiRefundResponse(200, '초과 취소 검토 결과 등록 완료', reviewSchema)
+  @ApiRefundErrors(400, 401, 403, 404, 409, 503)
   @ApiOperation({ summary: '운영자가 PG 초과 취소액의 검토 결과를 등록' })
   @Post(':refundId/amount-review')
   @UseGuards(RefundOperatorGuard)

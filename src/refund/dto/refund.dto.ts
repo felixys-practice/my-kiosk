@@ -1,3 +1,4 @@
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsBoolean, IsOptional, IsUUID } from 'class-validator';
 
 /**
@@ -6,6 +7,12 @@ import { IsBoolean, IsOptional, IsUUID } from 'class-validator';
  */
 export class RefundDto {
   @IsUUID('4', { message: '티켓 아이디는 유효한 UUID 형식이어야 합니다' })
+  @ApiProperty({
+    type: String,
+    description: '환불할 이용권 ID',
+    format: 'uuid',
+    example: '123e4567-e89b-42d3-a456-426614174000',
+  })
   ticketId!: string;
 
   /**
@@ -14,5 +21,11 @@ export class RefundDto {
    */
   @IsOptional()
   @IsBoolean()
+  @ApiPropertyOptional({
+    type: Boolean,
+    description:
+      '이용권 종료 및 환불 금액 동의. 누락하거나 false이면 서비스에서 거절합니다.',
+    example: true,
+  })
   consentToTerminateTicket?: boolean;
 }
