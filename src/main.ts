@@ -5,6 +5,7 @@ import { AppModule } from './app.module';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { apiReference } from '@scalar/nestjs-api-reference';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
@@ -36,6 +37,22 @@ async function bootstrap() {
       operationsSorter: 'alpha', // 앤드포인트 알파벳 순 정렬
     },
   });
+
+  app.use(
+    '/reference',
+    apiReference({
+      content: document,
+      persistAuth: true,
+      authentication: {
+        preferredSecurityScheme: 'access-token',
+      },
+      customCss: `
+        .scalar-api-reference {
+          --scalar-sidebar-width: 340px;
+        }
+      `,
+    }),
+  );
 
   app.useGlobalPipes(
     new ValidationPipe({
