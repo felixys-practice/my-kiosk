@@ -1,3 +1,4 @@
+import { activePauseWhere } from 'src/ticket/ticket-pause/active-pause';
 import { Injectable } from '@nestjs/common';
 import {
   Order,
@@ -133,7 +134,7 @@ export class OrderRepository {
                   },
                 },
                 ticketPauses: {
-                  where: { resumedAt: null },
+                  where: activePauseWhere,
                   select: { pausedAt: true },
                 },
               },

@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
 import request from 'supertest';
+import { signedCallback } from './helpers/pg-callback';
 import { type App } from 'supertest/types';
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
@@ -18,6 +19,7 @@ import {
 } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { JwtService } from '@nestjs/jwt';
+import { listenOnLoopback } from './helpers/listen-on-loopback';
 
 /**
  * 좌석 타입(고정석·자유석) 기능 E2E 테스트
@@ -269,16 +271,12 @@ describe('좌석 타입 (E2E)', () => {
     const payment = await prisma.payment.findUniqueOrThrow({
       where: { id: paymentId },
     });
-    await request(server)
-      .post('/payments/callback')
-      .set('Authorization', `Bearer ${userToken}`)
-      .send({
-        success,
-        pgTransactionId: payment.pgTransactionId,
-        amount: payment.amount,
-        reason: success ? null : 'E2E 승인 실패',
-      })
-      .expect(201);
+    await signedCallback(server, '/payments/callback', {
+      success,
+      pgTransactionId: payment.pgTransactionId,
+      amount: payment.amount,
+      reason: success ? null : 'E2E 승인 실패',
+    }).expect(200);
   }
 
   /**
@@ -344,7 +342,7 @@ describe('좌석 타입 (E2E)', () => {
       imports: [AppModule],
     }).compile();
 
-    app = moduleFixture.createNestApplication();
+    app = moduleFixture.createNestApplication({ rawBody: true });
 
     // main.ts와 동일하게 설정
     app.useGlobalPipes(
@@ -357,7 +355,7 @@ describe('좌석 타입 (E2E)', () => {
     app.useGlobalInterceptors(new TransformInterceptor());
     app.useGlobalFilters(new HttpExceptionFilter());
 
-    await app.init();
+    await listenOnLoopback(app);
 
     server = app.getHttpServer();
     prisma = app.get(PrismaService);
@@ -413,10 +411,18 @@ describe('좌석 타입 (E2E)', () => {
   afterAll(async () => {
     // 역순 정리 (FK 제약 충돌 방지)
     const userIds = [ownerUser.id, normalUser.id, otherUser.id];
-    await prisma.refundLock.deleteMany({
-      where: { orderItem: { order: { userId: { in: userIds } } } },
+    // 002 환불의 사건 알림(PG 미연동으로 전송 전 실패가 기록됨)은 PG 취소 요청보다 먼저 지운다
+    await prisma.refundNotification.deleteMany({
+      where: { refund: { payment: { order: { userId: { in: userIds } } } } },
     });
     await prisma.paymentCancel.deleteMany({
+      where: { payment: { order: { userId: { in: userIds } } } },
+    });
+    // 002 환불 계약의 환불 확정 기록(QS-21)과 그 멱등 기록
+    await prisma.refundIdempotencyRecord.deleteMany({
+      where: { requesterId: { in: userIds } },
+    });
+    await prisma.refund.deleteMany({
       where: { payment: { order: { userId: { in: userIds } } } },
     });
     await prisma.ticketSeatChange.deleteMany({
@@ -732,7 +738,7 @@ describe('좌석 타입 (E2E)', () => {
       expect(body.data.assignedSeat).toBeNull();
     });
 
-    it('승인 전에 좌석을 다른 이용자가 확정하면 이용권 발급 후 자동 환불되고 환불 콜백 후 이용권이 소멸된다 (QS-31)', async () => {
+    it('승인 전에 좌석을 다른 이용자가 확정하면 이용권은 승인과 함께 이용 종료되고 상품 대상 자동 취소 환불로 지급을 시작한다 (QS-31)', async () => {
       const productId = await createProduct(SeatType.FIXED, TicketType.TIME);
       const seatId = await createSeat(SeatType.FIXED);
       const other: Buyer = { userId: otherUser.id, token: otherUserToken };
@@ -754,7 +760,7 @@ describe('좌석 타입 (E2E)', () => {
       ).expect(201);
       await payOrder(otherOrder.data.id as string, true, other);
 
-      // 첫 결제의 승인 콜백 - 이용권은 발급되지만 좌석을 줄 수 없어 자동 환불 요청
+      // 첫 결제의 승인 콜백 - 좌석을 줄 수 없는 이용권은 승인과 같은 트랜잭션에서 이용 종료·자동 취소 환불 확정(환불 명세 API 계약 §7)
       await sendPaymentCallback(firstPaymentId, true);
       const firstTicketId = await findTicketIdByOrder(
         firstOrder.data.id as string,
@@ -763,28 +769,29 @@ describe('좌석 타입 (E2E)', () => {
         where: { id: firstTicketId },
         include: { orderItem: true },
       });
-      const cancel = await prisma.paymentCancel.findFirst({
+      const refund = await prisma.refund.findFirstOrThrow({
         where: { orderItemId: firstTicket.orderItemId },
+        include: { paymentCancels: true },
       });
-      expect(cancel).not.toBeNull();
-      expect(cancel!.reason).toContain('자동 결제 취소');
-
-      // PG 환불 성공 콜백 후 이용권 소멸
-      await request(server)
-        .post('/refund/callback')
-        .set('Authorization', `Bearer ${userToken}`)
-        .send({
-          success: true,
-          pgTransactionId: `refund-${cancel!.id}`,
-          orderItemId: firstTicket.orderItemId,
-          paymentCancelId: cancel!.id,
-          amount: cancel!.amount,
-        })
-        .expect(201);
-      const revoked = await prisma.ticket.findUniqueOrThrow({
-        where: { id: firstTicketId },
+      expect({
+        ticket: firstTicket.status,
+        refund: [
+          refund.targetKind,
+          refund.source,
+          refund.decisionStatus,
+          refund.amount,
+        ],
+        attempts: refund.paymentCancels.length,
+      }).toEqual({
+        ticket: TicketStatus.REVOKED,
+        refund: [
+          'ORDER_ITEM',
+          'SYSTEM',
+          'ACCEPTED',
+          firstTicket.orderItem.amount,
+        ],
+        attempts: 1,
       });
-      expect(revoked.status).toBe(TicketStatus.REVOKED);
     });
 
     it('결제 실패 후 같은 좌석으로 새 주문이 성공한다 (QS-9)', async () => {
@@ -957,28 +964,12 @@ describe('좌석 타입 (E2E)', () => {
         seatId,
       );
 
+      // 002 환불 계약: 종료 동의가 필수이고, 환불 확정(202) 즉시 배정을 해제한다(PG 콜백을 기다리지 않음)
       await request(server)
         .post('/refund')
         .set('Authorization', `Bearer ${userToken}`)
-        .send({ ticketId })
-        .expect(201);
-      const ticket = await prisma.ticket.findUniqueOrThrow({
-        where: { id: ticketId },
-      });
-      const cancel = await prisma.paymentCancel.findFirstOrThrow({
-        where: { orderItemId: ticket.orderItemId },
-      });
-      await request(server)
-        .post('/refund/callback')
-        .set('Authorization', `Bearer ${userToken}`)
-        .send({
-          success: true,
-          pgTransactionId: `refund-${cancel.id}`,
-          orderItemId: ticket.orderItemId,
-          paymentCancelId: cancel.id,
-          amount: cancel.amount,
-        })
-        .expect(201);
+        .send({ ticketId, consentToTerminateTicket: true })
+        .expect(202);
 
       // 조회 시점 판정(isAssignable)과 별개로 배정 행이 즉시 해제됐는지 확인한다
       const assignment = await prisma.seatAssignment.findFirstOrThrow({

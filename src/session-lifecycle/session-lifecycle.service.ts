@@ -19,7 +19,7 @@ export type EndSessionResult = {
  * 세션 종료 핵심 로직의 유일한 원천(Single Source of Truth).
  * UsageSession과 TicketPause 양쪽에서 공유한다.
  *
- * - FOR UPDATE 락으로 동시 종료 방지
+ * - 이용권 → 세션 순서(공유 잠금 순서)의 FOR UPDATE 락으로 동시 종료 방지
  * - 이미 종료된 세션은 멱등 처리
  * - 시간권(TIME)은 소비 시간을 remainingMinutes에서 차감하고, 소진 시 EXHAUSTED로 전이하며 고정석 배정을 해제
  * - 정기권(PERIOD)은 세션 상태만 ENDED로 변경 (시간 차감 없음)
@@ -39,6 +39,14 @@ export class SessionLifecycleService {
     now: Date,
     tx: TransactionClient,
   ): Promise<EndSessionResult> {
+    // 공유 잠금 순서(API 계약 §6: Ticket → UsageSession)를 지키려고 세션의 이용권을 먼저 잠근다.
+    // 세션을 먼저 잠그면 이용권을 먼저 잠근 환불·입실 경로와 교착이 생긴다
+    await tx.$executeRaw`
+      SELECT 1 FROM tickets
+        WHERE id = (SELECT "ticket_id" FROM usage_sessions WHERE id = ${sessionId})
+        FOR UPDATE
+    `;
+
     const [session] = await tx.$queryRaw<
       {
         id: string;

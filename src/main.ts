@@ -9,6 +9,7 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     bufferLogs: true, // Winston 준비 전 발생하는 초기 로그 손실 방지
+    rawBody: true, // PG 콜백 서명 검증용 파싱 전 원문 바이트(환불 명세 API 계약 §7)
   });
 
   // NestJS 기본 로거를 Winston으로 교체
@@ -19,6 +20,11 @@ async function bootstrap() {
     .setTitle('키오스크')
     .setDescription('키오스크 플랫폼 백앤드 API 문서')
     .setVersion('1.0')
+    .addBearerAuth(
+      { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
+      'access-token',
+    )
+    .addTag('refund', '환불 접수·조회 및 지급 운영')
     .addTag('shop', '매장 관리')
     .addTag('seat', '좌석 관리')
     .build();

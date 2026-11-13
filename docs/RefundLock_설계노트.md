@@ -1,3 +1,7 @@
+> **과거 설계 이력 — v0.3의 구현 기준은 별도 문서입니다.**
+>
+> 2026-10-26부터 환불 확정 시 이용 종료·좌석 해제를 먼저 처리하고 지급을 분리합니다. PG 실패로 이용권을 복구하지 않습니다. 이 문서의 승인 대기·PG 성공 시 소멸·RefundLock 신규 사용 설명은 당시 설계 기록입니다. 현재 기준은 [002 기능 명세](../specs/002-refund-completion/spec.md)와 [데이터 모델](../specs/002-refund-completion/data-model.md)입니다. 2026-10-30 T174·T171에서 구형 환불 코드와 `RefundLock` 모델·테이블을 제거했고, 빈 검증용 DB에서 테이블 부재를 검증했습니다. 아래 본문은 제거 전 설계 이력이며 현재 구현 설명으로 사용하지 않습니다. 현재 `RefundLockingRepository`는 결제·이용권·환불 등의 행 잠금을 담당하는 별도 구현입니다.
+
 ### Refund Lock(refund_locks)
 - order_item_id: 해당 상품에 대한 동시성 제어의 대상(PK) — 상품 하나당 락 하나만 존재 가능
 - payment_cancel_id: 락 소유권 식별자 — 이 락을 만든 PaymentCancel 시도가 누구인지 구분

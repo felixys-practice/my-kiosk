@@ -1,4 +1,5 @@
-/* eslint-disable @typescript-eslint/unbound-method -- jest 목(mock) 메서드를 expect로 검증할 때 생기는 오탐 */
+/* eslint-disable @typescript-eslint/unbound-method -- Vitest 목(mock) 메서드를 expect로 검증할 때 생기는 오탐 */
+import { vi, type Mocked } from 'vitest';
 import { Queue } from 'bullmq';
 import {
   SeatReleaseReason,
@@ -14,6 +15,7 @@ import { SeatTypeMismatchError } from 'src/seat-assignment/errors/seat-type-mism
 import { SessionLifecycleService } from 'src/session-lifecycle/session-lifecycle.service';
 import { SeatAlreadyOccupiedError } from 'src/usage-session/errors/seat-already-occupied.error';
 import { TicketClosedError } from '../errors/ticket-closed.error';
+import { DomainConflictError } from 'src/common/errors';
 import { TicketNotFoundError } from '../errors/ticket-not-found.error';
 import { TicketPausedError } from '../errors/ticket-paused.error';
 import { TicketSeatUnchangedError } from '../errors/ticket-seat-unchanged.error';
@@ -26,10 +28,10 @@ describe('TicketSeatService', () => {
   const shopId = 'shop-1';
   const ownerId = 'owner-1';
 
-  let repository: jest.Mocked<TicketSeatRepository>;
-  let seatAssignmentService: jest.Mocked<SeatAssignmentService>;
-  let sessionLifecycle: jest.Mocked<SessionLifecycleService>;
-  let queue: jest.Mocked<Queue>;
+  let repository: Mocked<TicketSeatRepository>;
+  let seatAssignmentService: Mocked<SeatAssignmentService>;
+  let sessionLifecycle: Mocked<SessionLifecycleService>;
+  let queue: Mocked<Queue>;
   let service: TicketSeatService;
 
   /**
@@ -43,38 +45,38 @@ describe('TicketSeatService', () => {
 
   beforeEach(() => {
     repository = {
-      runInTransaction: jest.fn((work: (tx: TransactionClient) => unknown) =>
+      runInTransaction: vi.fn((work: (tx: TransactionClient) => unknown) =>
         Promise.resolve(work(tx)),
       ),
-      getTicketForUpdate: jest
+      getTicketForUpdate: vi
         .fn()
         .mockResolvedValue(lockedTicket(SeatType.FREE)),
-      updateSeatType: jest.fn(),
-      createSeatChange: jest.fn(),
-      findActiveSession: jest.fn().mockResolvedValue(null),
-      updateSessionSeat: jest.fn(),
-      hasOtherActiveSessionOnSeat: jest.fn().mockResolvedValue(false),
-      hasActivePause: jest.fn().mockResolvedValue(false),
-      findSeatChanges: jest.fn(),
-      findSeat: jest
+      updateSeatType: vi.fn(),
+      createSeatChange: vi.fn(),
+      findActiveSession: vi.fn().mockResolvedValue(null),
+      updateSessionSeat: vi.fn(),
+      hasOtherActiveSessionOnSeat: vi.fn().mockResolvedValue(false),
+      hasActivePause: vi.fn().mockResolvedValue(false),
+      findSeatChanges: vi.fn(),
+      findSeat: vi
         .fn()
         .mockResolvedValue({ type: SeatType.FIXED, shopId: 'shop-1' }),
-    } as unknown as jest.Mocked<TicketSeatRepository>;
+    } as unknown as Mocked<TicketSeatRepository>;
     seatAssignmentService = {
-      assign: jest.fn(),
-      releaseByTicket: jest.fn(),
-      getActiveByTicket: jest.fn().mockResolvedValue(null),
-    } as unknown as jest.Mocked<SeatAssignmentService>;
+      assign: vi.fn(),
+      releaseByTicket: vi.fn(),
+      getActiveByTicket: vi.fn().mockResolvedValue(null),
+    } as unknown as Mocked<SeatAssignmentService>;
     sessionLifecycle = {
-      endSession: jest.fn().mockResolvedValue({
+      endSession: vi.fn().mockResolvedValue({
         ticketId,
         bullmqJobId: null,
         alreadyEnded: false,
       }),
-    } as unknown as jest.Mocked<SessionLifecycleService>;
+    } as unknown as Mocked<SessionLifecycleService>;
     queue = {
-      remove: jest.fn().mockResolvedValue(1),
-    } as unknown as jest.Mocked<Queue>;
+      remove: vi.fn().mockResolvedValue(1),
+    } as unknown as Mocked<Queue>;
     service = new TicketSeatService(
       repository,
       seatAssignmentService,
@@ -326,12 +328,8 @@ describe('TicketSeatService', () => {
       expect(seatAssignmentService.releaseByTicket).not.toHaveBeenCalled();
     });
 
-    it.each([
-      TicketStatus.EXPIRED,
-      TicketStatus.EXHAUSTED,
-      TicketStatus.REVOKED,
-    ])(
-      '종료 상태(EXPIRED·EXHAUSTED·REVOKED) 이용권이면 TicketClosedError다 (%s)',
+    it.each([TicketStatus.EXPIRED, TicketStatus.EXHAUSTED])(
+      '종료 상태(EXPIRED·EXHAUSTED) 이용권이면 TicketClosedError다 (%s)',
       async (status) => {
         repository.getTicketForUpdate.mockResolvedValue({
           ...lockedTicket(SeatType.FREE),
@@ -347,6 +345,22 @@ describe('TicketSeatService', () => {
         ).rejects.toBeInstanceOf(TicketClosedError);
       },
     );
+
+    it('환불로 종료된(REVOKED) 이용권의 좌석 타입 변경은 TICKET_TERMINATED(409)로 거절된다', async () => {
+      repository.getTicketForUpdate.mockResolvedValue({
+        ...lockedTicket(SeatType.FREE),
+        status: TicketStatus.REVOKED,
+      });
+
+      const change = service.changeSeat(
+        ticketId,
+        { seatType: SeatType.FIXED, seatId: 'seat-1', reason: '요청' },
+        ownerId,
+      );
+
+      await expect(change).rejects.toBeInstanceOf(DomainConflictError);
+      await expect(change).rejects.toMatchObject({ code: 'TICKET_TERMINATED' });
+    });
 
     it('일시정지 중인 이용권이면 TicketPausedError다', async () => {
       repository.hasActivePause.mockResolvedValue(true);

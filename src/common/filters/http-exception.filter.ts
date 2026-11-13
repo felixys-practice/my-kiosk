@@ -14,7 +14,10 @@ import { DomainConflictError } from '../errors/domain-conflict.error';
 import { DomainNotFoundError } from '../errors/domain-not-found.error';
 import { DomainBadRequestError } from '../errors/domain-bad-request.error';
 import { DomainForbiddenError } from '../errors/domain-forbidden.error';
-import { DomainUnauthorizedError } from '../errors';
+import {
+  DomainServiceUnavailableError,
+  DomainUnauthorizedError,
+} from '../errors';
 
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
@@ -47,23 +50,33 @@ export class HttpExceptionFilter implements ExceptionFilter {
       }
     } else if (exception instanceof DomainConflictError) {
       status = HttpStatus.CONFLICT;
-      errorDetail.code = exception.name;
+      errorDetail.code = this.codeOf(exception);
+      errorDetail.details = this.detailsOf(exception);
       errorDetail.message = exception.message;
     } else if (exception instanceof DomainNotFoundError) {
       status = HttpStatus.NOT_FOUND;
-      errorDetail.code = exception.name;
+      errorDetail.code = this.codeOf(exception);
+      errorDetail.details = this.detailsOf(exception);
       errorDetail.message = exception.message;
     } else if (exception instanceof DomainBadRequestError) {
       status = HttpStatus.BAD_REQUEST;
-      errorDetail.code = exception.name;
+      errorDetail.code = this.codeOf(exception);
+      errorDetail.details = this.detailsOf(exception);
       errorDetail.message = exception.message;
     } else if (exception instanceof DomainForbiddenError) {
       status = HttpStatus.FORBIDDEN;
-      errorDetail.code = exception.name;
+      errorDetail.code = this.codeOf(exception);
+      errorDetail.details = this.detailsOf(exception);
       errorDetail.message = exception.message;
     } else if (exception instanceof DomainUnauthorizedError) {
       status = HttpStatus.UNAUTHORIZED;
-      errorDetail.code = exception.name;
+      errorDetail.code = this.codeOf(exception);
+      errorDetail.details = this.detailsOf(exception);
+      errorDetail.message = exception.message;
+    } else if (exception instanceof DomainServiceUnavailableError) {
+      status = HttpStatus.SERVICE_UNAVAILABLE;
+      errorDetail.code = this.codeOf(exception);
+      errorDetail.details = this.detailsOf(exception);
       errorDetail.message = exception.message;
     }
     // 2. Prisma 에러 처리
@@ -103,6 +116,27 @@ export class HttpExceptionFilter implements ExceptionFilter {
       method: request.method,
       path: request.path,
     });
+  }
+
+  /**
+   * 도메인 오류의 응답 코드를 정한다
+   * - 계약 코드(code)를 지정한 오류는 그 코드를, 없으면 오류 클래스 이름을 쓴다
+   * @param exception 도메인 오류
+   * @returns 응답 error.code
+   */
+  private codeOf(exception: Error): string {
+    const { code } = exception as Error & { code?: unknown };
+    return typeof code === 'string' ? code : exception.name;
+  }
+
+  /**
+   * 도메인 오류의 응답 상세(details)를 꺼낸다
+   * - 오류에 details를 지정한 경우(예: USED_TICKET의 violations·action 안내)만 응답에 담는다
+   * @param exception 도메인 오류
+   * @returns 상세, 없으면 undefined
+   */
+  private detailsOf(exception: Error): unknown {
+    return (exception as Error & { details?: unknown }).details;
   }
 
   /**

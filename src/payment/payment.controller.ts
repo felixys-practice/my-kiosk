@@ -2,10 +2,14 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
   Param,
   ParseUUIDPipe,
   Post,
+  UseGuards,
 } from '@nestjs/common';
+import { Public } from 'src/auth/decorators/public.decorator';
+import { PgSignatureGuard } from 'src/pg/guards/pg-signature.guard';
 import { PaymentService } from './payment.service';
 import { RequestPaymentDto } from './dto/request-payment.dto';
 import { PgCallbackDto } from './dto/pg-callback.dto';
@@ -26,7 +30,14 @@ export class PaymentController {
     return await this.service.getPayment(id);
   }
 
+  /**
+   * PG 결제 결과 콜백을 받는다 (환불 명세 API 계약 §2·§7: 로그인 없이 PG 서명으로만, 200 수신 확인)
+   * @param dto 콜백 본문
+   */
   @Post('callback')
+  @HttpCode(200)
+  @Public()
+  @UseGuards(PgSignatureGuard)
   async callbackPayment(@Body() dto: PgCallbackDto) {
     await this.service.callbackPayment({
       success: dto.success,

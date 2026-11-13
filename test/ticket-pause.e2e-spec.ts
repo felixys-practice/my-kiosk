@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
 import request from 'supertest';
+import { signedCallback } from './helpers/pg-callback';
 import { type App } from 'supertest/types';
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
@@ -18,6 +19,7 @@ import {
 } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { JwtService } from '@nestjs/jwt';
+import { listenOnLoopback } from './helpers/listen-on-loopback';
 
 describe('TicketPauseController (E2E)', () => {
   let app: INestApplication;
@@ -40,7 +42,7 @@ describe('TicketPauseController (E2E)', () => {
       imports: [AppModule],
     }).compile();
 
-    app = moduleFixture.createNestApplication();
+    app = moduleFixture.createNestApplication({ rawBody: true });
 
     // main.ts와 동일하게 설정
     app.useGlobalPipes(
@@ -53,7 +55,7 @@ describe('TicketPauseController (E2E)', () => {
     app.useGlobalInterceptors(new TransformInterceptor());
     app.useGlobalFilters(new HttpExceptionFilter());
 
-    await app.init();
+    await listenOnLoopback(app);
 
     server = app.getHttpServer();
     prisma = app.get(PrismaService);
@@ -488,16 +490,12 @@ describe('TicketPauseController (E2E)', () => {
       const payment = await prisma.payment.findUniqueOrThrow({
         where: { id: paymentBody.data.paymentId as string },
       });
-      await request(server)
-        .post('/payments/callback')
-        .set('Authorization', `Bearer ${userToken}`)
-        .send({
-          success: true,
-          pgTransactionId: payment.pgTransactionId,
-          amount: payment.amount,
-          reason: null,
-        })
-        .expect(201);
+      await signedCallback(server, '/payments/callback', {
+        success: true,
+        pgTransactionId: payment.pgTransactionId,
+        amount: payment.amount,
+        reason: null,
+      }).expect(200);
 
       const ticket = await prisma.ticket.findFirstOrThrow({
         where: { orderItem: { orderId } },

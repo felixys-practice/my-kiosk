@@ -8,6 +8,8 @@ describe('validationSchema', () => {
     DATABASE_URL: 'postgresql://postgres:password@localhost:5432/db',
     JWT_SECRET: 'valid-secret-key',
     JWT_REFRESH_SECRET: 'valid-refresh-secret',
+    // PG 콜백 서명 비밀값 — 최소 32자 (API 계약 §8)
+    PG_CALLBACK_SECRET: 'test-pg-callback-secret-32-chars',
   };
 
   describe('유효한 환경변수', () => {
@@ -139,6 +141,289 @@ describe('validationSchema', () => {
       expect(
         error?.details.some((d) => d.path.includes('SEAT_HOLD_MINUTES')),
       ).toBe(true);
+    });
+  });
+
+  describe('PG 콜백 서명 비밀값(PG_CALLBACK_SECRET)', () => {
+    // API 계약 §8: 공유 서명 비밀값은 최소 32자
+    const pgCallbackSecretMinLength = 32;
+
+    it('PG_CALLBACK_SECRET이 없으면 필수값 누락으로 검증이 실패한다', () => {
+      const env: Record<string, unknown> = { ...validEnv };
+      delete env.PG_CALLBACK_SECRET;
+
+      const { error } = validationSchema.validate(env, { abortEarly: false });
+
+      expect(
+        error?.details.find((d) => d.path.includes('PG_CALLBACK_SECRET'))?.type,
+      ).toBe('any.required');
+    });
+
+    it('PG_CALLBACK_SECRET이 31자이면 검증이 실패한다', () => {
+      const { error } = validationSchema.validate(
+        {
+          ...validEnv,
+          PG_CALLBACK_SECRET: 'a'.repeat(pgCallbackSecretMinLength - 1),
+        },
+        { abortEarly: false },
+      );
+
+      expect(
+        error?.details.find((d) => d.path.includes('PG_CALLBACK_SECRET'))?.type,
+      ).toBe('string.min');
+    });
+
+    it('PG_CALLBACK_SECRET이 32자이면 검증을 통과한다', () => {
+      const { error } = validationSchema.validate(
+        {
+          ...validEnv,
+          PG_CALLBACK_SECRET: 'a'.repeat(pgCallbackSecretMinLength),
+        },
+        { abortEarly: false },
+      );
+
+      expect(error).toBeUndefined();
+    });
+  });
+
+  describe('환불 PG 처리 설정(REFUND_*)', () => {
+    // 양의 정수여야 하는 시간·횟수 설정 (API 계약 §8). REFUND_RESEND_LIMIT은 0 이상이라 제외
+    const positiveIntegerKeys = [
+      'REFUND_RESULT_WAIT_SECONDS',
+      'REFUND_SWEEP_INTERVAL_SECONDS',
+      'REFUND_QUERY_INTERVAL_SECONDS',
+      'REFUND_PG_TIMEOUT_SECONDS',
+      'REFUND_WORK_LEASE_SECONDS',
+      'REFUND_QUERY_BACKOFF_SECONDS',
+      'REFUND_QUERY_BACKOFF_MAX_SECONDS',
+      'REFUND_QUERY_FAILURE_THRESHOLD',
+      'REFUND_RECOVERY_PROBE_SECONDS',
+      'REFUND_RECOVERY_BATCH_SIZE',
+      'REFUND_MANUAL_CONFIRM_ALERT_SECONDS',
+      'PG_CALLBACK_MAX_SKEW_SECONDS',
+    ];
+
+    it('REFUND_RESEND_LIMIT=0이면 검증을 통과한다', () => {
+      const { error } = validationSchema.validate(
+        { ...validEnv, REFUND_RESEND_LIMIT: 0 },
+        { abortEarly: false },
+      );
+
+      expect(error).toBeUndefined();
+    });
+
+    it('REFUND_RESEND_LIMIT=-1이면 검증이 실패한다', () => {
+      const { error } = validationSchema.validate(
+        { ...validEnv, REFUND_RESEND_LIMIT: -1 },
+        { abortEarly: false },
+      );
+
+      expect(
+        error?.details.find((d) => d.path.includes('REFUND_RESEND_LIMIT'))
+          ?.type,
+      ).toBe('number.min');
+    });
+
+    it.each(positiveIntegerKeys)('%s=0이면 검증이 실패한다', (key) => {
+      const { error } = validationSchema.validate(
+        { ...validEnv, [key]: 0 },
+        { abortEarly: false },
+      );
+
+      expect(error?.details.find((d) => d.path.includes(key))?.type).toBe(
+        'number.min',
+      );
+    });
+
+    // 처리 기한은 PG 응답 제한(최소 1)보다 커야 하고, 정상 재조회 간격은 탐색 주기+응답 제한(최소 2) 이상이어야 하므로
+    // 두 설정은 1이 될 수 없다 (API 계약 §8). 하한은 설정 간 관계 검증에서 확인한다
+    const keysAllowingOne = positiveIntegerKeys.filter(
+      (key) =>
+        key !== 'REFUND_WORK_LEASE_SECONDS' &&
+        key !== 'REFUND_QUERY_INTERVAL_SECONDS',
+    );
+    // 조회 간격 상한은 첫 재조회 간격 이상이어야 하므로 1을 확인할 때 첫 간격도 1로 둔다
+    const companionsForOne: Record<string, Record<string, number>> = {
+      REFUND_QUERY_BACKOFF_MAX_SECONDS: { REFUND_QUERY_BACKOFF_SECONDS: 1 },
+    };
+
+    it.each(keysAllowingOne)('%s=1이면 검증을 통과한다', (key) => {
+      const { error } = validationSchema.validate(
+        { ...validEnv, ...companionsForOne[key], [key]: 1 },
+        { abortEarly: false },
+      );
+
+      expect(error).toBeUndefined();
+    });
+
+    it.each([...positiveIntegerKeys, 'REFUND_RESEND_LIMIT'])(
+      '%s가 소수 1.5이면 검증이 실패한다',
+      (key) => {
+        const { error } = validationSchema.validate(
+          { ...validEnv, [key]: 1.5 },
+          { abortEarly: false },
+        );
+
+        expect(error?.details.find((d) => d.path.includes(key))?.type).toBe(
+          'number.integer',
+        );
+      },
+    );
+
+    it('REFUND_WORK_LEASE_SECONDS가 REFUND_PG_TIMEOUT_SECONDS와 같으면 검증이 실패한다', () => {
+      const { error } = validationSchema.validate(
+        {
+          ...validEnv,
+          REFUND_PG_TIMEOUT_SECONDS: 10,
+          REFUND_WORK_LEASE_SECONDS: 10,
+        },
+        { abortEarly: false },
+      );
+
+      expect(
+        error?.details.find((d) => d.path.includes('REFUND_WORK_LEASE_SECONDS'))
+          ?.type,
+      ).toBe('number.greater');
+    });
+
+    it('REFUND_WORK_LEASE_SECONDS가 REFUND_PG_TIMEOUT_SECONDS보다 1 크면 검증을 통과한다', () => {
+      const { error } = validationSchema.validate(
+        {
+          ...validEnv,
+          REFUND_PG_TIMEOUT_SECONDS: 10,
+          REFUND_WORK_LEASE_SECONDS: 11,
+        },
+        { abortEarly: false },
+      );
+
+      expect(error).toBeUndefined();
+    });
+
+    it('REFUND_QUERY_INTERVAL_SECONDS가 SWEEP+TIMEOUT보다 1 작으면 검증이 실패한다', () => {
+      const { error } = validationSchema.validate(
+        {
+          ...validEnv,
+          REFUND_SWEEP_INTERVAL_SECONDS: 5,
+          REFUND_PG_TIMEOUT_SECONDS: 10,
+          REFUND_QUERY_INTERVAL_SECONDS: 14,
+        },
+        { abortEarly: false },
+      );
+
+      expect(
+        error?.details.find((d) =>
+          d.path.includes('REFUND_QUERY_INTERVAL_SECONDS'),
+        )?.type,
+      ).toBe('number.min');
+    });
+
+    it('REFUND_QUERY_INTERVAL_SECONDS가 SWEEP+TIMEOUT과 같으면 검증을 통과한다', () => {
+      const { error } = validationSchema.validate(
+        {
+          ...validEnv,
+          REFUND_SWEEP_INTERVAL_SECONDS: 5,
+          REFUND_PG_TIMEOUT_SECONDS: 10,
+          REFUND_QUERY_INTERVAL_SECONDS: 15,
+        },
+        { abortEarly: false },
+      );
+
+      expect(error).toBeUndefined();
+    });
+
+    it('REFUND_QUERY_BACKOFF_MAX_SECONDS가 REFUND_QUERY_BACKOFF_SECONDS보다 1 작으면 검증이 실패한다', () => {
+      const { error } = validationSchema.validate(
+        {
+          ...validEnv,
+          REFUND_QUERY_BACKOFF_SECONDS: 15,
+          REFUND_QUERY_BACKOFF_MAX_SECONDS: 14,
+        },
+        { abortEarly: false },
+      );
+
+      expect(
+        error?.details.find((d) =>
+          d.path.includes('REFUND_QUERY_BACKOFF_MAX_SECONDS'),
+        )?.type,
+      ).toBe('number.min');
+    });
+
+    it('REFUND_QUERY_BACKOFF_MAX_SECONDS가 REFUND_QUERY_BACKOFF_SECONDS와 같으면 검증을 통과한다', () => {
+      const { error } = validationSchema.validate(
+        {
+          ...validEnv,
+          REFUND_QUERY_BACKOFF_SECONDS: 15,
+          REFUND_QUERY_BACKOFF_MAX_SECONDS: 15,
+        },
+        { abortEarly: false },
+      );
+
+      expect(error).toBeUndefined();
+    });
+
+    it('REFUND_PG_TIMEOUT_SECONDS를 생략하고 REFUND_WORK_LEASE_SECONDS=11만 설정하면 기본 응답 제한 10과 비교해 통과한다', () => {
+      const { error } = validationSchema.validate(
+        { ...validEnv, REFUND_WORK_LEASE_SECONDS: 11 },
+        { abortEarly: false },
+      );
+
+      expect(error).toBeUndefined();
+    });
+
+    it('SWEEP·TIMEOUT을 생략하고 REFUND_QUERY_INTERVAL_SECONDS=15만 설정하면 기본값 합 15와 비교해 통과한다', () => {
+      const { error } = validationSchema.validate(
+        { ...validEnv, REFUND_QUERY_INTERVAL_SECONDS: 15 },
+        { abortEarly: false },
+      );
+
+      expect(error).toBeUndefined();
+    });
+
+    it('REFUND_QUERY_BACKOFF_SECONDS를 생략하고 REFUND_QUERY_BACKOFF_MAX_SECONDS=15만 설정하면 기본 첫 간격 15와 비교해 통과한다', () => {
+      const { error } = validationSchema.validate(
+        { ...validEnv, REFUND_QUERY_BACKOFF_MAX_SECONDS: 15 },
+        { abortEarly: false },
+      );
+
+      expect(error).toBeUndefined();
+    });
+
+    it('REFUND_PG_TIMEOUT_SECONDS=40만 설정하면 기본 처리 기한 30과 비교해 검증이 실패한다', () => {
+      const { error } = validationSchema.validate(
+        { ...validEnv, REFUND_PG_TIMEOUT_SECONDS: 40 },
+        { abortEarly: false },
+      );
+
+      expect(
+        error?.details.find((d) => d.path.includes('REFUND_WORK_LEASE_SECONDS'))
+          ?.type,
+      ).toBe('number.greater');
+    });
+
+    it('REFUND_SWEEP_INTERVAL_SECONDS=20만 설정하면 기본 재조회 간격 15가 20+10보다 작아 검증이 실패한다', () => {
+      const { error } = validationSchema.validate(
+        { ...validEnv, REFUND_SWEEP_INTERVAL_SECONDS: 20 },
+        { abortEarly: false },
+      );
+
+      expect(
+        error?.details.find((d) =>
+          d.path.includes('REFUND_QUERY_INTERVAL_SECONDS'),
+        )?.type,
+      ).toBe('number.min');
+    });
+
+    it('REFUND_QUERY_BACKOFF_SECONDS=500만 설정하면 기본 간격 상한 300이 500보다 작아 검증이 실패한다', () => {
+      const { error } = validationSchema.validate(
+        { ...validEnv, REFUND_QUERY_BACKOFF_SECONDS: 500 },
+        { abortEarly: false },
+      );
+
+      expect(
+        error?.details.find((d) =>
+          d.path.includes('REFUND_QUERY_BACKOFF_MAX_SECONDS'),
+        )?.type,
+      ).toBe('number.min');
     });
   });
 });

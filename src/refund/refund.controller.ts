@@ -3,61 +3,303 @@ import {
   Controller,
   Get,
   Headers,
+  HttpCode,
+  HttpStatus,
   Param,
+  ParseUUIDPipe,
   Post,
   Query,
-  UseInterceptors,
+  Res,
+  UseGuards,
 } from '@nestjs/common';
+import { Public } from 'src/auth/decorators/public.decorator';
+import { PgSignatureGuard } from 'src/pg/guards/pg-signature.guard';
+import type { Response } from 'express';
 import { CurrentUser } from 'src/auth/decorators/current-user.decorator';
 import type { JwtValidationResult } from 'src/auth/interfaces/jwt-payload.interface';
-import { RefundService } from './refund.service';
-import { GetRefundQueryDto, RefundDto, PgRefundCallbackDto } from './dto';
-import { IdempotencyInterceptor } from 'src/common/interceptors/idempotency.interceptor';
+import {
+  GetRefundQueryDto,
+  RefundDto,
+  PgRefundCallbackDto,
+  StoreRefundDto,
+  EmptyBodyDto,
+} from './dto';
+import { RefundStoreService } from './refund-store.service';
+import { RefundPgCheckService } from './refund-pg-check.service';
+import { RefundAcceptanceService } from './refund-acceptance.service';
+import { RefundResultService } from './refund-result.service';
+import { RefundQueryService } from './refund-query.service';
+import {
+  ApiOperation,
+  ApiTags,
+  ApiBearerAuth,
+  ApiParam,
+  ApiHeader,
+  ApiBody,
+} from '@nestjs/swagger';
+import {
+  ApiRefundResponse,
+  ApiRefundErrors,
+  pgCheckSchema,
+  refundAcceptanceSchema,
+  refundDetailSchema,
+  refundListSchema,
+} from './refund.swagger';
 
+@ApiTags('refund')
 @Controller('refund')
 export class RefundController {
-  constructor(private readonly refundService: RefundService) {}
+  constructor(
+    private readonly refundAcceptanceService: RefundAcceptanceService,
+    private readonly refundResultService: RefundResultService,
+    private readonly refundStoreService: RefundStoreService,
+    private readonly refundPgCheckService: RefundPgCheckService,
+    private readonly refundQueryService: RefundQueryService,
+  ) {}
 
+  /**
+   * 고객 본인 이용권의 환불을 확정한다 (API 계약 §4 고객: POST /refund)
+   * - 같은 Idempotency-Key 재요청은 DB 멱등 기록의 최초 응답을 돌려준다
+   * @param user 신청한 고객(JWT)
+   * @param dto 이용권·종료 동의
+   * @param res 응답 상태 지정용(양수 접수 202)
+   * @param idempotencyKey 선택 멱등 키
+   * @returns 접수 응답 본문
+   */
+  @ApiBearerAuth('access-token')
+  @ApiHeader({
+    name: 'idempotency-key',
+    required: false,
+    description:
+      '동일 요청 재전송 시 같은 키를 사용합니다. 다른 요청 내용으로 재사용하면 충돌합니다.',
+    schema: {
+      type: 'string',
+      minLength: 1,
+      maxLength: 128,
+      pattern: '^[!-~]+$',
+    },
+  })
+  @ApiRefundResponse(200, '0원 환불 확정', refundAcceptanceSchema)
+  @ApiRefundResponse(
+    202,
+    '환불 접수. 실제 지급 완료를 의미하지 않습니다.',
+    refundAcceptanceSchema,
+  )
+  @ApiRefundErrors(400, 401, 403, 404, 409, 503)
+  @ApiOperation({ summary: '고객 본인 이용권의 종료와 환불 금액 확정' })
   @Post()
-  @UseInterceptors(IdempotencyInterceptor)
   async refund(
     @CurrentUser() user: JwtValidationResult,
     @Body() dto: RefundDto,
+    @Res({ passthrough: true }) res: Response,
     @Headers('idempotency-key') idempotencyKey?: string,
   ) {
-    return await this.refundService.refund(
-      user.userId,
-      dto.ticketId,
-      idempotencyKey,
+    const result = await this.refundAcceptanceService.acceptCustomerRefund(
+      { userId: user.userId, role: user.role },
+      {
+        ticketId: dto.ticketId,
+        consentToTerminateTicket: dto.consentToTerminateTicket,
+        idempotencyKey,
+      },
     );
+    res.status(result.status);
+    return result.body;
   }
 
+  /**
+   * 점주가 자기 매장 이용권의 환불을 확정한다 (API 계약 §4 매장: POST /refund/shop/:shopId)
+   * - 같은 Idempotency-Key 재요청은 DB 멱등 기록의 최초 응답을 돌려준다
+   * @param user 요청한 점주(JWT)
+   * @param shopId 요청 매장
+   * @param dto 이용권·금액·사유·종료/퇴실 동의
+   * @param res 응답 상태 지정용(양수 접수 202, 0원 200)
+   * @param idempotencyKey 선택 멱등 키
+   * @returns 접수 응답 본문
+   */
+  @ApiBearerAuth('access-token')
+  @ApiParam({ name: 'shopId', format: 'uuid', description: 'shopId (UUID)' })
+  @ApiHeader({
+    name: 'idempotency-key',
+    required: false,
+    description:
+      '동일 요청 재전송 시 같은 키를 사용합니다. 다른 요청 내용으로 재사용하면 충돌합니다.',
+    schema: {
+      type: 'string',
+      minLength: 1,
+      maxLength: 128,
+      pattern: '^[!-~]+$',
+    },
+  })
+  @ApiRefundResponse(200, '0원 환불 확정', refundAcceptanceSchema)
+  @ApiRefundResponse(
+    202,
+    '환불 접수. 실제 지급 완료를 의미하지 않습니다.',
+    refundAcceptanceSchema,
+  )
+  @ApiRefundErrors(400, 401, 403, 404, 409, 503)
+  @ApiOperation({ summary: '점주 매장 이용권의 종료와 환불 금액 확정' })
+  @Post('shop/:shopId')
+  async storeRefund(
+    @CurrentUser() user: JwtValidationResult,
+    @Param('shopId', ParseUUIDPipe) shopId: string,
+    @Body() dto: StoreRefundDto,
+    @Res({ passthrough: true }) res: Response,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
+    const result = await this.refundStoreService.acceptStoreRefund(
+      { userId: user.userId, role: user.role },
+      shopId,
+      {
+        ticketId: dto.ticketId,
+        amount: dto.amount,
+        reason: dto.reason,
+        consentToTerminateTicket: dto.consentToTerminateTicket,
+        consentToEndSession: dto.consentToEndSession,
+        idempotencyKey,
+      },
+    );
+    res.status(result.status);
+    return result.body;
+  }
+
+  /**
+   * 점주·운영자가 환불의 PG 결과를 개별 확인한다 (API 계약 §8 POST /refund/:refundId/pg-check)
+   * @param user 요청한 사용자(JWT)
+   * @param refundId 확인할 환불
+   * @param _body 본문 없음/{}만 허용(금액·시도 ID·결과는 입력받지 않는다)
+   * @param res 응답 상태 지정용(진행 중 202, 그 밖 200)
+   * @returns 확인 결과와 최신 환불 정보
+   */
+  @ApiBearerAuth('access-token')
+  @ApiParam({
+    name: 'refundId',
+    format: 'uuid',
+    description: 'refundId (UUID)',
+  })
+  @ApiBody({
+    required: false,
+    description: '본문 생략 또는 빈 객체만 허용합니다.',
+    schema: { type: 'object', additionalProperties: false },
+  })
+  @ApiRefundResponse(200, '확인 결과', pgCheckSchema)
+  @ApiRefundResponse(202, '이미 확인 작업이 진행 중', pgCheckSchema)
+  @ApiRefundErrors(400, 401, 403, 404, 409, 503)
+  @ApiOperation({ summary: '점주·운영자의 환불 PG 취소 결과 개별 확인' })
+  @Post(':refundId/pg-check')
+  async pgCheck(
+    @CurrentUser() user: JwtValidationResult,
+    @Param('refundId', ParseUUIDPipe) refundId: string,
+    @Body() _body: EmptyBodyDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.refundPgCheckService.check(
+      { userId: user.userId, role: user.role },
+      refundId,
+      new Date(),
+    );
+    res.status(result.checkStatus === 'ALREADY_RUNNING' ? 202 : 200);
+    return result;
+  }
+
+  /**
+   * PG 취소 결과 콜백을 받는다 (API 계약 §7 POST /refund/callback, 200 수신 확인)
+   * @param dto 콜백 본문
+   */
+  @ApiHeader({
+    name: 'X-Pg-Timestamp',
+    required: true,
+    description: '서명 시각(십진 Unix 초)',
+    schema: { type: 'string', pattern: '^[0-9]+$' },
+  })
+  @ApiHeader({
+    name: 'X-Pg-Signature',
+    required: true,
+    description:
+      'v1= 접두사와 HMAC-SHA256 서명. 파싱 전 JSON 본문과 시각·메서드·경로로 계산합니다.',
+    schema: {
+      type: 'string',
+      pattern: '^v1=[a-f0-9]{64}$',
+    },
+  })
+  @ApiRefundResponse(200, 'PG 취소 결과 수신 확인')
+  @ApiRefundErrors(400, 401, 404)
+  @ApiOperation({ summary: 'PG 서명으로 인증한 취소 결과 통보 수신' })
   @Post('callback')
+  @HttpCode(HttpStatus.OK)
+  @Public()
+  @UseGuards(PgSignatureGuard)
   async callbackRefund(@Body() dto: PgRefundCallbackDto) {
-    await this.refundService.callback(
-      dto.success,
-      dto.paymentCancelId,
-      dto.orderItemId,
-      dto.amount,
-      dto.reason,
-    );
+    await this.refundResultService.receiveCallback({
+      success: dto.success,
+      paymentCancelId: dto.paymentCancelId,
+      pgTransactionId: dto.pgTransactionId,
+      orderItemId: dto.orderItemId ?? null,
+      amount: dto.amount,
+      reason: dto.reason,
+    });
   }
 
-  // 매장의 환불 내역 (status 미지정 시 전체 상태 조회)
+  @ApiBearerAuth('access-token')
+  @ApiRefundResponse(200, '본인 환불 내역', refundListSchema)
+  @ApiRefundErrors(400, 401, 403, 404)
+  @ApiOperation({ summary: '고객 본인의 환불 내역 조회' })
+  @Get('me')
+  getMyRefundHistory(
+    @CurrentUser() user: JwtValidationResult,
+    @Query() query: GetRefundQueryDto,
+  ) {
+    return this.refundQueryService.byMe(user, query);
+  }
+
+  /** 현재 점주는 자기 매장, 운영자는 지정 매장의 환불 내역을 조회한다. */
+  @ApiBearerAuth('access-token')
+  @ApiParam({ name: 'shopId', format: 'uuid', description: 'shopId (UUID)' })
+  @ApiRefundResponse(200, '매장 환불 내역', refundListSchema)
+  @ApiRefundErrors(400, 401, 403, 404)
+  @ApiOperation({ summary: '현재 점주·운영자의 매장 환불 내역 조회' })
   @Get('/shop/:shopId')
   async getRefundHistoryByShop(
-    @Param('shopId') shopId: string,
-    @Query() query?: GetRefundQueryDto,
+    @CurrentUser() user: JwtValidationResult,
+    @Param('shopId', ParseUUIDPipe) shopId: string,
+    @Query() query: GetRefundQueryDto,
   ) {
-    return this.refundService.getRefundHistoryByShop(shopId, query?.status);
+    return this.refundQueryService.byShop(user, shopId, query);
   }
 
-  // 사용자의 환불 내역
+  /** 운영자가 지정한 고객의 환불 내역을 조회한다. */
+  @ApiBearerAuth('access-token')
+  @ApiParam({ name: 'userId', format: 'uuid', description: 'userId (UUID)' })
+  @ApiRefundResponse(200, '고객 환불 내역', refundListSchema)
+  @ApiRefundErrors(400, 401, 403, 404)
+  @ApiOperation({ summary: '운영자의 지정 고객 환불 내역 조회' })
   @Get('/user/:userId')
   async getRefundHistoryByUser(
-    @Param('userId') userId: string,
-    @Query() query?: GetRefundQueryDto,
+    @CurrentUser() user: JwtValidationResult,
+    @Param('userId', ParseUUIDPipe) userId: string,
+    @Query() query: GetRefundQueryDto,
   ) {
-    return this.refundService.getRefundHistoryByUser(userId, query?.status);
+    return this.refundQueryService.byUser(user, userId, query);
+  }
+
+  // 고정 조회 경로 뒤에 선언하여 /me 등을 환불 식별자로 해석하지 않는다.
+  @ApiBearerAuth('access-token')
+  @ApiParam({
+    name: 'refundId',
+    format: 'uuid',
+    description: 'refundId (UUID)',
+  })
+  @ApiRefundResponse(
+    200,
+    '환불 상세. 운영자 전용 정보는 MANAGER에게만 반환합니다.',
+    refundDetailSchema,
+  )
+  @ApiRefundErrors(400, 401, 403, 404)
+  @ApiOperation({ summary: '권한 범위 안의 환불 상세·실제 지급액 조회' })
+  @Get(':refundId')
+  getRefundDetail(
+    @CurrentUser() user: JwtValidationResult,
+    @Param('refundId', ParseUUIDPipe) refundId: string,
+  ) {
+    return this.refundQueryService.detail(user, refundId);
   }
 }

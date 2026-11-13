@@ -1,3 +1,4 @@
+import { activePauseWhere } from './active-pause';
 import { Injectable } from '@nestjs/common';
 import {
   TicketPause,
@@ -61,13 +62,13 @@ export class TicketPauseRepository {
     return ticket;
   }
 
-  // 해당 티켓의 활성 정지(resumed_at IS NULL) 조회
+  // 해당 티켓의 활성 정지(재개·환불 종료 모두 아닌 정지) 조회
   async findActivePause(
     ticketId: string,
     client: TransactionClient | PrismaService = this.prisma,
   ): Promise<TicketPause | null> {
     return client.ticketPause.findFirst({
-      where: { ticketId, resumedAt: null },
+      where: { ticketId, ...activePauseWhere },
     });
   }
 

@@ -1,7 +1,7 @@
 import {
   IsBoolean,
+  IsInt,
   IsNotEmpty,
-  IsNumber,
   IsOptional,
   IsPositive,
   IsString,
@@ -15,7 +15,8 @@ export class PgCallbackDto {
   @IsNotEmpty()
   pgTransactionId!: string;
 
-  @IsNumber()
+  // PG가 승인했다고 알린 금액(원 단위 정수, approvedAmount·환불 금액으로 저장된다)
+  @IsInt()
   @IsPositive()
   amount!: number;
 

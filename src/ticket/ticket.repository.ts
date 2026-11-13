@@ -1,3 +1,4 @@
+import { activePauseWhere } from './ticket-pause/active-pause';
 import { Injectable } from '@nestjs/common';
 import {
   Ticket,
@@ -100,7 +101,7 @@ export class TicketRepository {
           take: 1,
         },
         ticketPauses: {
-          where: { resumedAt: null }, // 현재 정지 중인 것만
+          where: activePauseWhere, // 현재 정지 중인 것만(환불로 닫힌 정지 제외)
           select: {
             pausedAt: true,
             pausedReason: true,
@@ -144,7 +145,7 @@ export class TicketRepository {
           take: 1,
         },
         ticketPauses: {
-          where: { resumedAt: null }, // 현재 정지 중인 것만
+          where: activePauseWhere, // 현재 정지 중인 것만(환불로 닫힌 정지 제외)
           select: {
             pausedAt: true,
             pausedReason: true,

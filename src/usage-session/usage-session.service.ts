@@ -1,4 +1,5 @@
-import { SeatType } from '@prisma/client';
+import { SeatType, TicketStatus } from '@prisma/client';
+import { TicketTerminatedError } from 'src/ticket/errors/ticket-terminated.error';
 import { Injectable } from '@nestjs/common';
 import { UsageSessionRepository } from './usage-session.repository';
 import { TicketRepository } from 'src/ticket/ticket.repository';
@@ -74,6 +75,11 @@ export class UsageSessionService {
     userId: string,
   ): Promise<void> {
     const ticket = await this.ticketRepository.getTicketById(ticketId);
+
+    // 환불로 이용이 종료된 이용권은 지급 상태와 관계없이 입실할 수 없다(API 계약 §6, FR-017)
+    if (ticket.status === TicketStatus.REVOKED) {
+      throw new TicketTerminatedError();
+    }
 
     // 이용권과 좌석의 타입이 같아야 입실할 수 있다(FR-011)
     const seatType = await this.repository.findSeatType(seatId);

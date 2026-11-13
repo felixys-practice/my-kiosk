@@ -1,4 +1,5 @@
-/* eslint-disable @typescript-eslint/unbound-method -- jest 목(mock) 메서드를 expect로 검증할 때 생기는 오탐 */
+/* eslint-disable @typescript-eslint/unbound-method -- Vitest 목(mock) 메서드를 expect로 검증할 때 생기는 오탐 */
+import { vi, type Mocked } from 'vitest';
 import {
   PaymentStatus,
   SeatReleaseReason,
@@ -10,8 +11,7 @@ import { PrismaService, TransactionClient } from 'src/prisma/prisma.service';
 import { SeatHoldExpiredError } from 'src/seat-assignment/errors/seat-hold-expired.error';
 import { SeatAssignmentService } from 'src/seat-assignment/seat-assignment.service';
 import { TransactionLoggerService } from 'src/logger/transaction-logger.service';
-import { RefundService } from 'src/refund/refund.service';
-import { PaymentAmountMismatchError } from './errors';
+import { RefundSystemService } from 'src/refund/refund-system.service';
 import { PaymentRepository } from './payment.repository';
 import { PaymentService } from './payment.service';
 import { PeriodPaymentData, TimePaymentData } from './payment.types';
@@ -19,12 +19,12 @@ import { PeriodPaymentData, TimePaymentData } from './payment.types';
 describe('PaymentService', () => {
   const tx = {} as TransactionClient;
 
-  let paymentRepository: jest.Mocked<PaymentRepository>;
-  let orderItemRepository: jest.Mocked<OrderItemRepository>;
-  let prisma: jest.Mocked<PrismaService>;
-  let seatAssignmentService: jest.Mocked<SeatAssignmentService>;
-  let refundService: jest.Mocked<RefundService>;
-  let transactionLogger: jest.Mocked<TransactionLoggerService>;
+  let paymentRepository: Mocked<PaymentRepository>;
+  let orderItemRepository: Mocked<OrderItemRepository>;
+  let prisma: Mocked<PrismaService>;
+  let seatAssignmentService: Mocked<SeatAssignmentService>;
+  let transactionLogger: Mocked<TransactionLoggerService>;
+  let refundSystemService: Mocked<RefundSystemService>;
   /** 트랜잭션 안에서 실행 중인지(커밋 후 호출 검증용) */
   let inTransaction: boolean;
   let service: PaymentService;
@@ -73,24 +73,29 @@ describe('PaymentService', () => {
 
   beforeEach(() => {
     paymentRepository = {
-      getPaymentByPgTransactionId: jest.fn().mockResolvedValue({
+      getPaymentByPgTransactionId: vi.fn().mockResolvedValue({
         id: 'payment-1',
         amount: 20000,
         status: PaymentStatus.REQUESTED,
         order: { id: 'order-1', userId: 'user-1' },
       }),
-      approvePayment: jest.fn(),
-      createTickets: jest.fn(),
-      failedPayment: jest.fn(),
-      createPayment: jest.fn().mockResolvedValue({ id: 'payment-1' }),
-      requestedPayment: jest.fn(),
-    } as unknown as jest.Mocked<PaymentRepository>;
+      approvePayment: vi.fn(),
+      createTickets: vi.fn(),
+      failedPayment: vi.fn(),
+      failApprovalMismatch: vi.fn(),
+      lockForApproval: vi.fn().mockResolvedValue({
+        status: PaymentStatus.REQUESTED,
+        approvedAmount: null,
+      }),
+      createPayment: vi.fn().mockResolvedValue({ id: 'payment-1' }),
+      requestedPayment: vi.fn(),
+    } as unknown as Mocked<PaymentRepository>;
     orderItemRepository = {
-      getOrderItem: jest.fn().mockResolvedValue([fixedItem, freeItem]),
-    } as unknown as jest.Mocked<OrderItemRepository>;
+      getOrderItem: vi.fn().mockResolvedValue([fixedItem, freeItem]),
+    } as unknown as Mocked<OrderItemRepository>;
     inTransaction = false;
     prisma = {
-      executeTransaction: jest.fn(
+      executeTransaction: vi.fn(
         async (work: (tx: TransactionClient) => Promise<unknown>) => {
           inTransaction = true;
           try {
@@ -100,25 +105,27 @@ describe('PaymentService', () => {
           }
         },
       ),
-    } as unknown as jest.Mocked<PrismaService>;
+    } as unknown as Mocked<PrismaService>;
     seatAssignmentService = {
-      activateByOrderItem: jest.fn().mockResolvedValue(true),
-      releaseByOrderItems: jest.fn(),
-      releaseEndedHolds: jest.fn().mockResolvedValue([]),
-    } as unknown as jest.Mocked<SeatAssignmentService>;
-    refundService = {
-      refundBySystem: jest.fn(),
-    } as unknown as jest.Mocked<RefundService>;
+      activateByOrderItem: vi.fn().mockResolvedValue(true),
+      releaseByOrderItems: vi.fn(),
+      releaseEndedHolds: vi.fn().mockResolvedValue([]),
+    } as unknown as Mocked<SeatAssignmentService>;
     transactionLogger = {
-      logTransaction: jest.fn(),
-    } as unknown as jest.Mocked<TransactionLoggerService>;
+      logTransaction: vi.fn(),
+    } as unknown as Mocked<TransactionLoggerService>;
+    refundSystemService = {
+      acceptPaymentMismatch: vi.fn(),
+      acceptSeatAssignmentFailure: vi.fn(),
+      sendAfterCommit: vi.fn(),
+    } as unknown as Mocked<RefundSystemService>;
     service = new PaymentService(
       paymentRepository,
       orderItemRepository,
       prisma,
       seatAssignmentService,
-      refundService,
       transactionLogger,
+      refundSystemService,
     );
   });
 
@@ -152,7 +159,7 @@ describe('PaymentService', () => {
       ]);
     });
 
-    it('좌석을 확정하지 못한 이용권은 커밋 후 시스템 자동 취소를 요청한다', async () => {
+    it('좌석을 확정하지 못한 이용권은 승인과 같은 트랜잭션에서 상품 대상 시스템 환불로 확정하고 커밋 뒤 PG 취소를 보낸다', async () => {
       const secondFixed = { ...fixedItem, id: 'item-fixed-2' };
       orderItemRepository.getOrderItem.mockResolvedValue([
         fixedItem,
@@ -162,25 +169,59 @@ describe('PaymentService', () => {
       seatAssignmentService.activateByOrderItem.mockImplementation(
         (orderItemId) => Promise.resolve(orderItemId !== 'item-fixed'),
       );
-      const calledInTransaction: boolean[] = [];
-      refundService.refundBySystem.mockImplementation(() => {
-        calledInTransaction.push(inTransaction);
+      const pending = {
+        paymentCancelId: 'cancel-1',
+        amount: 10000,
+        claimToken: 'claim-1',
+        sentAt: new Date(),
+      };
+      const steps: [string, boolean][] = [];
+      refundSystemService.acceptSeatAssignmentFailure.mockImplementation(() => {
+        steps.push(['환불 확정', inTransaction]);
+        return Promise.resolve(pending);
+      });
+      refundSystemService.sendAfterCommit.mockImplementation(() => {
+        steps.push(['PG 취소 전송', inTransaction]);
         return Promise.resolve();
       });
 
       await service.callbackPayment(successPayload);
 
-      expect(refundService.refundBySystem).toHaveBeenCalledTimes(1);
-      expect(refundService.refundBySystem).toHaveBeenCalledWith(
-        createdTicketId('item-fixed'),
-        '좌석 선점 만료로 좌석 배정 불가 - 자동 결제 취소',
-      );
-      expect(calledInTransaction).toEqual([false]);
+      expect({
+        accepted: refundSystemService.acceptSeatAssignmentFailure.mock.calls,
+        sent: refundSystemService.sendAfterCommit.mock.calls,
+        steps,
+      }).toEqual({
+        accepted: [
+          [
+            tx,
+            {
+              paymentId: 'payment-1',
+              orderItemId: 'item-fixed',
+              ticketId: createdTicketId('item-fixed'),
+              now: expect.any(Date) as Date,
+            },
+          ],
+        ],
+        sent: [[pending]],
+        steps: [
+          ['환불 확정', true],
+          ['PG 취소 전송', false],
+        ],
+      });
     });
 
-    it('자동 취소 요청이 예외를 던져도 콜백은 성공하고 거래 로그를 남긴다', async () => {
+    it('좌석 배정 실패 환불의 PG 전송이 커밋 뒤 예외를 던져도 콜백은 성공하고 거래 로그를 남긴다', async () => {
       seatAssignmentService.activateByOrderItem.mockResolvedValue(false);
-      refundService.refundBySystem.mockRejectedValue(new Error('PG 장애'));
+      refundSystemService.acceptSeatAssignmentFailure.mockResolvedValue({
+        paymentCancelId: 'cancel-1',
+        amount: 10000,
+        claimToken: 'claim-1',
+        sentAt: new Date(),
+      });
+      refundSystemService.sendAfterCommit.mockRejectedValue(
+        new Error('PG 장애'),
+      );
 
       await expect(
         service.callbackPayment(successPayload),
@@ -215,10 +256,91 @@ describe('PaymentService', () => {
       );
     });
 
-    it('승인 금액이 다르면 선점을 PAYMENT_FAILED로 해제한다', async () => {
+    it('승인 금액이 다르면 같은 트랜잭션에서 실제 승인액을 보존하고 승인액 전액의 결제 전체 대상 시스템 환불을 확정하며 커밋 뒤 PG 취소를 보낸다', async () => {
+      /** PG가 실제로 승인했다고 알린 금액(요청액 20000원과 다름) */
+      const approvedAmount = 15000;
+      const pending = {
+        paymentCancelId: 'cancel-1',
+        amount: approvedAmount,
+        claimToken: 'claim-1',
+        sentAt: new Date(),
+      };
+      const steps: [string, boolean][] = [];
+      paymentRepository.failApprovalMismatch.mockImplementation(() => {
+        steps.push(['결제 실패·승인액 저장', inTransaction]);
+        return Promise.resolve();
+      });
+      refundSystemService.acceptPaymentMismatch.mockImplementation(() => {
+        steps.push(['환불 확정', inTransaction]);
+        return Promise.resolve(pending);
+      });
+      refundSystemService.sendAfterCommit.mockImplementation(() => {
+        steps.push(['PG 취소 전송', inTransaction]);
+        return Promise.resolve();
+      });
+
+      await service.callbackPayment({
+        ...successPayload,
+        amount: approvedAmount,
+      });
+
+      expect({
+        failed: paymentRepository.failApprovalMismatch.mock.calls,
+        accepted: refundSystemService.acceptPaymentMismatch.mock.calls,
+        sent: refundSystemService.sendAfterCommit.mock.calls,
+        steps,
+      }).toEqual({
+        failed: [
+          ['payment-1', approvedAmount, expect.any(String) as string, tx],
+        ],
+        accepted: [
+          [
+            tx,
+            {
+              paymentId: 'payment-1',
+              approvedAmount,
+              now: expect.any(Date) as Date,
+            },
+          ],
+        ],
+        sent: [[pending]],
+        steps: [
+          ['결제 실패·승인액 저장', true],
+          ['환불 확정', true],
+          ['PG 취소 전송', false],
+        ],
+      });
+    });
+
+    it('승인 금액이 다르면 이용권을 발행하지 않는다', async () => {
+      await service.callbackPayment({ ...successPayload, amount: 15000 });
+
+      expect({
+        tickets: paymentRepository.createTickets.mock.calls.length,
+        approved: paymentRepository.approvePayment.mock.calls.length,
+      }).toEqual({ tickets: 0, approved: 0 });
+    });
+
+    it('이미 반영한 같은 승인 금액 불일치 콜백이 다시 오면 예외 없이 끝나고 시스템 환불을 다시 만들지 않는다', async () => {
+      paymentRepository.getPaymentByPgTransactionId.mockResolvedValue({
+        id: 'payment-1',
+        amount: 20000,
+        approvedAmount: 15000,
+        status: PaymentStatus.FAILED,
+        order: { id: 'order-1', userId: 'user-1' },
+      });
+
+      await expect(
+        service.callbackPayment({ ...successPayload, amount: 15000 }),
+      ).resolves.toBeUndefined();
+
+      expect(refundSystemService.acceptPaymentMismatch).not.toHaveBeenCalled();
+    });
+
+    it('승인 금액이 다르면 선점을 PAYMENT_FAILED로 해제하고 콜백은 수신 확인으로 끝난다', async () => {
       await expect(
         service.callbackPayment({ ...successPayload, amount: 1 }),
-      ).rejects.toBeInstanceOf(PaymentAmountMismatchError);
+      ).resolves.toBeUndefined();
 
       expect(seatAssignmentService.releaseByOrderItems).toHaveBeenCalledWith(
         ['item-fixed', 'item-free'],
