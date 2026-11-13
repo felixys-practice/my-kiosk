@@ -40,6 +40,7 @@
     "@prisma/adapter-pg": "^7.9.0",
     "@prisma/client": "^7.9.0",
     "@prisma/client-runtime-utils": "^7.9.0",
+    "@scalar/nestjs-api-reference": "^1.2.37",
     "bcrypt": "^6.0.0",
     "bullmq": "^6.0.5",
     "class-transformer": "^0.5.1",
