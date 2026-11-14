@@ -20,6 +20,7 @@
     "test:e2e": "vitest run --config vitest.config.e2e.mts",
     "prisma:studio": "prisma --port 5555",
     "prisma:seed": "ts-node --transpile-only prisma/seed.ts",
+    "dev:scenario": "ts-node scripts/dev-scenario.ts",
     "log:tx": "bash scripts/txlog.sh",
     "log:tx:full": "bash scripts/txlog.sh --full",
     "log": "bash scripts/log.sh"
