@@ -6,14 +6,15 @@
 
 - [ ] 빈 PostgreSQL DB에 전체 Prisma 마이그레이션을 순서대로 적용하고 `prisma migrate status`가 최신인지 확인한다. `prisma migrate diff`로 최종 Prisma 모델과 DB의 차이를 확인하고, 환불·PG 취소 요청·별도 지급 예약·원장의 FK, unique, 금액 제약을 확인한다. 검증용 DB 결과를 실제 배포 DB에 적용한 결과로 오인하지 않는다.
 - [ ] Redis와 BullMQ에 연결하고 환불 자동 복구 작업자가 실행되는지 확인한다. `REFUND_RECOVERY_WORKER_ENABLED`를 배포 환경에서 활성화하고, 중단 후 DB에 남은 미확정 PG 취소 요청은 조회부터 재개하며 별도 지급 예약은 보존되는지 확인한다.
-- [ ] `DATABASE_URL`, `REDIS_HOST`, `JWT_SECRET`, `JWT_REFRESH_SECRET`, `PG_CALLBACK_SECRET`을 배포 환경에 설정한다. `PG_CALLBACK_SECRET`은 32자 이상으로 관리하고 응답·로그에 노출하지 않는다. `.env.example`의 환불 시간·횟수 설정과 계약 §8의 기본값 및 `workLease > pgTimeout`, `queryInterval >= sweepInterval + pgTimeout`, `backoffMax >= backoff` 관계를 대조한다.
-- [ ] 배포 환경의 PG 클라이언트가 실제 사업자와 연결됐는지 확인한다. 현재 미연동 기본 동작의 `NOT_SENT`/`QUERY_ERROR`를 실제 PG 성공으로 간주하지 않는다.
+- [ ] `DATABASE_URL`, `REDIS_HOST`, `JWT_SECRET`, `JWT_REFRESH_SECRET`, `PG_MODE`, `PG_CALLBACK_SECRET`을 배포 환경에 설정한다. `PG_CALLBACK_SECRET`은 32자 이상으로 관리하고 응답·로그에 노출하지 않는다. `.env.example`의 환불 시간·횟수 설정과 계약 §8의 기본값 및 `workLease > pgTimeout`, `queryInterval >= sweepInterval + pgTimeout`, `backoffMax >= backoff` 관계를 대조한다.
+- [ ] 배포 환경의 PG 클라이언트가 실제 사업자와 연결됐는지 확인한다. 현재 `ProductionPgClient`는 실제 통신이 미구현된 골격으로, `PG_MODE=production`으로 선택하면 서버 시작을 거부한다. `SimulatedPgClient`는 development/test에서만 허용하며, 모의 성공 결과·지급액·원장을 외부 금전 지급 증거로 간주하지 않는다.
 
 ## 2. 서버·클라이언트 API 계약
 
 - [ ] 클라이언트가 고객 `POST /refund`, 점주 `POST /refund/shop/:shopId`에 이용 종료 동의를 전달하고, 이용 중인 매장 환불에는 퇴실 동의도 전달하는지 확인한다. 양수 환불의 접수 응답은 이용 종료 완료와 환불금 지급 처리 중을 구분하고 `refundId`·`payoutStatus`를 표시한다.
 - [ ] 목록과 상세 조회에서 고객 본인, 현재 점주의 자기 매장, 운영자 범위를 확인한다. 클라이언트는 확정 환불 금액(`amount`), 실제 지급액(`paidAmount`), 미지급액과 조치 사유를 서로 다른 값으로 표시하고 운영 전용 원문 오류·증빙을 일반 사용자에게 노출하지 않는다.
-- [ ] 운영 화면이 PG 개별 확인, 운영자 직접 PG 재요청, 별도 지급 예약, 실제 지급 증빙 확정, 미지급 확인, 초과 지급 검토를 계약의 서로 다른 API와 상태로 처리하는지 확인한다. 예약만으로 지급 완료로 표시하거나 미확정 지급 중 다른 지급을 시작하지 않는다.
+- [ ] 점주·운영자의 일반 PG 재확인·재시도는 같은 `POST /refund/:refundId/pg-check`로 처리하고, 조회 결과에 따라 기존 요청 재전송 또는 새 요청 생성·전송까지 수행하는지 확인한다. 폐지한 `payout-retries` API를 사용하지 않는다.
+- [ ] 운영 화면이 별도 지급 예약, 실제 지급 증빙 확정, 미지급 확인, 초과 지급 검토를 각각 계약의 API와 상태로 처리하는지 확인한다. 예약만으로 지급 완료로 표시하거나 미확정 지급 중 다른 지급을 시작하지 않는다. 별도 지급 예약을 미지급으로 실패 종료해도 `Refund.payoutMethod=MANUAL`은 유지하며, `pg-check`는 이 환불의 PG 조회·재전송·새 요청 생성을 수행하지 않는다. `MANUAL → PG` 전환 절차는 아직 미결이다.
 - [ ] 결제·환불 콜백의 HTTP 200 수신 확인, 서명 실패의 401, 저장 실패의 503 및 계약 §10의 업무 오류 코드를 서버와 PG/클라이언트 양쪽에서 대조한다. PG 콜백은 로그인 JWT가 아니라 계약 §7의 서명으로 인증한다.
 
 ## 3. 실제 PG·은행 연동 확인 — 미확인
@@ -24,7 +25,7 @@
 - [ ] PG의 `FAILED` 또는 거절 확정이 해당 취소 요청으로 금액이 지급되지 않았고 이후에도 처리되지 않음을 보장하는지 확인한다. 불명확한 실패 문구는 확정 실패로 분류하지 않는다.
 - [ ] `PaymentCancel.id`를 PG 취소 요청의 멱등 키로 반복 전송했을 때 한 거래만 실행되고 같은 결과가 조회되는지 확인한다. 새 PG 취소 요청에는 새 ID를 쓰며, 미확정 요청과 별도 지급 예약이 있는 동안 추가 지급을 막는다.
 - [ ] PG가 계약 §7의 두 고정 경로, raw JSON 바이트 SHA-256, Unix 초 timestamp, HMAC-SHA256 서명을 동일하게 생성하고 유효 시간 안에 재통보할 수 있는지 확인한다. 서명 비밀값 교체 절차와 HTTPS 전달을 확인하고, 서명 없는 통보로 결제·환불 상태가 바뀌지 않는지 확인한다.
-- [ ] 실제 PG 취소 성공의 거래 ID와 정수 실제액이 원승인 거래 ID와 구분되고, 환불금 지급액과 지급별 원장이 한 번만 반영되는지 확인한다. 별도 지급은 은행의 실제 송금 여부·거래 식별자·시각·증빙을 운영자가 확인한 뒤에만 확정한다. **은행 연동 검증: 미확인.**
+- [ ] 실제 PG 취소 성공 응답의 paymentCancelId가 요청 ID와 일치하고, 취소 거래 ID·정수 실제액을 저장하며, 환불금 지급액과 지급별 원장이 한 번만 반영되는지 확인한다. 별도 지급은 은행의 실제 송금 여부·거래 식별자·시각·증빙을 운영자가 확인한 뒤에만 확정한다. **은행 연동 검증: 미확인.**
 
 ## 4. 완료 기록
 

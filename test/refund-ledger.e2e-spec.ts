@@ -1,3 +1,4 @@
+import { RefundRecoveryService } from '../src/refund/refund-recovery.service';
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
 import request from 'supertest';
 import { signedCallback } from './helpers/pg-callback';
@@ -6,7 +7,7 @@ import {
   PaymentCancelStatus,
   RefundPayoutStatus,
 } from '@prisma/client';
-import { REFUND_PG_GATEWAY } from '../src/pg/refund-pg.gateway';
+import { PgService } from '../src/pg/pg.service';
 import {
   createRefundTestContext,
   IssuedTicket,
@@ -27,7 +28,7 @@ describe('실제 지급별 원장 (E2E)', () => {
     ctx = await createRefundTestContext({
       label: 'ledger',
       configure: (builder) =>
-        builder.overrideProvider(REFUND_PG_GATEWAY).useValue(pgStub),
+        builder.overrideProvider(PgService).useValue(pgStub),
     });
   });
 
@@ -75,7 +76,6 @@ describe('실제 지급별 원장 (E2E)', () => {
       success: true,
       paymentCancelId: accepted.paymentCancelId,
       pgTransactionId: `pg-cancel-${accepted.paymentCancelId}`,
-      orderItemId: accepted.orderItemId,
       amount: accepted.amount,
       reason: null,
     }).expect(200);
@@ -105,7 +105,6 @@ describe('실제 지급별 원장 (E2E)', () => {
       success: true,
       paymentCancelId: accepted.paymentCancelId,
       pgTransactionId: `pg-cancel-${accepted.paymentCancelId}`,
-      orderItemId: accepted.orderItemId,
       amount: accepted.amount,
       reason: null,
     };
@@ -154,23 +153,41 @@ describe('실제 지급별 원장 (E2E)', () => {
       ledgers: refund.ledgers.length,
     }).toEqual({ payoutStatus: RefundPayoutStatus.PENDING, ledgers: 0 });
   });
-  it('orderItemId를 생략한 콜백도 상품 대상 환불이면 409 PG_CALLBACK_TARGET_MISMATCH로 거절되고 반영하지 않는다', async () => {
+  it('paymentCancelId만 전달한 콜백으로 상품 대상 환불의 지급액·원장을 반영한다', async () => {
     const accepted = await acceptedRefund();
-    // 콜백 본문에서 orderItemId 필드 자체를 뺀다
-    const withoutTarget: Partial<ReturnType<typeof successCallback>> =
-      successCallback(accepted);
-    delete withoutTarget.orderItemId;
-
-    const { body } = await sendRefundCallback(withoutTarget).expect(409);
-
-    expect(body.error.code).toBe('PG_CALLBACK_TARGET_MISMATCH');
+    await sendRefundCallback(successCallback(accepted)).expect(200);
     const refund = await ctx.prisma.refund.findUniqueOrThrow({
       where: { id: accepted.refundId },
       include: { ledgers: true },
     });
-    expect({
-      payoutStatus: refund.payoutStatus,
-      ledgers: refund.ledgers.length,
-    }).toEqual({ payoutStatus: RefundPayoutStatus.PENDING, ledgers: 0 });
+    expect(refund.payoutStatus).toBe(RefundPayoutStatus.PAID);
+    expect(refund.paidAmount).toBe(accepted.amount);
+    expect(refund.ledgers).toHaveLength(1);
+  });
+
+  it('조회 성공 후 같은 성공 콜백이 와도 실제 지급액과 원장은 한 번만 반영한다 (003 QS-3)', async () => {
+    const accepted = await acceptedRefund();
+    pgStub.respondToInquiry({
+      result: 'SUCCEEDED',
+      pgTransactionId: `pg-cancel-${accepted.paymentCancelId}`,
+      cancelledAmount: accepted.amount,
+    });
+    expect(
+      await ctx.app
+        .get(RefundRecoveryService)
+        .inquireAttempt(
+          accepted.paymentCancelId,
+          new Date(Date.now() + 120000),
+        ),
+    ).toBe('SUCCEEDED');
+    await sendRefundCallback(successCallback(accepted)).expect(200);
+    const { body } = await request(ctx.server)
+      .get(`/refund/${accepted.refundId}`)
+      .set('Authorization', `Bearer ${ctx.customer.token}`)
+      .expect(200);
+    expect(body.data.paidAmount).toBe(accepted.amount);
+    expect(
+      await ctx.prisma.ledger.count({ where: { refundId: accepted.refundId } }),
+    ).toBe(1);
   });
 });

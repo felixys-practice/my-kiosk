@@ -9,5 +9,18 @@
   "jestrunner.configPath": {
     "**/*.e2e-spec.ts": "./test/jest-e2e.json",
     "**/*.spec.ts": "./package.json"
-  }
+  },
+  "sqltools.connections": [
+    {
+      "ssh": "Disabled",
+      "previewLimit": 50,
+      "server": "localhost",
+      "port": 5432,
+      "driver": "PostgreSQL",
+      "name": "my-kiosk-db",
+      "database": "my_kiosk_db",
+      "username": "postgres",
+      "password": "password"
+    }
+  ]
 }

@@ -94,6 +94,8 @@ export type RefundTestContext = {
   ): Promise<AwaitingPayment>;
   /** 이 컨텍스트가 만든 데이터를 지우고 앱을 닫는다 */
   close(): Promise<void>;
+  /** 업무 데이터를 유지한 채 앱만 종료한다. 재생성 검증 후 close()로 데이터를 정리한다. */
+  stopApplication(): Promise<void>;
 };
 
 /** 기본 상품 가격(원) */
@@ -341,6 +343,13 @@ export async function createRefundTestContext(options: {
    * 이 컨텍스트가 만든 데이터를 FK 역순으로 지우고 앱을 닫는다
    * - 다른 E2E 파일의 데이터는 건드리지 않도록 사용자·매장 ID로만 지운다
    */
+  let applicationStopped = false;
+  async function stopApplication(): Promise<void> {
+    if (applicationStopped) return;
+    await app.close();
+    applicationStopped = true;
+  }
+
   async function close(): Promise<void> {
     const byOrderUser = { order: { userId: { in: userIds } } };
     const byRefund = { refund: { payment: byOrderUser } };
@@ -381,7 +390,7 @@ export async function createRefundTestContext(options: {
     await prisma.user.deleteMany({ where: { id: { in: userIds } } });
 
     await prisma.$disconnect();
-    await app.close();
+    await stopApplication();
   }
 
   return {
@@ -402,5 +411,6 @@ export async function createRefundTestContext(options: {
     orderPeriodAwaitingApproval: (o) =>
       orderAwaitingApproval(TicketType.PERIOD, o),
     close,
+    stopApplication,
   };
 }

@@ -92,6 +92,14 @@ export class RefundNotEligibleError extends DomainConflictError {
   }
 }
 
+/** 결과 반영 대상인 PG 취소 요청 기록이 없음. 내부 경로에서는 데이터 정합성 장애로 처리한다. */
+export class PaymentCancelResultTargetMissingError extends Error {
+  constructor(readonly paymentCancelId: string) {
+    super(`결과를 반영할 PG 취소 요청을 찾을 수 없습니다: ${paymentCancelId}`);
+    this.name = 'PaymentCancelResultTargetMissingError';
+  }
+}
+
 /** PG 콜백의 PG 취소 요청이 없음 (404) */
 export class PgCallbackTargetNotFoundError extends DomainNotFoundError {
   readonly code = 'PG_CALLBACK_TARGET_NOT_FOUND';

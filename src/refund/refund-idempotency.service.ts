@@ -42,7 +42,6 @@ function fingerprintOf(request: Record<string, unknown>): string {
 export type RefundOperation =
   | 'CUSTOMER_REFUND'
   | 'STORE_REFUND'
-  | 'PAYOUT_RETRY'
   | 'MANUAL_PAYOUT_RESERVE'
   | 'MANUAL_PAYOUT_CONFIRM'
   | 'MANUAL_PAYOUT_NOT_PAID'

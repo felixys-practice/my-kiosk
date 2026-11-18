@@ -38,8 +38,8 @@ import {
   ApiBody,
 } from '@nestjs/swagger';
 import {
-  ApiRefundResponse,
-  ApiRefundErrors,
+  apiRefundResponse,
+  apiRefundErrors,
   pgCheckSchema,
   refundAcceptanceSchema,
   refundDetailSchema,
@@ -79,13 +79,13 @@ export class RefundController {
       pattern: '^[!-~]+$',
     },
   })
-  @ApiRefundResponse(200, '0원 환불 확정', refundAcceptanceSchema)
-  @ApiRefundResponse(
+  @apiRefundResponse(200, '0원 환불 확정', refundAcceptanceSchema)
+  @apiRefundResponse(
     202,
     '환불 접수. 실제 지급 완료를 의미하지 않습니다.',
     refundAcceptanceSchema,
   )
-  @ApiRefundErrors(400, 401, 403, 404, 409, 503)
+  @apiRefundErrors(400, 401, 403, 404, 409, 503)
   @ApiOperation({ summary: '고객 본인 이용권의 종료와 환불 금액 확정' })
   @Post()
   async refund(
@@ -130,13 +130,13 @@ export class RefundController {
       pattern: '^[!-~]+$',
     },
   })
-  @ApiRefundResponse(200, '0원 환불 확정', refundAcceptanceSchema)
-  @ApiRefundResponse(
+  @apiRefundResponse(200, '0원 환불 확정', refundAcceptanceSchema)
+  @apiRefundResponse(
     202,
     '환불 접수. 실제 지급 완료를 의미하지 않습니다.',
     refundAcceptanceSchema,
   )
-  @ApiRefundErrors(400, 401, 403, 404, 409, 503)
+  @apiRefundErrors(400, 401, 403, 404, 409, 503)
   @ApiOperation({ summary: '점주 매장 이용권의 종료와 환불 금액 확정' })
   @Post('shop/:shopId')
   async storeRefund(
@@ -181,9 +181,9 @@ export class RefundController {
     description: '본문 생략 또는 빈 객체만 허용합니다.',
     schema: { type: 'object', additionalProperties: false },
   })
-  @ApiRefundResponse(200, '확인 결과', pgCheckSchema)
-  @ApiRefundResponse(202, '이미 확인 작업이 진행 중', pgCheckSchema)
-  @ApiRefundErrors(400, 401, 403, 404, 409, 503)
+  @apiRefundResponse(200, '확인 결과', pgCheckSchema)
+  @apiRefundResponse(202, '이미 확인 작업이 진행 중', pgCheckSchema)
+  @apiRefundErrors(400, 401, 403, 404, 409, 503)
   @ApiOperation({ summary: '점주·운영자의 환불 PG 취소 결과 개별 확인' })
   @Post(':refundId/pg-check')
   async pgCheck(
@@ -221,8 +221,8 @@ export class RefundController {
       pattern: '^v1=[a-f0-9]{64}$',
     },
   })
-  @ApiRefundResponse(200, 'PG 취소 결과 수신 확인')
-  @ApiRefundErrors(400, 401, 404)
+  @apiRefundResponse(200, 'PG 취소 결과 수신 확인')
+  @apiRefundErrors(400, 401, 404)
   @ApiOperation({ summary: 'PG 서명으로 인증한 취소 결과 통보 수신' })
   @Post('callback')
   @HttpCode(HttpStatus.OK)
@@ -233,15 +233,14 @@ export class RefundController {
       success: dto.success,
       paymentCancelId: dto.paymentCancelId,
       pgTransactionId: dto.pgTransactionId,
-      orderItemId: dto.orderItemId ?? null,
       amount: dto.amount,
       reason: dto.reason,
     });
   }
 
   @ApiBearerAuth('access-token')
-  @ApiRefundResponse(200, '본인 환불 내역', refundListSchema)
-  @ApiRefundErrors(400, 401, 403, 404)
+  @apiRefundResponse(200, '본인 환불 내역', refundListSchema)
+  @apiRefundErrors(400, 401, 403, 404)
   @ApiOperation({ summary: '고객 본인의 환불 내역 조회' })
   @Get('me')
   getMyRefundHistory(
@@ -254,8 +253,8 @@ export class RefundController {
   /** 현재 점주는 자기 매장, 운영자는 지정 매장의 환불 내역을 조회한다. */
   @ApiBearerAuth('access-token')
   @ApiParam({ name: 'shopId', format: 'uuid', description: 'shopId (UUID)' })
-  @ApiRefundResponse(200, '매장 환불 내역', refundListSchema)
-  @ApiRefundErrors(400, 401, 403, 404)
+  @apiRefundResponse(200, '매장 환불 내역', refundListSchema)
+  @apiRefundErrors(400, 401, 403, 404)
   @ApiOperation({ summary: '현재 점주·운영자의 매장 환불 내역 조회' })
   @Get('/shop/:shopId')
   async getRefundHistoryByShop(
@@ -269,8 +268,8 @@ export class RefundController {
   /** 운영자가 지정한 고객의 환불 내역을 조회한다. */
   @ApiBearerAuth('access-token')
   @ApiParam({ name: 'userId', format: 'uuid', description: 'userId (UUID)' })
-  @ApiRefundResponse(200, '고객 환불 내역', refundListSchema)
-  @ApiRefundErrors(400, 401, 403, 404)
+  @apiRefundResponse(200, '고객 환불 내역', refundListSchema)
+  @apiRefundErrors(400, 401, 403, 404)
   @ApiOperation({ summary: '운영자의 지정 고객 환불 내역 조회' })
   @Get('/user/:userId')
   async getRefundHistoryByUser(
@@ -288,12 +287,12 @@ export class RefundController {
     format: 'uuid',
     description: 'refundId (UUID)',
   })
-  @ApiRefundResponse(
+  @apiRefundResponse(
     200,
     '환불 상세. 운영자 전용 정보는 MANAGER에게만 반환합니다.',
     refundDetailSchema,
   )
-  @ApiRefundErrors(400, 401, 403, 404)
+  @apiRefundErrors(400, 401, 403, 404)
   @ApiOperation({ summary: '권한 범위 안의 환불 상세·실제 지급액 조회' })
   @Get(':refundId')
   getRefundDetail(

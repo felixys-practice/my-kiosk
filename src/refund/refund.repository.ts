@@ -35,9 +35,12 @@ export type CustomerRefundTarget = {
 };
 
 /** PG 결과를 반영할 PG 취소 요청과 그 환불 */
-export type AttemptForResult = {
+export type PaymentCancelForResult = {
   id: string;
   status: PaymentCancelStatus;
+  failureCode: PaymentCancelFailureCode | null;
+  failureReason: string | null;
+  failedAt: Date | null;
   claimToken: string | null;
   claimUntil: Date | null; // 담당 작업자의 처리 기한
   amount: number; // 이 PG 취소 요청으로 보낼 금액
@@ -85,7 +88,7 @@ export type AcceptedRefundInput = {
   reason?: string;
   exitConsentedAt?: Date;
   endedSessionId?: string;
-  // 커밋 뒤 바로 보낼 최초 PG 취소 요청의 담당(전송 직전 기록을 확정과 함께 저장, API 계약 §8)
+  // 양수 환불에 필수인 최초 PG 취소 요청의 담당(전송 직전 기록을 확정과 함께 저장, API 계약 §8)
   sendClaim?: { claimToken: string; claimUntil: Date };
 };
 
@@ -251,6 +254,11 @@ export class RefundRepository {
     tx: TransactionClient,
   ): Promise<{ refundId: string; paymentCancelId: string | null }> {
     const isZero = input.amount === 0;
+    if (input.amount > 0 && !input.sendClaim) {
+      throw new Error(
+        '양수 환불 생성에는 PG 전송 담당 토큰과 처리 기한이 필요합니다',
+      );
+    }
     // 업무 확정(Refund). 양수는 최초 PG 취소 요청(시도 1)을 함께, 0원은 PG 요청 없이 지급 완료로 만든다
     const refund = await tx.refund.create({
       data: {
@@ -285,12 +293,10 @@ export class RefundRepository {
                 amount: input.amount,
                 status: PaymentCancelStatus.REQUESTED,
                 requestedAt: input.now,
-                ...(input.sendClaim && {
-                  sendAttemptCount: 1,
-                  lastSendAttemptAt: input.now,
-                  claimToken: input.sendClaim.claimToken,
-                  claimUntil: input.sendClaim.claimUntil,
-                }),
+                sendAttemptCount: 1,
+                lastSendAttemptAt: input.now,
+                claimToken: input.sendClaim!.claimToken,
+                claimUntil: input.sendClaim!.claimUntil,
               },
             },
       },
@@ -321,15 +327,18 @@ export class RefundRepository {
    * @param tx 지급 결과 반영 트랜잭션
    * @returns PG 취소 요청과 환불, 없거나 새 환불에 속하지 않으면 null
    */
-  async findAttemptForResult(
+  async findPaymentCancelForResult(
     paymentCancelId: string,
     tx: TransactionClient,
-  ): Promise<AttemptForResult | null> {
-    const attempt = await tx.paymentCancel.findUnique({
+  ): Promise<PaymentCancelForResult | null> {
+    const storedPaymentCancel = await tx.paymentCancel.findUnique({
       where: { id: paymentCancelId },
       select: {
         id: true,
         status: true,
+        failureCode: true,
+        failureReason: true,
+        failedAt: true,
         claimToken: true,
         claimUntil: true,
         amount: true,
@@ -358,52 +367,37 @@ export class RefundRepository {
         },
       },
     });
-    if (!attempt?.refund) return null;
+    if (!storedPaymentCancel?.refund) return null;
     return {
-      id: attempt.id,
-      status: attempt.status,
-      claimToken: attempt.claimToken,
-      claimUntil: attempt.claimUntil,
-      amount: attempt.amount,
-      resendCount: attempt.resendCount,
-      inquiryFailureCount: attempt.inquiryFailureCount,
-      lastSendAttemptAt: attempt.lastSendAttemptAt,
-      lastInquiryAt: attempt.lastInquiryAt,
-      actualAmount: attempt.actualAmount,
-      pgTransactionId: attempt.pgTransactionId,
+      id: storedPaymentCancel.id,
+      status: storedPaymentCancel.status,
+      failureCode: storedPaymentCancel.failureCode,
+      failureReason: storedPaymentCancel.failureReason,
+      failedAt: storedPaymentCancel.failedAt,
+      claimToken: storedPaymentCancel.claimToken,
+      claimUntil: storedPaymentCancel.claimUntil,
+      amount: storedPaymentCancel.amount,
+      resendCount: storedPaymentCancel.resendCount,
+      inquiryFailureCount: storedPaymentCancel.inquiryFailureCount,
+      lastSendAttemptAt: storedPaymentCancel.lastSendAttemptAt,
+      lastInquiryAt: storedPaymentCancel.lastInquiryAt,
+      actualAmount: storedPaymentCancel.actualAmount,
+      pgTransactionId: storedPaymentCancel.pgTransactionId,
       refund: {
-        id: attempt.refund.id,
-        amount: attempt.refund.amount,
-        paidAmount: attempt.refund.paidAmount,
-        payoutStatus: attempt.refund.payoutStatus,
-        reviewRequired: attempt.refund.reviewRequired,
-        orderItemId: attempt.refund.orderItemId,
-        source: attempt.refund.source,
-        customerId: attempt.refund.payment.order.userId,
-        approvalTransactionId: attempt.refund.payment.pgTransactionId,
-        orderId: attempt.refund.payment.order.id,
-        shopId: attempt.refund.payment.order.shopId,
+        id: storedPaymentCancel.refund.id,
+        amount: storedPaymentCancel.refund.amount,
+        paidAmount: storedPaymentCancel.refund.paidAmount,
+        payoutStatus: storedPaymentCancel.refund.payoutStatus,
+        reviewRequired: storedPaymentCancel.refund.reviewRequired,
+        orderItemId: storedPaymentCancel.refund.orderItemId,
+        source: storedPaymentCancel.refund.source,
+        customerId: storedPaymentCancel.refund.payment.order.userId,
+        approvalTransactionId:
+          storedPaymentCancel.refund.payment.pgTransactionId,
+        orderId: storedPaymentCancel.refund.payment.order.id,
+        shopId: storedPaymentCancel.refund.payment.order.shopId,
       },
     };
-  }
-
-  /**
-   * PG 취소 거래 ID를 다른 PG 취소 요청이 이미 쓰고 있는지 확인한다
-   * @param tx 지급 결과 반영 트랜잭션
-   * @param pgTransactionId PG 취소 거래 ID
-   * @param attemptId 결과를 반영하려는 PG 취소 요청 ID
-   * @returns 다른 요청이 쓰고 있으면 true
-   */
-  async isCancelTransactionUsedByOther(
-    tx: TransactionClient,
-    pgTransactionId: string,
-    attemptId: string,
-  ): Promise<boolean> {
-    const used = await tx.paymentCancel.findUnique({
-      where: { pgTransactionId },
-      select: { id: true },
-    });
-    return used !== null && used.id !== attemptId;
   }
 
   /**
@@ -434,7 +428,7 @@ export class RefundRepository {
    * @param refundId 환불 ID
    * @returns 가장 최근 미확정 시도, 개별 확인 대상이 아니면 null
    */
-  async findPendingAttemptOfRefund(refundId: string): Promise<{
+  async findPendingPaymentCancelOfRefund(refundId: string): Promise<{
     id: string;
     lastInquiryAt: Date | null;
     lastInquiryError: string | null;
@@ -483,7 +477,6 @@ export class RefundRepository {
           // 커밋 뒤 전송 전후에 중단돼 예정 시각 없이 남은 시도: 담당 기한이 지나면 조회부터 한다(API 계약 §8)
           {
             nextInquiryAt: null,
-            sendAttemptCount: { gt: 0 },
             lastSendAttemptAt: { lte: now },
             OR: [{ claimUntil: null }, { claimUntil: { lte: now } }],
           },
@@ -503,16 +496,16 @@ export class RefundRepository {
       take: limit,
       select: { id: true },
     });
-    return due.map((attempt) => attempt.id);
+    return due.map((paymentCancel) => paymentCancel.id);
   }
 
   /**
-   * 조회 직전에 조회 시작 시각·횟수와 담당을 저장한다 (API 계약 §8)
+   * 환불 상태 조회 직전에 조회 시작 시각·횟수와 담당을 저장한다 (API 계약 §8)
    * @param tx 조회 준비 트랜잭션
    * @param id PG 취소 요청 ID
    * @param claim 담당 토큰·처리 기한·조회 시각
    */
-  async markInquiryStarted(
+  async markPgCancelStatusCheckAttempt(
     tx: TransactionClient,
     id: string,
     claim: { claimToken: string; claimUntil: Date; now: Date },
@@ -579,6 +572,34 @@ export class RefundRepository {
         queryFailedAt: null,
         claimToken: null,
         claimUntil: null,
+      },
+    });
+  }
+
+  /**
+   * 내부 실패 후 PG 처리 중이 확인된 기존 취소 요청의 조회를 재개한다.
+   * - 호출자가 같은 트랜잭션에서 담당 토큰·현재 실패 사유·지급 조건을 재검사한 뒤 사용한다.
+   * - PG 최종 거절과 구분해 실패 필드를 해제하며 전송·재전송 횟수는 보존한다.
+   * @param tx 결과 반영 트랜잭션
+   * @param id PG 취소 요청 ID
+   * @param nextInquiryAt 다음 PG 상태 조회 시각
+   */
+  async resumePgCancelStatusInquiry(
+    tx: TransactionClient,
+    id: string,
+    nextInquiryAt: Date,
+  ): Promise<void> {
+    await tx.paymentCancel.update({
+      where: { id },
+      data: {
+        status: PaymentCancelStatus.REQUESTED,
+        failureCode: null,
+        failureReason: null,
+        failedAt: null,
+        queryFailedAt: null,
+        nextInquiryAt,
+        inquiryFailureCount: 0,
+        lastInquiryError: null,
       },
     });
   }
@@ -663,17 +684,21 @@ export class RefundRepository {
    * @param paymentCancelId PG 취소 요청 ID
    * @returns 환불·주문 ID
    */
-  async findAttemptRefundIds(
+  async findRefundAndOrderIdsByPaymentCancelId(
     paymentCancelId: string,
   ): Promise<{ refundId: string; orderId: string }> {
-    const attempt = await this.prisma.paymentCancel.findUniqueOrThrow({
-      where: { id: paymentCancelId },
-      select: {
-        refundId: true,
-        payment: { select: { orderId: true } },
-      },
-    });
-    return { refundId: attempt.refundId!, orderId: attempt.payment.orderId };
+    const storedPaymentCancel =
+      await this.prisma.paymentCancel.findUniqueOrThrow({
+        where: { id: paymentCancelId },
+        select: {
+          refundId: true,
+          payment: { select: { orderId: true } },
+        },
+      });
+    return {
+      refundId: storedPaymentCancel.refundId,
+      orderId: storedPaymentCancel.payment.orderId,
+    };
   }
 
   /**
@@ -681,14 +706,17 @@ export class RefundRepository {
    * @param paymentCancelId PG 취소 요청 ID
    * @returns 지급 상태와 조치 사유 코드
    */
-  async findPayoutStateByAttempt(
+  async findPayoutStateByPaymentCancelId(
     paymentCancelId: string,
   ): Promise<{ payoutStatus: RefundPayoutStatus; actionCode: string | null }> {
-    const attempt = await this.prisma.paymentCancel.findUniqueOrThrow({
-      where: { id: paymentCancelId },
-      select: { refund: { select: { payoutStatus: true, actionCode: true } } },
-    });
-    return attempt.refund!;
+    const storedPaymentCancel =
+      await this.prisma.paymentCancel.findUniqueOrThrow({
+        where: { id: paymentCancelId },
+        select: {
+          refund: { select: { payoutStatus: true, actionCode: true } },
+        },
+      });
+    return storedPaymentCancel.refund;
   }
 
   /**
@@ -697,7 +725,7 @@ export class RefundRepository {
    * @param id PG 취소 요청 ID
    * @param result PG 취소 거래 ID·실제 취소액·확정 시각
    */
-  async markAttemptSucceeded(
+  async markPaymentCancelSucceeded(
     tx: TransactionClient,
     id: string,
     result: { pgTransactionId: string; actualAmount: number; now: Date },
@@ -709,6 +737,9 @@ export class RefundRepository {
         pgTransactionId: result.pgTransactionId,
         actualAmount: result.actualAmount,
         cancelledAt: result.now,
+        failureCode: null,
+        failureReason: null,
+        failedAt: null,
         nextInquiryAt: null,
         claimToken: null,
         claimUntil: null,
@@ -723,7 +754,7 @@ export class RefundRepository {
    * @param id PG 취소 요청 ID
    * @param failure 실패 사유 코드·설명·확정 시각
    */
-  async markAttemptFailed(
+  async markPaymentCancelFailed(
     tx: TransactionClient,
     id: string,
     failure: {
@@ -867,9 +898,9 @@ export class RefundRepository {
         amount: refund.amount,
         paidAmount: refund.paidAmount,
         actionCode: refund.actionCode,
-        attempts: refund.paymentCancels.map((attempt) => ({
-          status: attempt.status,
-          claimUntil: attempt.claimUntil,
+        paymentCancels: refund.paymentCancels.map((paymentCancel) => ({
+          status: paymentCancel.status,
+          claimUntil: paymentCancel.claimUntil,
         })),
         activeManualPayout: refund.manualPayouts.some(
           (payout) => payout.status === ManualRefundPayoutStatus.RESERVED,
@@ -879,7 +910,9 @@ export class RefundRepository {
       // 새 요청의 대상 상품은 환불과 같다(결제 전체 대상이면 null, DB 검사 트리거가 일치를 보장)
       orderItemId: refund.orderItemId,
       nextAttemptNumber: (latest?.attemptNumber ?? 0) + 1,
-      paymentCancelIds: refund.paymentCancels.map((attempt) => attempt.id),
+      paymentCancelIds: refund.paymentCancels.map(
+        (paymentCancel) => paymentCancel.id,
+      ),
       manualRefundPayoutIds: refund.manualPayouts.map((payout) => payout.id),
     };
   }
@@ -945,7 +978,7 @@ export class RefundRepository {
    * @param refundId 환불 ID
    * @returns 최근 조회 시각·마지막 조회 오류, 요청이 없으면 null
    */
-  async findLatestAttemptInquiry(refundId: string): Promise<{
+  async findLatestPaymentCancelInquiry(refundId: string): Promise<{
     lastInquiryAt: Date | null;
     lastInquiryError: string | null;
   } | null> {
@@ -964,7 +997,7 @@ export class RefundRepository {
    * @param lastInquiryError 이번 조회의 오류(정상 응답이면 null로 지운다, 생략하면 그대로 둔다)
    * @returns 아직 자기 담당이어서 내려놓았으면 true
    */
-  async releaseAttemptClaim(
+  async releasePaymentCancelClaim(
     tx: TransactionClient,
     id: string,
     claimToken: string,
@@ -985,7 +1018,7 @@ export class RefundRepository {
    * @param input 환불·대상·시도 번호·금액·실행자·사유·시각·전송 담당
    * @returns 새 PG 취소 요청 ID
    */
-  async createRetryAttempt(
+  async createRetryPaymentCancel(
     tx: TransactionClient,
     input: {
       refundId: string;
@@ -1000,7 +1033,7 @@ export class RefundRepository {
       lastInquiryAt?: Date | null; // 개별 확인으로 만든 요청은 실패 시도의 조회 시각을 승계한다
     },
   ): Promise<string> {
-    const attempt = await tx.paymentCancel.create({
+    const createdPaymentCancel = await tx.paymentCancel.create({
       data: {
         refundId: input.refundId,
         paymentId: input.paymentId,
@@ -1028,7 +1061,7 @@ export class RefundRepository {
         actionReason: null,
       },
     });
-    return attempt.id;
+    return createdPaymentCancel.id;
   }
 
   /**

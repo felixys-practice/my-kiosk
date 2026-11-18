@@ -1,8 +1,7 @@
 import { RefundIdempotencyStatus } from '@prisma/client';
-import { Inject, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { TransactionClient } from 'src/prisma/prisma.service';
-import { REFUND_PG_GATEWAY } from 'src/pg/refund-pg.gateway';
-import type { RefundPgGateway } from 'src/pg/refund-pg.gateway';
+import { PgService } from 'src/pg/pg.service';
 import type {
   PendingSend,
   RefundAcceptance,
@@ -33,7 +32,7 @@ export class RefundAcceptanceExecutionService {
     private readonly idempotencyService: RefundIdempotencyService,
     private readonly idempotencyRepository: RefundIdempotencyRepository,
     private readonly refundRepository: RefundRepository,
-    @Inject(REFUND_PG_GATEWAY) private readonly pgGateway: RefundPgGateway,
+    private readonly pgService: PgService,
     private readonly dispatchService: RefundDispatchService,
   ) {}
 
@@ -145,7 +144,7 @@ export class RefundAcceptanceExecutionService {
     pending: PendingSend,
     result: IdempotentResult<RefundAcceptance>,
   ): Promise<IdempotentResult<RefundAcceptance>> {
-    const sendResult = await this.pgGateway.sendCancel({
+    const sendResult = await this.pgService.requestPaymentCancel({
       paymentCancelId: pending.paymentCancelId,
       amount: pending.amount,
     });

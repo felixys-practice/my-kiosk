@@ -1,5 +1,7 @@
 # 환불 데이터 모델: 이용 종료와 지급 분리
 
+> 2026-11-17 설계 변경: 아래 개별 확인 규칙은 승인된 수정 목표다. 서버 구현과 기존 테스트는 아직 이 규칙으로 변경·검증하지 않았다. 테스트 요구사항·완료 기록은 다음 단계에서 갱신한다.
+
 **기준**: [spec.md](spec.md), 정책 v0.4 · **갱신일**: 2026-10-27
 
 이용 종료와 지급을 분리한 환불 설계다. 기존 PaymentCancel·RefundLock 중심 구조는 아래 구조로 대체했으며, 구형 RefundLock 모델·테이블은 T174·T171에서 제거했다. 전체 기능의 검증 현황은 tasks.md와 tdd/cycle-log.md를 기준으로 확인한다.
@@ -80,7 +82,7 @@ Payment에 `approvedAmount Int?`를 추가한다. 기존 amount는 원래 요청
 | failureCode / failureReason / failedAt | 확정 시도 실패, Refund 실패·철회가 아님 |
 | cancelledAt / updatedAt | 실제 PG 성공 확정 / 최종 갱신 |
 | resendCount | 백그라운드 자동 재전송 횟수, 최초 전송과 개별 확인에 따른 재전송은 제외 |
-| manualResendCount | 개별 확인에서 PG 미접수를 확인한 뒤 기존 미확정 시도를 다시 보낸 횟수, 자동 한도와 별도 |
+| manualResendCount | 개별 확인에서 PG 미접수를 확인한 뒤 PaymentCancel.status=REQUESTED 또는 QUERY_FAILED인 기존 요청을 같은 ID로 다시 보낸 횟수, 자동 한도와 별도 |
 | inquiryCount / inquiryFailureCount | 총 조회·연속 조회 오류 횟수 |
 | lastInquiryAt / nextInquiryAt / lastInquiryError | 조회 일정·장애 상세 |
 | queryFailedAt / recoveryGeneration | 확인 실패 진입 시각·알림 중복 방지 세대 |
@@ -88,9 +90,9 @@ Payment에 `approvedAmount Int?`를 추가한다. 기존 amount는 원래 요청
 | claimToken / claimUntil | 개별 작업자의 담당 토큰·처리 기한 |
 | requestedById / retryReason | 최초 시스템 실행 또는 권한 있는 점주·운영자의 재시도 감사 정보 |
 
-새로 생성하는 PG 취소 요청의 amount는 Refund.amount와 같아야 하고, 기존 실제 환불금 지급 합계는 0이어야 한다. 일부 PG 결제 취소가 있으면 PG 전액 재시도 대신 부족액 별도 환불금 지급만 허용한다. 같은 미확정 시도의 재전송은 같은 PaymentCancel.id를 PG 멱등 키로 사용한다. 확정 실패 뒤 권한 있는 사람의 명시적 재시도는 새 PaymentCancel.id를 사용한다.
+새로 생성하는 PG 취소 요청의 amount는 Refund.amount와 같아야 하고, 기존 실제 환불금 지급 합계는 0이어야 한다. 일부 PG 결제 취소가 있으면 PG 전액 재시도 대신 부족액 별도 환불금 지급만 허용한다. 같은 미확정 시도의 재전송은 같은 PaymentCancel.id를 PG 멱등 키로 사용한다. PG_REJECTED 뒤 새 요청은 새 PaymentCancel.id를 사용한다. FAILED/SEND_FAILED·FAILED/RETRY_EXHAUSTED도 미접수·최종 거절 확인 후 새 ID로 요청한다.
 
-최근 시도가 이미 FAILED이고 실패 사유가 RETRY_EXHAUSTED·SEND_FAILED·PG_REJECTED인 환불도 점주·운영자의 개별 조회 대상이다. 해당 실패 시도의 식별자로 PG에 다시 조회해 미접수 또는 거절 확정이 확인되면 Refund 행 잠금을 획득한 트랜잭션에서 실제 지급액이 0인지, 다른 미확정 지급과 활성 별도 지급 예약이 없는지, payoutMethod가 PG인지, 현재 작업의 담당 토큰이 유효한지 확인한다. 이 조건을 모두 만족하면 기존 Refund.amount와 같은 금액으로 새 PaymentCancel을 만든다. 작업 시작 때 다른 유효 담당이 없어야 한다. 거절 확정은 PG가 해당 요청을 거절했고 그 요청으로 취소가 실행되지 않았으며 앞으로도 진행되지 않는다고 확정 응답한 경우다. 오류 문자열만으로 실행 여부가 불명확하면 거절 확정이 아니다. 이전 FAILED 행의 상태·사유·횟수는 보존한다. 새 행의 requestedById는 개별 확인 실행자, retryReason은 개별 확인에서 미접수 또는 거절 확정 후 재시도임을 기록한다. 별도 사유 입력은 요구하지 않는다. 새 행은 resendCount=0·manualResendCount=0이고 lastInquiryAt을 승계한다. 조회 오류이면 실패 이력을 보존하고 새 요청을 만들지 않으며, 처리 중·취소 성공 등 모순 결과는 PG_RESULT_CONFLICT·운영자 알림과 추가 지급 차단으로 처리한다. 미확정 요청의 조회에서 새로 확인한 거절은 실패·조치 필요만 기록한다. MANUAL 예약 실패 종료 후 PG 재개는 운영자 직접 재시도로만 한다. 새 요청 최초 전송과 이후 자동 재전송을 구분하며 자동 작업에는 기존 미접수·한도 조건을 적용한다.
+점주·운영자의 개별 확인은 기존 PaymentCancel.id로 PG 상태를 먼저 조회한다. PaymentCancel.status=REQUESTED 또는 QUERY_FAILED인 요청은 성공이면 실제 취소액·거래 ID·원장을 중복 없이 반영하고, 처리 중이면 조회를 이어간다. 확실한 미접수이면 기존 PaymentCancel.id·금액으로 재전송한다. 최종 거절이면 FAILED/PG_REJECTED로 기록하고 같은 실행에서는 전송하지 않는다. 실행 시작 시 PaymentCancel.status=FAILED이고 failureCode가 SEND_FAILED·RETRY_EXHAUSTED·PG_REJECTED인 요청은 미접수·최종 거절이 확인되면 이전 실패 상태·사유·횟수를 보존하고 같은 Refund 아래 새 PaymentCancel을 생성해 전송한다. FAILED/SEND_FAILED·FAILED/RETRY_EXHAUSTED의 성공·처리 중 조회는 새 요청을 만들지 않고 기존 요청에 반영한다. 실행 시작 시 PG_REJECTED였던 기존 요청의 조회 결과가 성공·처리 중이면 Refund.actionCode=PG_RESULT_CONFLICT·Refund.reviewRequired=true와 운영자 알림으로 기록하고 추가 지급을 차단한다. 조회 오류이면 전송하지 않고 확인 불가를 기록한다. REQUESTED·QUERY_FAILED 및 FAILED/SEND_FAILED·FAILED/RETRY_EXHAUSTED·FAILED/PG_REJECTED의 재확인·재시도는 점주·운영자의 pg-check로 통일한다. 별도 일반 PG 재시도 API는 제공하지 않는다. 조회 후 전송 준비·결과 저장 시 Refund → PaymentCancel → ManualRefundPayout 순서로 필요한 행을 잠그고 현재 상태·지급액·다른 지급 작업·활성 별도 지급 예약·자기 작업 토큰을 재검사한다. 실제 지급액 0·다른 미확정 지급 없음·지급 방식 PG·활성 예약 없음이 재전송·새 요청 생성의 조건이다. 외부 호출은 트랜잭션 밖에서 수행한다. 유효한 다른 작업과 최근 조회 간격 안의 반복 실행은 PG를 중복 호출하지 않는다. SEND_FAILED·RETRY_EXHAUSTED는 PG 최종 거절과 구분하는 내부 처리 중단 사유다. FAILED/SEND_FAILED·FAILED/RETRY_EXHAUSTED를 조회해 성공·처리 중을 반영하는 경우에만 이전 상태·사유를 거래 로그에 남기고 기존 PaymentCancel.failureCode·PaymentCancel.failureReason·PaymentCancel.failedAt을 해제한다. 처리 중이면 기존 PaymentCancel.status=REQUESTED, Refund.payoutStatus=PENDING으로 변경한다. 미접수·최종 거절 후 새 요청을 생성하는 경우에는 이전 FAILED 행을 변경하지 않고 새 PaymentCancel.status=REQUESTED, Refund.payoutStatus=PENDING으로 변경한다. 두 경우 모두 이전 내부 실패의 Refund.actionCode·Refund.actionReason을 해제하며 별도의 검토 사유는 유지한다. 성공은 실제액에 따른 기존 지급 완료·금액 불일치 규칙을 따른다. 조회 오류이면 기존 상태를 유지한다. 기존 요청의 resendCount는 초기화·증가하지 않고 개별 재전송 시 manualResendCount·sendAttemptCount와 lastSendAttemptAt을 갱신한다. FAILED/SEND_FAILED·FAILED/RETRY_EXHAUSTED·FAILED/PG_REJECTED 뒤 새 요청의 resendCount·manualResendCount는 0부터 시작한다. 자동 작업의 미접수·한도 규칙은 유지한다.
 
 PaymentCancel의 FAILED는 현재 스키마에도 있지만 기존 설명은 PG의 확정 거절 중심이다. 새 구현에서는 확인된 전송 전 실패·재전송 한도 소진 후 PG 미접수 확인까지 포함하도록 의미와 주석을 확장한다. SEND_FAILED·PG_REJECTED·RETRY_EXHAUSTED 실패 사유를 추가하고 기존 사유는 과거 이력 해석을 위해 보존한다. Refund와 그 payoutStatus=ACTION_REQUIRED는 아직 현재 Prisma 스키마에 없는 추가 설계다.
 
@@ -132,7 +134,9 @@ RESERVED를 만들기 전에 Refund를 잠그고 모든 PG 취소 요청이 최�
 | 전송 전 실패·거절·한도 초과 | ACTION_REQUIRED | FAILED | 종료 유지 |
 | 확정된 환불 금액과 같은 PG 결제 취소 성공 | PAID | SUCCEEDED·actualAmount | 종료 유지 |
 | PG 실제액 불일치 | ACTION_REQUIRED·reviewRequired | SUCCEEDED·실제액 원장 | 종료 유지 |
-| 운영자 직접 재시도 또는 점주·운영자의 실패 확정 건 개별 확인 재전송 | PENDING/PG | 새 REQUESTED, 이전 실패는 보존 | 종료 유지 |
+| FAILED/SEND_FAILED·FAILED/RETRY_EXHAUSTED 개별 확인 후 처리 중 | PENDING/PG | 기존 요청 REQUESTED, ID·자동 횟수 유지 | 종료 유지 |
+| FAILED/SEND_FAILED·FAILED/RETRY_EXHAUSTED 개별 확인 후 미접수·최종 거절 | PENDING/PG | 새 REQUESTED, 이전 실패 보존 | 종료 유지 |
+| PG_REJECTED 뒤 새 요청 | PENDING/PG | 새 REQUESTED, 이전 실패는 보존 | 종료 유지 |
 | 별도 환불금 지급 예약 | ACTION_REQUIRED/MANUAL | RESERVED | 종료 유지 |
 | 증빙 있는 별도 환불금 지급 성공 | 미지급액 0·검토 완료면 PAID | SUCCEEDED·실제액 원장 | 종료 유지 |
 | 별도 환불금 지급 여부 모름 | ACTION_REQUIRED/MANUAL | RESERVED 유지 | 종료 유지 |
@@ -142,7 +146,7 @@ RESERVED를 만들기 전에 Refund를 잠그고 모든 PG 취소 요청이 최�
 
 한도를 소진한 전송의 PG 미접수가 확인되면 Refund 행 잠금을 획득한 트랜잭션에서 PaymentCancel.status=FAILED·failureCode=RETRY_EXHAUSTED·failedAt을 기록하고 nextInquiryAt·claimToken·claimUntil을 null로 정리한다. Refund.payoutStatus=ACTION_REQUIRED·actionCode=RETRY_EXHAUSTED와 운영자 알림도 함께 저장한다. FAILED는 모든 자동 PG 조회·재전송 선택에서 제외하고, ACTION_REQUIRED는 운영자 목록에서 계속 조회한다. 별도 EXCLUDED 상태는 추가하지 않는다.
 
-resendCount가 한도에 도달했다는 이유만으로 실패로 바꾸지 않는다. PG 처리 중·조회 장애·결과 불명은 기존 미확정 상태로 조회를 계속한다. 운영자 재시도는 원인을 해결하고 모든 환불금 지급 결과가 확정됐는지 확인한 뒤 새 PaymentCancel을 생성하고 Refund를 PENDING/PG로 바꾼다. 실패했던 시도를 다시 활성화하지 않는다.
+resendCount가 한도에 도달했다는 이유만으로 실패로 바꾸지 않는다. PG 처리 중·조회 장애·결과 불명은 기존 미확정 상태로 조회를 계속한다. 점주·운영자의 개별 확인은 기존 요청 조회와 지급 조건 검사 후 FR-057에 따라 기존 ID로 재전송하거나 새 PaymentCancel을 생성하고 Refund를 PENDING/PG로 바꾼다. FAILED/SEND_FAILED·FAILED/RETRY_EXHAUSTED도 미접수·최종 거절이면 FR-057에 따라 새 시도를 만든다.
 
 확정 트랜잭션은 권한·정책·금액·동의 재검사 → 필요한 퇴실·시간 차감 → Refund 생성·Ticket REVOKED·기존 정지 닫기·SeatAssignment 해제 → 최초 PG 취소 요청 저장이다. 0원은 PG 대신 0원 원장·PAID를 함께 저장한다. PG 요청은 커밋 뒤에만 한다.
 
@@ -150,9 +154,9 @@ resendCount가 한도에 도달했다는 이유만으로 실패로 바꾸지 않
 
 개별 확인은 자동 작업과 claimToken·claimUntil·lastInquiryAt을 공유한다. 유효한 작업 담당이 있으면 추가 조회·전송하지 않고, 작업이 끝났어도 최근 조회 간격 안에는 저장 상태를 반환한다. PG 미접수가 확실히 확인된 미확정 시도는 자동 횟수를 검사하지 않고 기존 ID·금액으로 즉시 다시 보내며 manualResendCount만 증가시킨다. resendCount를 초기화하거나 증가시키지 않는다. Refund와 PaymentCancel의 행 잠금을 이 순서로 획득한 트랜잭션에서 상태·환불금 지급액·다른 환불금 지급·예약·토큰을 검증하고 전송 횟수·시각·담당 기한을 저장한 뒤 커밋 밖에서 전송한다.
 
-FAILED이고 실패 사유가 RETRY_EXHAUSTED·SEND_FAILED·PG_REJECTED인 시도의 개별 조회 담당 지정은 Refund → PaymentCancel 순서로 잠그고 수행하며 자동 선택에서는 계속 제외한다. 조회 중인 실패 시도의 유효한 claimToken도 기존 PG 취소 재요청·별도 환불금 지급 생성 경로가 검사해 경쟁 지급을 막는다. 조회 후 취소 요청 기록을 새 PG 취소 요청 식별자로 추가하면 기존 조회 담당을 해제하고 새 식별자를 발급한 PG 취소 요청에 담당을 부여하는 작업을 같은 트랜잭션에서 처리한다. 새 식별자를 발급한 PG 취소 요청은 활성 시도 고유 제약으로도 보호한다. 실패 시도 재조회가 기존 확정 실패와 모순되면 actionCode=PG_RESULT_CONFLICT를 기록하고 자동·개별 재전송·새 식별자를 발급한 PG 취소 요청·별도 환불금 지급 생성 모두 차단한다. 일반 조회·콜백은 결과 미확정인 새 취소 요청이 만들어졌는지 다시 확인해 늦은 결과가 다른 환불금 지급을 시작하지 못하게 한다.
+점주·운영자의 개별 확인은 기존 PaymentCancel.id로 PG 상태를 먼저 조회한다. PaymentCancel.status=REQUESTED 또는 QUERY_FAILED인 요청은 성공이면 실제 취소액·거래 ID·원장을 중복 없이 반영하고, 처리 중이면 조회를 이어간다. 확실한 미접수이면 기존 PaymentCancel.id·금액으로 재전송한다. 최종 거절이면 FAILED/PG_REJECTED로 기록하고 같은 실행에서는 전송하지 않는다. 실행 시작 시 PaymentCancel.status=FAILED이고 failureCode가 SEND_FAILED·RETRY_EXHAUSTED·PG_REJECTED인 요청은 미접수·최종 거절이 확인되면 이전 실패 상태·사유·횟수를 보존하고 같은 Refund 아래 새 PaymentCancel을 생성해 전송한다. FAILED/SEND_FAILED·FAILED/RETRY_EXHAUSTED의 성공·처리 중 조회는 새 요청을 만들지 않고 기존 요청에 반영한다. 실행 시작 시 PG_REJECTED였던 기존 요청의 조회 결과가 성공·처리 중이면 Refund.actionCode=PG_RESULT_CONFLICT·Refund.reviewRequired=true와 운영자 알림으로 기록하고 추가 지급을 차단한다. 조회 오류이면 전송하지 않고 확인 불가를 기록한다. REQUESTED·QUERY_FAILED 및 FAILED/SEND_FAILED·FAILED/RETRY_EXHAUSTED·FAILED/PG_REJECTED의 재확인·재시도는 점주·운영자의 pg-check로 통일한다. 별도 일반 PG 재시도 API는 제공하지 않는다. 조회 후 전송 준비·결과 저장 시 Refund → PaymentCancel → ManualRefundPayout 순서로 필요한 행을 잠그고 현재 상태·지급액·다른 지급 작업·활성 별도 지급 예약·자기 작업 토큰을 재검사한다. 실제 지급액 0·다른 미확정 지급 없음·지급 방식 PG·활성 예약 없음이 재전송·새 요청 생성의 조건이다. 외부 호출은 트랜잭션 밖에서 수행한다. 유효한 다른 작업과 최근 조회 간격 안의 반복 실행은 PG를 중복 호출하지 않는다.
 
-PG 조회 담당 지정은 PaymentCancel만 갱신하고 트랜잭션을 끝낸다. 결과 저장 때 Refund·해당 시도를 잠근 뒤 담당 토큰과 미확정 상태를 확인한다. 외부 호출 동안 DB 잠금을 유지하지 않는다. 담당 기한이 지났다고 지급을 다시 허용하지 않는다.
+PG 조회 담당 지정은 PaymentCancel만 갱신하고 트랜잭션을 끝낸다. 결과 저장 때 Refund·해당 시도를 잠근 뒤 담당 토큰과 현재 상태를 확인한다. 개별 확인은 SEND_FAILED·RETRY_EXHAUSTED의 처리 재개도 허용한다. 외부 호출 동안 DB 잠금을 유지하지 않는다. 담당 기한이 지났다고 지급을 다시 허용하지 않는다.
 
 성공한 지급의 상태·실제액·Refund 합계·원장·필요 알림을 함께 저장한다. 같은 최종 결과의 중복 통보는 합산하지 않는다. 최종 결과와 모순되는 늦은 PG 통보는 그대로 덮어쓰지 않고 운영자 알림·대사 근거로 남긴다. PG의 최종 실패가 실제로 최종인지 보장되지 않는 연동은 별도 환불금 지급을 허용할 수 없다.
 
@@ -180,3 +184,5 @@ RefundRecoveryControl은 기존 설계의 PROBE/BATCH·nextProbeAt·담당 토�
 5. 서버·클라이언트는 최종 API 계약으로 최초 배포한다. 실제 PG·은행은 아직 미연동이며 서명·미접수 확정·최종 실패·같은 키 중복 취소 방지 보장은 실연동 전에 확인한다. 서비스 시작 후에는 환불·원장·미확정 지급·예약을 보존한다.
 
 T171의 빈 검증용 DB 재구축은 완료했다. 원래 로컬 개발 DB의 초기화와 최초 배포까지 완료했다는 의미는 아니다.
+
+개별 확인의 FAILED/SEND_FAILED·FAILED/RETRY_EXHAUSTED·FAILED/PG_REJECTED 새 요청 생성은 API 계약의 실행자·시각·사유·lastInquiryAt 승계 및 조회 점유 해제·전송 점유 저장의 동일 트랜잭션 규칙을 적용한다.

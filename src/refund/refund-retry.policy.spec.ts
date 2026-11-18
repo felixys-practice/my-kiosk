@@ -24,7 +24,9 @@ describe('evaluatePayoutRetry', () => {
       amount: refundAmount,
       paidAmount: 0,
       actionCode: 'SEND_FAILED',
-      attempts: [{ status: PaymentCancelStatus.FAILED, claimUntil: null }],
+      paymentCancels: [
+        { status: PaymentCancelStatus.FAILED, claimUntil: null },
+      ],
       activeManualPayout: false,
       ...override,
     };
@@ -34,7 +36,7 @@ describe('evaluatePayoutRetry', () => {
     const state = stateWith({
       payoutStatus: RefundPayoutStatus.PENDING,
       actionCode: null,
-      attempts: [
+      paymentCancels: [
         { status: PaymentCancelStatus.FAILED, claimUntil: null },
         { status: PaymentCancelStatus.REQUESTED, claimUntil: null },
       ],
@@ -55,7 +57,7 @@ describe('evaluatePayoutRetry', () => {
   it('실패한 요청에 유효한 개별 조회 담당이 있으면 REFUND_PAYOUT_UNRESOLVED로 거절하고, 담당 기한이 지났으면 허용한다', () => {
     const claimedUntil = (offsetMs: number) =>
       stateWith({
-        attempts: [
+        paymentCancels: [
           {
             status: PaymentCancelStatus.FAILED,
             claimUntil: new Date(now.getTime() + offsetMs),
@@ -95,7 +97,9 @@ describe('evaluatePayoutRetry', () => {
       payoutStatus: RefundPayoutStatus.PAID,
       paidAmount: refundAmount,
       actionCode: null,
-      attempts: [{ status: PaymentCancelStatus.SUCCEEDED, claimUntil: null }],
+      paymentCancels: [
+        { status: PaymentCancelStatus.SUCCEEDED, claimUntil: null },
+      ],
     });
 
     expect(evaluatePayoutRetry(paid, now)).toEqual({
@@ -147,7 +151,7 @@ describe('evaluatePayoutRetry', () => {
 
   it('최종 결과가 아닌 과거 승인 대기(PENDING_APPROVAL) 시도가 있으면 REFUND_PAYOUT_UNRESOLVED로 거절한다', () => {
     const state = stateWith({
-      attempts: [
+      paymentCancels: [
         { status: PaymentCancelStatus.PENDING_APPROVAL, claimUntil: null },
         { status: PaymentCancelStatus.FAILED, claimUntil: null },
       ],

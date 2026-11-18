@@ -1,7 +1,6 @@
 import { vi, type Mocked } from 'vitest';
 import { RefundAcceptanceExecutionService } from './refund-acceptance-execution.service';
 import { RefundIdempotencyRepository } from './refund-idempotency.repository';
-/* eslint-disable @typescript-eslint/unbound-method -- jest 목(mock) 메서드를 expect로 검증할 때 생기는 오탐 */
 import {
   PaymentStatus,
   RefundDecisionStatus,
@@ -10,7 +9,7 @@ import {
   UserRole,
 } from '@prisma/client';
 import { TransactionClient } from 'src/prisma/prisma.service';
-import { RefundPgGateway } from 'src/pg/refund-pg.gateway';
+import { PgService } from 'src/pg/pg.service';
 import { SeatAssignmentService } from 'src/seat-assignment/seat-assignment.service';
 import { RefundAcceptanceService } from './refund-acceptance.service';
 import { CustomerRefundTarget, RefundRepository } from './refund.repository';
@@ -39,10 +38,10 @@ describe('RefundAcceptanceService', () => {
     >
   >;
   let locking: Mocked<Pick<RefundLockingRepository, 'lockForAcceptance'>>;
-  let seatAssignment: Mocked<
-    Pick<SeatAssignmentService, 'releaseByTicket'>
+  let seatAssignment: Mocked<Pick<SeatAssignmentService, 'releaseByTicket'>>;
+  let pgServiceMock: Mocked<
+    Pick<PgService, 'requestPaymentCancel' | 'inquirePaymentCancel'>
   >;
-  let pgGateway: Mocked<RefundPgGateway>;
   let service: RefundAcceptanceService;
   /** 전송 결과 반영 대역(전송 결과를 저장하고 지급 처리 중 상태를 돌려준다) */
   const dispatchService = {
@@ -104,13 +103,13 @@ describe('RefundAcceptanceService', () => {
     };
     locking = { lockForAcceptance: vi.fn().mockResolvedValue(undefined) };
     seatAssignment = { releaseByTicket: vi.fn().mockResolvedValue(null) };
-    pgGateway = {
-      sendCancel: vi.fn().mockResolvedValue({ result: 'ACCEPTED' }),
-      inquireCancel: vi.fn(),
+    pgServiceMock = {
+      requestPaymentCancel: vi.fn().mockResolvedValue({ result: 'ACCEPTED' }),
+      inquirePaymentCancel: vi.fn(),
     };
     // 멱등 처리 대역: 처리를 트랜잭션 안에서 실행하고, 끝나면 커밋으로 기록한다
     events = [];
-    pgGateway.sendCancel.mockImplementation(() => {
+    pgServiceMock.requestPaymentCancel.mockImplementation(() => {
       events.push('pg-send');
       return Promise.resolve({ result: 'ACCEPTED' });
     });
@@ -128,7 +127,7 @@ describe('RefundAcceptanceService', () => {
         },
       } as unknown as RefundIdempotencyRepository,
       repository as unknown as RefundRepository,
-      pgGateway,
+      pgServiceMock as unknown as PgService,
       dispatchService,
     );
     service = new RefundAcceptanceService(
@@ -149,7 +148,7 @@ describe('RefundAcceptanceService', () => {
     ).rejects.toBeInstanceOf(RefundTerminationConsentRequiredError);
     expect(repository.terminateTicket).not.toHaveBeenCalled();
     expect(repository.createAcceptedRefund).not.toHaveBeenCalled();
-    expect(pgGateway.sendCancel).not.toHaveBeenCalled();
+    expect(pgServiceMock.requestPaymentCancel).not.toHaveBeenCalled();
   });
 
   it('종료 동의 필드가 없으면 REFUND_TERMINATION_CONSENT_REQUIRED로 거절된다', async () => {
@@ -240,7 +239,7 @@ describe('RefundAcceptanceService', () => {
     });
 
     expect(events).toEqual(['commit', 'pg-send']);
-    expect(pgGateway.sendCancel).toHaveBeenCalledWith({
+    expect(pgServiceMock.requestPaymentCancel).toHaveBeenCalledWith({
       paymentCancelId: 'pc-1',
       amount: 10000,
     });
@@ -260,7 +259,7 @@ describe('RefundAcceptanceService', () => {
         },
       } as unknown as RefundIdempotencyRepository,
       repository as unknown as RefundRepository,
-      pgGateway,
+      pgServiceMock as unknown as PgService,
       dispatchService,
     );
     const failingService = new RefundAcceptanceService(
@@ -277,7 +276,7 @@ describe('RefundAcceptanceService', () => {
         consentToTerminateTicket: true,
       }),
     ).rejects.toThrow('커밋 실패');
-    expect(pgGateway.sendCancel).not.toHaveBeenCalled();
+    expect(pgServiceMock.requestPaymentCancel).not.toHaveBeenCalled();
   });
 
   it('양수 금액 접수 응답은 202와 환불 식별자·이용 종료 완료·지급 처리 중 상태를 담는다', async () => {
@@ -310,7 +309,7 @@ describe('RefundAcceptanceService', () => {
         ),
       ).rejects.toBeInstanceOf(RefundForbiddenError);
       expect(repository.createAcceptedRefund).not.toHaveBeenCalled();
-      expect(pgGateway.sendCancel).not.toHaveBeenCalled();
+      expect(pgServiceMock.requestPaymentCancel).not.toHaveBeenCalled();
     },
   );
 

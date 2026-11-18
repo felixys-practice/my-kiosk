@@ -361,7 +361,8 @@ export class RefundOperationsService {
         if (payout.status !== ManualRefundPayoutStatus.RESERVED) {
           throw new ManualPayoutStateConflictError();
         }
-        // 예약만 실패로 종료한다. 환불은 조치 필요·MANUAL 그대로이고 PG 재개는 운영자 직접 재시도로만 한다
+        // 미지급이 확인된 예약만 실패로 종료한다. Refund.payoutMethod=MANUAL은 유지한다.
+        // pg-check는 MANUAL 환불을 처리하지 않으며, PG 지급 방식으로 전환하는 절차는 아직 미결이다.
         await this.operationsRepository.markPayoutNotPaid(tx, payoutId, {
           confirmedById: actor.userId,
           now,

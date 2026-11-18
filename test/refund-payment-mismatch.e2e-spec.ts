@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
 import { vi } from 'vitest';
 import { signedCallback } from './helpers/pg-callback';
 import {
@@ -10,7 +9,7 @@ import {
   RefundTargetKind,
   SeatAssignmentStatus,
 } from '@prisma/client';
-import { REFUND_PG_GATEWAY } from '../src/pg/refund-pg.gateway';
+import { PgService } from '../src/pg/pg.service';
 import { RefundRecoveryService } from '../src/refund/refund-recovery.service';
 import { RefundSystemService } from '../src/refund/refund-system.service';
 import {
@@ -64,7 +63,7 @@ describe('승인 금액 불일치의 자동 취소 (E2E)', () => {
     ctx = await createRefundTestContext({
       label: 'mismatch',
       configure: (builder) =>
-        builder.overrideProvider(REFUND_PG_GATEWAY).useValue(pgStub),
+        builder.overrideProvider(PgService).useValue(pgStub),
     });
   });
 
@@ -140,7 +139,6 @@ describe('승인 금액 불일치의 자동 취소 (E2E)', () => {
       success: true,
       paymentCancelId: attempt.id,
       pgTransactionId: `pg-cancel-${attempt.id}`,
-      orderItemId: null,
       amount: approvedAmount,
     }).expect(200);
 

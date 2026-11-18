@@ -2,7 +2,7 @@
 import { vi } from 'vitest';
 import request from 'supertest';
 import { randomUUID } from 'crypto';
-import { REFUND_PG_GATEWAY } from '../src/pg/refund-pg.gateway';
+import { PgService } from '../src/pg/pg.service';
 import {
   createRefundTestContext,
   RefundTestContext,
@@ -32,7 +32,7 @@ describe('환불 동시성 (E2E)', () => {
     ctx = await createRefundTestContext({
       label: 'concurrency',
       configure: (builder) =>
-        builder.overrideProvider(REFUND_PG_GATEWAY).useValue(pgStub),
+        builder.overrideProvider(PgService).useValue(pgStub),
     });
   });
 
@@ -287,10 +287,10 @@ describe('환불 동시성 (E2E)', () => {
     const ready = new Promise<void>((resolve) => {
       inquiryReady = resolve;
     });
-    const originalInquire: RefundPgStub['inquireCancel'] =
-      pgStub.inquireCancel.bind(pgStub);
+    const originalInquire: RefundPgStub['inquirePaymentCancel'] =
+      pgStub.inquirePaymentCancel.bind(pgStub);
     const inquirySpy = vi
-      .spyOn(pgStub, 'inquireCancel')
+      .spyOn(pgStub, 'inquirePaymentCancel')
       .mockImplementation(async (input) => {
         const result = await originalInquire(input);
         inquiryReady();
@@ -308,7 +308,6 @@ describe('환불 동시성 (E2E)', () => {
         success: true,
         paymentCancelId,
         pgTransactionId: `pg-cancel-${paymentCancelId}`,
-        orderItemId: issued.orderItemId,
         amount: issued.amount,
         reason: null,
       }).expect(200);
@@ -351,11 +350,11 @@ describe('환불 동시성 (E2E)', () => {
     const ready = new Promise<void>((resolve) => {
       inquiryReady = resolve;
     });
-    const originalInquire: RefundPgStub['inquireCancel'] =
-      pgStub.inquireCancel.bind(pgStub);
+    const originalInquire: RefundPgStub['inquirePaymentCancel'] =
+      pgStub.inquirePaymentCancel.bind(pgStub);
     let inquiryCalls = 0;
     const inquirySpy = vi
-      .spyOn(pgStub, 'inquireCancel')
+      .spyOn(pgStub, 'inquirePaymentCancel')
       .mockImplementation(async (input) => {
         const result = await originalInquire(input);
         inquiryCalls += 1;
@@ -422,11 +421,11 @@ describe('환불 동시성 (E2E)', () => {
     const ready = new Promise<void>((resolve) => {
       inquiryReady = resolve;
     });
-    const originalInquire: RefundPgStub['inquireCancel'] =
-      pgStub.inquireCancel.bind(pgStub);
+    const originalInquire: RefundPgStub['inquirePaymentCancel'] =
+      pgStub.inquirePaymentCancel.bind(pgStub);
     let inquiryCalls = 0;
     const inquirySpy = vi
-      .spyOn(pgStub, 'inquireCancel')
+      .spyOn(pgStub, 'inquirePaymentCancel')
       .mockImplementation(async (input) => {
         const result = await originalInquire(input);
         inquiryCalls += 1;
@@ -493,10 +492,10 @@ describe('환불 동시성 (E2E)', () => {
       const ready = new Promise<void>((resolve) => {
         inquiryReady = resolve;
       });
-      const originalInquire: RefundPgStub['inquireCancel'] =
-        pgStub.inquireCancel.bind(pgStub);
+      const originalInquire: RefundPgStub['inquirePaymentCancel'] =
+        pgStub.inquirePaymentCancel.bind(pgStub);
       const inquirySpy = vi
-        .spyOn(pgStub, 'inquireCancel')
+        .spyOn(pgStub, 'inquirePaymentCancel')
         .mockImplementation(async (input) => {
           const result = await originalInquire(input);
           inquiryReady();
@@ -512,10 +511,10 @@ describe('환불 동시성 (E2E)', () => {
         await ready;
         const retryRequest = () =>
           request(ctx.server)
-            .post(`/refund/${refundId}/payout-retries`)
+            .post(`/refund/${refundId}/pg-check`)
             .set('Authorization', `Bearer ${ctx.manager.token}`)
             .set('Idempotency-Key', randomUUID())
-            .send({ reason: 'PG 재요청' });
+            .send({});
         const reserveRequest = () =>
           request(ctx.server)
             .post(`/refund/${refundId}/manual-payouts`)
@@ -534,8 +533,8 @@ describe('환불 동시성 (E2E)', () => {
         const sendsBeforeRelease = pgStub.sendCalls.length;
         releaseInquiry();
         const check = await checkPromise;
-        expect(retry.status).toBe(409);
-        expect(retry.body.error.code).toBe('REFUND_PAYOUT_UNRESOLVED');
+        expect(retry.status).toBe(202);
+        expect(retry.body.data.checkStatus).toBe('ALREADY_RUNNING');
         expect(reserve.status).toBe(409);
         expect(reserve.body.error.code).toBe('REFUND_PAYOUT_UNRESOLVED');
         expect(inquiriesBeforeRelease).toBe(1);
@@ -686,11 +685,11 @@ describe('환불 동시성 (E2E)', () => {
       const ready = new Promise<void>((resolve) => {
         inquiryReady = resolve;
       });
-      const originalInquire: RefundPgStub['inquireCancel'] =
-        pgStub.inquireCancel.bind(pgStub);
+      const originalInquire: RefundPgStub['inquirePaymentCancel'] =
+        pgStub.inquirePaymentCancel.bind(pgStub);
       let calls = 0;
       const inquirySpy = vi
-        .spyOn(pgStub, 'inquireCancel')
+        .spyOn(pgStub, 'inquirePaymentCancel')
         .mockImplementation(async (input) => {
           const result = await originalInquire(input);
           calls += 1;
@@ -755,6 +754,7 @@ describe('환불 동시성 (E2E)', () => {
         .expect(202);
       const refundId = accepted.body.data.refundId as string;
       pgStub.reset();
+      pgStub.respondToInquiry({ result: 'NOT_FOUND', authoritative: true });
 
       const locking = ctx.app.get<RefundLockingRepository>(
         RefundLockingRepository,
@@ -765,8 +765,8 @@ describe('환불 동시성 (E2E)', () => {
       );
       const originalLock: RefundLockingRepository['lockForPayout'] =
         locking.lockForPayout.bind(locking);
-      const originalRetry: RefundRepository['createRetryAttempt'] =
-        refunds.createRetryAttempt.bind(refunds);
+      const originalRetry: RefundRepository['createRetryPaymentCancel'] =
+        refunds.createRetryPaymentCancel.bind(refunds);
       const originalReserve: RefundOperationsRepository['createReservation'] =
         operations.createReservation.bind(operations);
       let firstReady!: () => void;
@@ -786,11 +786,11 @@ describe('환불 동시성 (E2E)', () => {
         .spyOn(locking, 'lockForPayout')
         .mockImplementation((...args) => {
           lockCalls += 1;
-          if (lockCalls === 2) secondLockAttempted();
+          if (lockCalls === (retryFirst ? 3 : 2)) secondLockAttempted();
           return originalLock(...args);
         });
       const retrySpy = vi
-        .spyOn(refunds, 'createRetryAttempt')
+        .spyOn(refunds, 'createRetryPaymentCancel')
         .mockImplementation(async (...args) => {
           if (retryFirst) {
             firstReady();
@@ -809,10 +809,10 @@ describe('환불 동시성 (E2E)', () => {
         });
       const retry = () =>
         request(ctx.server)
-          .post(`/refund/${refundId}/payout-retries`)
+          .post(`/refund/${refundId}/pg-check`)
           .set('Authorization', `Bearer ${ctx.manager.token}`)
           .set('Idempotency-Key', randomUUID())
-          .send({ reason: 'PG 재요청' })
+          .send({})
           .then((response) => response);
       const reserve = () =>
         request(ctx.server)
@@ -833,11 +833,15 @@ describe('환불 동시성 (E2E)', () => {
         ]);
         const retryResponse = retryFirst ? first : second;
         const reserveResponse = retryFirst ? second : first;
-        expect(retryResponse.status).toBe(retryFirst ? 202 : 409);
+        expect(retryResponse.status).toBe(200);
+        expect(retryResponse.body.data.checkStatus).toBe(
+          retryFirst ? 'CHECKED' : 'NO_PENDING_ATTEMPT',
+        );
         expect(reserveResponse.status).toBe(retryFirst ? 409 : 201);
-        expect(
-          (retryFirst ? reserveResponse : retryResponse).body.error.code,
-        ).toBe('REFUND_PAYOUT_UNRESOLVED');
+        if (retryFirst)
+          expect(reserveResponse.body.error.code).toBe(
+            'REFUND_PAYOUT_UNRESOLVED',
+          );
       } finally {
         releaseFirst();
         retrySpy.mockRestore();
@@ -888,8 +892,8 @@ describe('환불 동시성 (E2E)', () => {
     const locking = ctx.app.get<RefundLockingRepository>(
       RefundLockingRepository,
     );
-    const originalSucceeded: RefundRepository['markAttemptSucceeded'] =
-      refunds.markAttemptSucceeded.bind(refunds);
+    const originalSucceeded: RefundRepository['markPaymentCancelSucceeded'] =
+      refunds.markPaymentCancelSucceeded.bind(refunds);
     const originalLock: RefundLockingRepository['lockForPayout'] =
       locking.lockForPayout.bind(locking);
     let inquiryLocked!: () => void;
@@ -905,7 +909,7 @@ describe('환불 동시성 (E2E)', () => {
       callbackLockAttempted = resolve;
     });
     const succeededSpy = vi
-      .spyOn(refunds, 'markAttemptSucceeded')
+      .spyOn(refunds, 'markPaymentCancelSucceeded')
       .mockImplementation(async (...args) => {
         inquiryLocked();
         await holdInquiry;
@@ -929,7 +933,7 @@ describe('환불 동시성 (E2E)', () => {
           success: true,
           paymentCancelId,
           pgTransactionId,
-          orderItemId: issued.orderItemId,
+
           amount: issued.amount,
           reason: null,
         }).then((response) => response);

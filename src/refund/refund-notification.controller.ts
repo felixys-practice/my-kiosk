@@ -20,8 +20,8 @@ import {
   ApiBody,
 } from '@nestjs/swagger';
 import {
-  ApiRefundResponse,
-  ApiRefundErrors,
+  apiRefundResponse,
+  apiRefundErrors,
   notificationListSchema,
   notificationSchema,
 } from './refund.swagger';
@@ -44,8 +44,8 @@ export class RefundNotificationController {
     description: '본문 생략 또는 빈 객체만 허용합니다.',
     schema: { type: 'object', additionalProperties: false },
   })
-  @ApiRefundResponse(200, '읽음 처리한 알림', notificationSchema)
-  @ApiRefundErrors(400, 401, 403, 404)
+  @apiRefundResponse(200, '읽음 처리한 알림', notificationSchema)
+  @apiRefundErrors(400, 401, 403, 404)
   @ApiOperation({ summary: '본인에게 전달된 환불 알림을 읽음 처리' })
   @Patch(':notificationId/read')
   read(
@@ -58,8 +58,8 @@ export class RefundNotificationController {
   }
 
   /** 고객·현재 점주·운영자에게 허용된 수신 알림만 조회한다. */
-  @ApiRefundResponse(200, '수신 알림 목록', notificationListSchema)
-  @ApiRefundErrors(400, 401, 403, 404)
+  @apiRefundResponse(200, '수신 알림 목록', notificationListSchema)
+  @apiRefundErrors(400, 401, 403, 404)
   @ApiOperation({ summary: '권한 범위 안의 환불 알림 목록 조회' })
   @Get()
   list(

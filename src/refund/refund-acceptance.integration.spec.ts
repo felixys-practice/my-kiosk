@@ -21,7 +21,7 @@ import {
 } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { AppModule } from 'src/app.module';
-import { REFUND_PG_GATEWAY } from 'src/pg/refund-pg.gateway';
+import { PgService } from 'src/pg/pg.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { RefundAcceptanceService } from './refund-acceptance.service';
 import { RefundRepository } from './refund.repository';
@@ -33,9 +33,9 @@ import { UsageSessionRepository } from 'src/usage-session/usage-session.reposito
  * - 테스트마다 새 이용권을 만들고 afterAll에서 자기 데이터만 지운다
  */
 describe('환불 확정 저장 (실제 DB)', () => {
-  const pgGateway = {
-    sendCancel: vi.fn(),
-    inquireCancel: vi.fn(),
+  const pgServiceMock = {
+    requestPaymentCancel: vi.fn(),
+    inquirePaymentCancel: vi.fn(),
   };
   let app: INestApplication;
   let prisma: PrismaService;
@@ -121,8 +121,8 @@ describe('환불 확정 저장 (실제 DB)', () => {
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
-      .overrideProvider(REFUND_PG_GATEWAY)
-      .useValue(pgGateway)
+      .overrideProvider(PgService)
+      .useValue(pgServiceMock)
       .compile();
     app = moduleRef.createNestApplication();
     await app.init();
@@ -185,7 +185,9 @@ describe('환불 확정 저장 (실제 DB)', () => {
   });
 
   beforeEach(() => {
-    pgGateway.sendCancel.mockReset().mockResolvedValue({ result: 'ACCEPTED' });
+    pgServiceMock.requestPaymentCancel
+      .mockReset()
+      .mockResolvedValue({ result: 'ACCEPTED' });
   });
 
   it('환불 확정 시 확정된 환불(ACCEPTED)과 그 금액의 최초 PG 취소 요청(REQUESTED)이 저장된다', async () => {
@@ -315,9 +317,9 @@ describe('환불 확정 저장 (실제 DB)', () => {
       },
     });
     const repository = app.get(RefundRepository);
-    vi
-      .spyOn(repository, 'createAcceptedRefund')
-      .mockRejectedValueOnce(new Error('환불 저장 실패'));
+    vi.spyOn(repository, 'createAcceptedRefund').mockRejectedValueOnce(
+      new Error('환불 저장 실패'),
+    );
 
     await expect(accept(issued.ticketId)).rejects.toThrow('환불 저장 실패');
 
@@ -342,7 +344,7 @@ describe('환불 확정 저장 (실제 DB)', () => {
       refunds: 0,
       attempts: 0,
     });
-    expect(pgGateway.sendCancel).not.toHaveBeenCalled();
+    expect(pgServiceMock.requestPaymentCancel).not.toHaveBeenCalled();
   });
 
   it('같은 이용권의 동시 신청 두 건 중 한 건만 확정되고 다른 한 건은 REFUND_IN_PROGRESS를 받는다', async () => {
@@ -368,7 +370,7 @@ describe('환불 확정 저장 (실제 DB)', () => {
 
   it('PG 전송 결과가 NOT_SENT여도 접수는 성공하고 이용권은 REVOKED로 남는다', async () => {
     const issued = await createUnusedPeriodTicket();
-    pgGateway.sendCancel.mockResolvedValue({
+    pgServiceMock.requestPaymentCancel.mockResolvedValue({
       result: 'NOT_SENT',
       reason: 'PG 미연동',
     });
@@ -425,7 +427,7 @@ describe('환불 확정 저장 (실제 DB)', () => {
       where: { id: issued.ticketId },
     });
     expect(ticket.status).toBe(TicketStatus.REVOKED);
-    expect(pgGateway.sendCancel).not.toHaveBeenCalled();
+    expect(pgServiceMock.requestPaymentCancel).not.toHaveBeenCalled();
   });
 
   it('입실이 먼저 이용권 잠금을 얻으면 뒤이은 고객 환불은 사용 이력을 보고 USED_TICKET으로 거절된다', async () => {
@@ -521,7 +523,7 @@ describe('환불 확정 저장 (실제 DB)', () => {
 
   it('접수 응답과 같은 키 재응답은 PG 전송 결과(전송 전 실패 → 조치 필요)를 반영한 같은 응답이다', async () => {
     const issued = await createUnusedPeriodTicket();
-    pgGateway.sendCancel.mockResolvedValueOnce({
+    pgServiceMock.requestPaymentCancel.mockResolvedValueOnce({
       result: 'NOT_SENT',
       reason: 'PG 연결 설정 누락',
     });
@@ -538,7 +540,7 @@ describe('환불 확정 저장 (실제 DB)', () => {
     expect({
       status: first.status,
       payoutStatus: first.body.payoutStatus,
-      pgCalls: pgGateway.sendCancel.mock.calls.length,
+      pgCalls: pgServiceMock.requestPaymentCancel.mock.calls.length,
     }).toEqual({
       status: 202,
       payoutStatus: RefundPayoutStatus.ACTION_REQUIRED,
@@ -553,7 +555,7 @@ describe('환불 확정 저장 (실제 DB)', () => {
 
   it('최초 전송은 자동 재전송 횟수에 더해지지 않고 전송 시도 횟수에만 기록된다', async () => {
     const issued = await createUnusedPeriodTicket();
-    pgGateway.sendCancel.mockResolvedValueOnce({
+    pgServiceMock.requestPaymentCancel.mockResolvedValueOnce({
       result: 'UNKNOWN',
       reason: '응답 시간 초과',
     });
@@ -580,7 +582,7 @@ describe('환불 확정 저장 (실제 DB)', () => {
     const sendStartedSignal = new Promise<void>((resolve) => {
       sendStarted = resolve;
     });
-    pgGateway.sendCancel.mockImplementationOnce(async () => {
+    pgServiceMock.requestPaymentCancel.mockImplementationOnce(async () => {
       sendStarted();
       await sendHeld;
       return { result: 'NOT_SENT', reason: 'PG 연결 설정 누락' };
@@ -615,7 +617,9 @@ describe('환불 확정 저장 (실제 DB)', () => {
 
   it('확정은 커밋됐지만 PG 전송 단계 전에 중단되면, 처리 기한이 지난 뒤 같은 키 요청은 환불을 새로 만들지 않고 저장된 상태로 응답한다', async () => {
     const issued = await createUnusedPeriodTicket();
-    pgGateway.sendCancel.mockRejectedValueOnce(new Error('서버 중단'));
+    pgServiceMock.requestPaymentCancel.mockRejectedValueOnce(
+      new Error('서버 중단'),
+    );
     const command = {
       ticketId: issued.ticketId,
       consentToTerminateTicket: true,
@@ -643,7 +647,7 @@ describe('환불 확정 저장 (실제 DB)', () => {
       status: retried.status,
       refundId: retried.body.refundId,
       refunds: refunds.length,
-      sends: pgGateway.sendCancel.mock.calls.length,
+      sends: pgServiceMock.requestPaymentCancel.mock.calls.length,
       record: record.status,
     }).toEqual({
       status: 202,
@@ -664,7 +668,7 @@ describe('환불 확정 저장 (실제 DB)', () => {
     const sendStartedSignal = new Promise<void>((resolve) => {
       sendStarted = resolve;
     });
-    pgGateway.sendCancel.mockImplementationOnce(async () => {
+    pgServiceMock.requestPaymentCancel.mockImplementationOnce(async () => {
       sendStarted();
       await sendHeld;
       return { result: 'NOT_SENT', reason: 'PG 연결 설정 누락' };

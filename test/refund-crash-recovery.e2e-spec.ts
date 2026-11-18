@@ -9,7 +9,7 @@ import {
   SeatAssignmentStatus,
   TicketStatus,
 } from '@prisma/client';
-import { REFUND_PG_GATEWAY } from '../src/pg/refund-pg.gateway';
+import { PgService } from '../src/pg/pg.service';
 import {
   createRefundTestContext,
   RefundTestContext,
@@ -31,7 +31,7 @@ describe('환불 중단 복구 (E2E)', () => {
     ctx = await createRefundTestContext({
       label: 'crash-recovery',
       configure: (builder) =>
-        builder.overrideProvider(REFUND_PG_GATEWAY).useValue(pgStub),
+        builder.overrideProvider(PgService).useValue(pgStub),
     });
   });
 
@@ -46,7 +46,7 @@ describe('환불 중단 복구 (E2E)', () => {
     const app = await createRefundTestContext({
       label: 'crash-recovery-new',
       configure: (builder) =>
-        builder.overrideProvider(REFUND_PG_GATEWAY).useValue(pgStub),
+        builder.overrideProvider(PgService).useValue(pgStub),
     });
     restarted.push(app);
     return app;
@@ -304,12 +304,12 @@ describe('환불 중단 복구 (E2E)', () => {
     pgStub.reset();
     await app.app.get(RefundRecoveryService).sweep(new Date());
     const retry = await request(app.server)
-      .post(`/refund/${refundId}/payout-retries`)
+      .post(`/refund/${refundId}/pg-check`)
       .set('Authorization', `Bearer ${ctx.manager.token}`)
       .set('Idempotency-Key', randomUUID())
-      .send({ reason: '작업자 재시작 후 PG 재요청' })
-      .expect(409);
-    expect(retry.body.error.code).toBe('REFUND_PAYOUT_UNRESOLVED');
+      .send({})
+      .expect(200);
+    expect(retry.body.data.checkStatus).toBe('NO_PENDING_ATTEMPT');
     const payout = await app.prisma.manualRefundPayout.findUniqueOrThrow({
       where: { id: payoutId },
     });
@@ -349,8 +349,8 @@ describe('환불 중단 복구 (E2E)', () => {
       cancelledAmount: issued.amount,
     });
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const originalInquire: RefundPgStub['inquireCancel'] =
-      pgStub.inquireCancel.bind(pgStub);
+    const originalInquire: RefundPgStub['inquirePaymentCancel'] =
+      pgStub.inquirePaymentCancel.bind(pgStub);
     let inquiryStarted!: () => void;
     const started = new Promise<void>((resolve) => {
       inquiryStarted = resolve;
@@ -361,7 +361,7 @@ describe('환불 중단 복구 (E2E)', () => {
     });
     let calls = 0;
     const inquirySpy = vi
-      .spyOn(pgStub, 'inquireCancel')
+      .spyOn(pgStub, 'inquirePaymentCancel')
       .mockImplementation(async (input) => {
         const result = await originalInquire(input);
         calls += 1;

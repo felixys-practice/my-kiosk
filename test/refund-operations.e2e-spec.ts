@@ -10,7 +10,7 @@ import {
   RefundPayoutStatus,
   TicketStatus,
 } from '@prisma/client';
-import { REFUND_PG_GATEWAY } from '../src/pg/refund-pg.gateway';
+import { PgService } from '../src/pg/pg.service';
 import {
   createRefundTestContext,
   RefundTestContext,
@@ -26,7 +26,6 @@ import { RefundOperationsService } from '../src/refund/refund-operations.service
 describe('미지급 환불금 재처리 (E2E)', () => {
   const pgStub = new RefundPgStub();
   let ctx: RefundTestContext;
-  const retryReason = 'PG 연결 설정을 복구해 다시 요청';
 
   /**
    * 고객 환불의 최초 PG 취소 요청이 보내기 전에 실패해 조치 필요가 된 환불을 만든다
@@ -55,27 +54,6 @@ describe('미지급 환불금 재처리 (E2E)', () => {
       refundId: res.body.data.refundId as string,
       ticketId: issued.ticketId,
     };
-  }
-
-  /**
-   * 운영자가 PG 직접 재시도를 요청한다
-   * @param refundId 환불
-   * @param key 멱등 키
-   * @param reason 사유
-   * @param token 요청자 토큰(기본 운영자)
-   * @returns 응답
-   */
-  function retry(
-    refundId: string,
-    key: string,
-    reason = retryReason,
-    token = ctx.manager.token,
-  ) {
-    return request(ctx.server)
-      .post(`/refund/${refundId}/payout-retries`)
-      .set('Authorization', `Bearer ${token}`)
-      .set('Idempotency-Key', key)
-      .send({ reason });
   }
 
   /**
@@ -129,7 +107,7 @@ describe('미지급 환불금 재처리 (E2E)', () => {
     ctx = await createRefundTestContext({
       label: 'operations',
       configure: (builder) =>
-        builder.overrideProvider(REFUND_PG_GATEWAY).useValue(pgStub),
+        builder.overrideProvider(PgService).useValue(pgStub),
     });
   });
 
@@ -141,65 +119,46 @@ describe('미지급 환불금 재처리 (E2E)', () => {
     pgStub.reset();
   });
 
-  it('점주의 PG 직접 재시도는 403 REFUND_FORBIDDEN으로 거절되고 PG 취소 요청이 추가되지 않는다', async () => {
+  it('폐지한 일반 PG 재시도 API는 404를 반환하고 PG를 호출하지 않는다 (RC-05)', async () => {
     const refundId = await createFailedRefund();
     pgStub.reset();
-
-    const res = await request(ctx.server)
-      .post(`/refund/${refundId}/payout-retries`)
-      .set('Authorization', `Bearer ${ctx.owner.token}`)
-      .set('Idempotency-Key', `retry-${randomUUID()}`)
-      .send({ reason: retryReason });
-
-    const attempts = await ctx.prisma.paymentCancel.count({
-      where: { refundId },
-    });
-    expect({
-      status: res.status,
-      code: res.body.error?.code,
-      attempts,
-      sends: pgStub.sendCalls.length,
-    }).toEqual({
-      status: 403,
-      code: 'REFUND_FORBIDDEN',
-      attempts: 1,
-      sends: 0,
-    });
-  });
-
-  it('운영자의 PG 직접 재시도에 Idempotency-Key가 없으면 400 IDEMPOTENCY_KEY_REQUIRED로 거절되고 PG 취소 요청이 추가되지 않는다', async () => {
-    const refundId = await createFailedRefund();
-    pgStub.reset();
-
-    const res = await request(ctx.server)
+    await request(ctx.server)
       .post(`/refund/${refundId}/payout-retries`)
       .set('Authorization', `Bearer ${ctx.manager.token}`)
-      .send({ reason: retryReason });
-
-    const attempts = await ctx.prisma.paymentCancel.count({
-      where: { refundId },
-    });
-    expect({
-      status: res.status,
-      code: res.body.error?.code,
-      attempts,
-      sends: pgStub.sendCalls.length,
-    }).toEqual({
-      status: 400,
-      code: 'IDEMPOTENCY_KEY_REQUIRED',
-      attempts: 1,
-      sends: 0,
-    });
+      .set('Idempotency-Key', randomUUID())
+      .send({ reason: 'PG 재시도' })
+      .expect(404);
+    expect(pgStub.sendCalls).toHaveLength(0);
+    expect(pgStub.inquiryCalls).toHaveLength(0);
+    expect(await ctx.prisma.paymentCancel.count({ where: { refundId } })).toBe(
+      1,
+    );
   });
+
+  it.each(['owner', 'manager'] as const)(
+    '%s는 멱등 키와 사유 없이 개별 확인해 PG 미접수 뒤 새 요청을 전송한다',
+    async (role) => {
+      const refundId = await createFailedRefund();
+      pgStub.reset();
+      pgStub.respondToInquiry({ result: 'NOT_FOUND', authoritative: true });
+      const result = await pgCheck(refundId, ctx[role].token).expect(200);
+      expect(result.body.data.checkStatus).toBe('CHECKED');
+      expect(result.body.data.resendResult).toBe('ACCEPTED');
+      expect(pgStub.inquiryCalls).toHaveLength(1);
+      expect(pgStub.sendCalls).toHaveLength(1);
+      expect(
+        await ctx.prisma.paymentCancel.count({ where: { refundId } }),
+      ).toBe(2);
+    },
+  );
 
   it('PG 취소 요청의 실패가 확정됐고 실제 지급액이 0원일 때 운영자가 재시도를 요청하면 확정된 환불 금액의 취소 요청을 새 PG 취소 요청 식별자로 기록해 PG에 보내고 실행자·사유를 남기며 이용권은 복구하지 않는다 (QS-10-1)', async () => {
     const failed = await createFailedRefundOfTicket();
     pgStub.reset();
     pgStub.respondToSend({ result: 'ACCEPTED' });
 
-    const res = await retry(failed.refundId, `retry-${randomUUID()}`).expect(
-      202,
-    );
+    pgStub.respondToInquiry({ result: 'NOT_FOUND', authoritative: true });
+    const res = await pgCheck(failed.refundId, ctx.manager.token).expect(200);
 
     const refund = await ctx.prisma.refund.findUniqueOrThrow({
       where: { id: failed.refundId },
@@ -210,7 +169,11 @@ describe('미지급 환불금 재처리 (E2E)', () => {
     });
     const [previous, created] = refund.paymentCancels;
     expect({
-      body: res.body.data,
+      result: [
+        res.body.data.checkStatus,
+        res.body.data.inquiryResult,
+        res.body.data.resendResult,
+      ],
       previous: {
         status: previous.status,
         failureCode: previous.failureCode,
@@ -224,11 +187,7 @@ describe('미지급 환불금 재처리 (E2E)', () => {
       payoutStatus: refund.payoutStatus,
       ticket: ticket.status,
     }).toEqual({
-      body: {
-        refundId: failed.refundId,
-        paymentCancelId: created?.id,
-        payoutStatus: RefundPayoutStatus.PENDING,
-      },
+      result: ['CHECKED', 'NOT_FOUND', 'ACCEPTED'],
       previous: {
         status: PaymentCancelStatus.FAILED,
         failureCode: PaymentCancelFailureCode.SEND_FAILED,
@@ -236,7 +195,7 @@ describe('미지급 환불금 재처리 (E2E)', () => {
       created: {
         amount: refund.amount,
         requestedById: ctx.manager.id,
-        retryReason,
+        retryReason: '개별 확인에서 PG 미접수 확인 후 재시도',
       },
       sent: [created?.id],
       payoutStatus: RefundPayoutStatus.PENDING,
@@ -244,68 +203,42 @@ describe('미지급 환불금 재처리 (E2E)', () => {
     });
   });
 
-  it('같은 키·같은 내용의 반복은 최초 응답(같은 PG 취소 요청 식별자)을, 내용이 바뀌면 IDEMPOTENCY_KEY_REUSED를, 다른 키의 동시 요청은 REFUND_PAYOUT_UNRESOLVED를 받고 취소 요청 기록과 PG 호출은 추가되지 않는다 (QS-10-1c)', async () => {
+  it('개별 확인 후 반복·동시 실행은 최근 결과를 반환하고 새 요청·PG 호출을 추가하지 않는다 (QS-10-1c)', async () => {
     const refundId = await createFailedRefund();
     pgStub.reset();
-    pgStub.respondToSend({ result: 'ACCEPTED' });
-    const k1 = `retry-${randomUUID()}`;
-    const first = await retry(refundId, k1).expect(202);
-
-    const repeated = await retry(refundId, k1);
-    const changed = await retry(refundId, k1, '다른 사유');
-    const [k2, k3] = await Promise.all([
-      retry(refundId, `retry-${randomUUID()}`),
-      retry(refundId, `retry-${randomUUID()}`),
+    pgStub.respondToInquiry({ result: 'NOT_FOUND', authoritative: true });
+    const first = await pgCheck(refundId, ctx.manager.token).expect(200);
+    expect(first.body.data.resendResult).toBe('ACCEPTED');
+    const repeated = await pgCheck(refundId, ctx.manager.token).expect(200);
+    const others = await Promise.all([
+      pgCheck(refundId),
+      pgCheck(refundId, ctx.manager.token),
     ]);
-
-    const attempts = await ctx.prisma.paymentCancel.count({
-      where: { refundId },
-    });
-    expect({
-      repeated: { status: repeated.status, body: repeated.body.data },
-      changed: changed.body.error?.code,
-      others: [k2, k3].map((res) => [
+    expect(
+      [repeated, ...others].map((res) => [
         res.status,
-        res.body.error?.code as string,
+        res.body.data.checkStatus as string,
       ]),
-      attempts,
-      sends: pgStub.sendCalls.length,
-    }).toEqual({
-      repeated: { status: 202, body: first.body.data },
-      changed: 'IDEMPOTENCY_KEY_REUSED',
-      others: [
-        [409, 'REFUND_PAYOUT_UNRESOLVED'],
-        [409, 'REFUND_PAYOUT_UNRESOLVED'],
-      ],
-      attempts: 2,
-      sends: 1,
-    });
+    ).toEqual([
+      [200, 'RECENT_RESULT'],
+      [200, 'RECENT_RESULT'],
+      [200, 'RECENT_RESULT'],
+    ]);
+    expect(await ctx.prisma.paymentCancel.count({ where: { refundId } })).toBe(
+      2,
+    );
+    expect(pgStub.inquiryCalls).toHaveLength(1);
+    expect(pgStub.sendCalls).toHaveLength(1);
   });
 
-  it('고객은 403 REFUND_FORBIDDEN, 운영자의 같은 키 반복은 지급 완료 뒤에도 최초 응답, 새 요청은 지급 완료 REFUND_PAYOUT_NOT_ACTIONABLE·활성 별도 지급 예약 REFUND_PAYOUT_UNRESOLVED·일부 지급 REFUND_PARTIAL_PAYOUT_REQUIRES_MANUAL로 거절되고 기록·PG 호출이 추가되지 않는다 (QS-10-1d)', async () => {
-    // 고객 요청
+  it('고객은 개별 확인을 거절하고 지급 완료·활성 예약·일부 지급 환불은 저장 상태만 반환하며 PG를 호출하지 않는다 (QS-10-1d)', async () => {
     const forCustomer = await createFailedRefund();
-    // 같은 키 반복: 최초 재시도 뒤 지급 완료로 바뀐 환불
-    const paidLater = await createFailedRefund();
-    // 활성 별도 지급 예약이 있는 환불
+    const paid = await createFailedRefund();
     const reserved = await createFailedRefund();
-    // 일부만 지급된 환불
     const partial = await createFailedRefund();
-    pgStub.reset();
-    pgStub.respondToSend({ result: 'ACCEPTED' });
-    const key = `retry-${randomUUID()}`;
-    const first = await retry(paidLater, key).expect(202);
     await ctx.prisma.refund.update({
-      where: { id: paidLater },
+      where: { id: paid },
       data: { payoutStatus: RefundPayoutStatus.PAID },
-    });
-    await ctx.prisma.paymentCancel.updateMany({
-      where: { refundId: paidLater, status: PaymentCancelStatus.REQUESTED },
-      data: {
-        status: PaymentCancelStatus.SUCCEEDED,
-        claimToken: null,
-        claimUntil: null,
-      },
     });
     const reservedRefund = await ctx.prisma.refund.findUniqueOrThrow({
       where: { id: reserved },
@@ -324,45 +257,23 @@ describe('미지급 환불금 재처리 (E2E)', () => {
       where: { id: partial },
       data: { paidAmount: 1000 },
     });
-    const before = await ctx.prisma.paymentCancel.count({
-      where: { refundId: { in: [forCustomer, paidLater, reserved, partial] } },
-    });
-    const sendsBefore = pgStub.sendCalls.length;
-
-    const customer = await retry(
-      forCustomer,
-      `retry-${randomUUID()}`,
-      retryReason,
-      ctx.customer.token,
-    );
-    const repeated = await retry(paidLater, key);
-    const paidNew = await retry(paidLater, `retry-${randomUUID()}`);
-    const reservedNew = await retry(reserved, `retry-${randomUUID()}`);
-    const partialNew = await retry(partial, `retry-${randomUUID()}`);
-
-    const after = await ctx.prisma.paymentCancel.count({
-      where: { refundId: { in: [forCustomer, paidLater, reserved, partial] } },
-    });
-    expect({
-      customer: [customer.status, customer.body.error?.code],
-      repeated: { status: repeated.status, body: repeated.body.data },
-      paidNew: [paidNew.status, paidNew.body.error?.code],
-      reservedNew: [reservedNew.status, reservedNew.body.error?.code],
-      partialNew: [partialNew.status, partialNew.body.error?.code],
-      addedAttempts: after - before,
-      addedSends: pgStub.sendCalls.length - sendsBefore,
-    }).toEqual({
-      customer: [403, 'REFUND_FORBIDDEN'],
-      repeated: { status: 202, body: first.body.data },
-      paidNew: [409, 'REFUND_PAYOUT_NOT_ACTIONABLE'],
-      reservedNew: [409, 'REFUND_PAYOUT_UNRESOLVED'],
-      partialNew: [409, 'REFUND_PARTIAL_PAYOUT_REQUIRES_MANUAL'],
-      addedAttempts: 0,
-      addedSends: 0,
-    });
+    pgStub.reset();
+    const customer = await pgCheck(forCustomer, ctx.customer.token).expect(403);
+    expect(customer.body.error.code).toBe('REFUND_FORBIDDEN');
+    for (const refundId of [paid, reserved, partial]) {
+      const result = await pgCheck(refundId, ctx.manager.token).expect(200);
+      expect(result.body.data.checkStatus).toBe('NO_PENDING_ATTEMPT');
+    }
+    expect(
+      await ctx.prisma.paymentCancel.count({
+        where: { refundId: { in: [forCustomer, paid, reserved, partial] } },
+      }),
+    ).toBe(4);
+    expect(pgStub.inquiryCalls).toHaveLength(0);
+    expect(pgStub.sendCalls).toHaveLength(0);
   });
 
-  it('최근 PG 취소 요청이 한도 소진·전송 전 실패·PG 거절로 이미 실패한 자기 매장 환불을 점주가 개별 확인해 미접수 또는 거절 확정이면 별도 버튼·사유 없이 새 PG 취소 요청 식별자로 즉시 보내고 이전 실패·이용 종료를 유지하며, 조회 오류면 보내지 않고 처리 중이면 운영자에게 알리고 추가 지급을 막는다 (QS-10-1a)', async () => {
+  it('최근 PG 취소 요청이 한도 소진·전송 전 실패·PG 거절로 이미 실패한 자기 매장 환불을 점주가 개별 확인해 미접수 또는 거절 확정이면 별도 버튼·사유 없이 새 PG 취소 요청 식별자로 즉시 보내고 이전 실패·이용 종료를 유지하며, 조회 오류면 보내지 않고 내부 실패의 처리 중 조회는 기존 요청의 조회를 재개한다 (QS-10-1a)', async () => {
     const reasons = [
       PaymentCancelFailureCode.RETRY_EXHAUSTED,
       PaymentCancelFailureCode.SEND_FAILED,
@@ -459,8 +370,8 @@ describe('미지급 환불금 재처리 (E2E)', () => {
       },
       inProgress: {
         attempts: 1,
-        actionCode: 'PG_RESULT_CONFLICT',
-        operatorNotified: true,
+        actionCode: null,
+        operatorNotified: false,
       },
       sends: 3,
     });
@@ -657,13 +568,12 @@ describe('미지급 환불금 재처리 (E2E)', () => {
       success: true,
       paymentCancelId: attempt.id,
       pgTransactionId: `pg-cancel-${attempt.id}`,
-      orderItemId: issued.orderItemId,
       amount: actualAmount,
     }).expect(200);
     return refundId;
   }
 
-  it('PG 취소 요청이 처리 중이거나 결과 확인 실패일 때 새 PG 취소 요청이나 별도 환불금 지급을 요청하면 결과 미확정 오류로 거부한다 (QS-10-2)', async () => {
+  it('PG 취소 요청이 미확정이면 개별 확인은 조회만 수행하고 별도 지급 예약은 거절한다 (QS-10-2)', async () => {
     const inProgress = await createFailedRefund();
     const queryFailed = await createFailedRefund();
     // 실패한 요청을 미확정 상태로 되돌려 처리 중·결과 확인 실패 상태를 만든다
@@ -687,17 +597,20 @@ describe('미지급 환불금 재처리 (E2E)', () => {
       const refund = await ctx.prisma.refund.findUniqueOrThrow({
         where: { id: refundId },
       });
-      const retried = await retry(refundId, `retry-${randomUUID()}`);
+      const retried = await pgCheck(refundId, ctx.manager.token);
       const reserved = await operate(`${refundId}/manual-payouts`, {
         amount: refund.amount,
         reason: '계좌 이체',
       });
-      results.push([retried.body.error?.code, reserved.body.error?.code]);
+      results.push([
+        retried.body.data.inquiryResult,
+        reserved.body.error?.code,
+      ]);
     }
 
     expect(results).toEqual([
-      ['REFUND_PAYOUT_UNRESOLVED', 'REFUND_PAYOUT_UNRESOLVED'],
-      ['REFUND_PAYOUT_UNRESOLVED', 'REFUND_PAYOUT_UNRESOLVED'],
+      ['IN_PROGRESS', 'REFUND_PAYOUT_UNRESOLVED'],
+      ['IN_PROGRESS', 'REFUND_PAYOUT_UNRESOLVED'],
     ]);
   });
 
@@ -712,7 +625,7 @@ describe('미지급 환불금 재처리 (E2E)', () => {
       amount: refund.amount,
       reason: '계좌 이체로 지급',
     });
-    const retried = await retry(refundId, `retry-${randomUUID()}`);
+    const retried = await pgCheck(refundId, ctx.manager.token);
     const second = await operate(`${refundId}/manual-payouts`, {
       amount: refund.amount,
       reason: '중복 예약',
@@ -727,12 +640,12 @@ describe('미지급 환불금 재처리 (E2E)', () => {
         reserved.body.data?.status,
         reserved.body.data?.amount,
       ],
-      blocked: [retried.body.error?.code, second.body.error?.code],
+      blocked: [retried.body.data.checkStatus, second.body.error?.code],
       refund: [after.payoutStatus, after.payoutMethod, after.paidAmount],
       sends: pgStub.sendCalls.length,
     }).toEqual({
       reserved: [201, 'RESERVED', refund.amount],
-      blocked: ['REFUND_PAYOUT_UNRESOLVED', 'REFUND_PAYOUT_UNRESOLVED'],
+      blocked: ['NO_PENDING_ATTEMPT', 'REFUND_PAYOUT_UNRESOLVED'],
       refund: [RefundPayoutStatus.ACTION_REQUIRED, 'MANUAL', 0],
       sends: 0,
     });
@@ -773,7 +686,7 @@ describe('미지급 환불금 재처리 (E2E)', () => {
     await ctx.app
       .get(RefundOperationsService)
       .alertUnconfirmedManualPayouts(new Date(Date.now() + 3_601_000));
-    const retried = await retry(refundId, `retry-${randomUUID()}`);
+    const retried = await pgCheck(refundId, ctx.manager.token);
 
     const payout = await ctx.prisma.manualRefundPayout.findUniqueOrThrow({
       where: { id: payoutId },
@@ -782,13 +695,13 @@ describe('미지급 환불금 재처리 (E2E)', () => {
     expect({
       status: payout.status,
       alerts: payout.notifications.map((n) => [n.kind, n.audience]),
-      retried: retried.body.error?.code,
+      retried: retried.body.data.checkStatus,
     }).toEqual({
       status: ManualRefundPayoutStatus.RESERVED,
       alerts: [
         ['MANUAL_CONFIRMATION_REQUIRED', RefundNotificationAudience.OPERATOR],
       ],
-      retried: 'REFUND_PAYOUT_UNRESOLVED',
+      retried: 'NO_PENDING_ATTEMPT',
     });
   });
 

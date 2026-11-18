@@ -16,7 +16,7 @@ import {
 import { DomainConflictError } from 'src/common/errors';
 import { randomUUID } from 'crypto';
 import { AppModule } from 'src/app.module';
-import { REFUND_PG_GATEWAY } from 'src/pg/refund-pg.gateway';
+import { PgService } from 'src/pg/pg.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { RefundStoreService } from './refund-store.service';
 import { SessionLifecycleService } from 'src/session-lifecycle/session-lifecycle.service';
@@ -31,9 +31,9 @@ import { ShopNotFoundError, TicketNotFoundError } from './errors';
  * - 테스트마다 새 이용권을 만들고 afterAll에서 자기 데이터만 지운다
  */
 describe('매장 환불 확정 저장 (실제 DB)', () => {
-  const pgGateway = {
-    sendCancel: vi.fn(),
-    inquireCancel: vi.fn(),
+  const pgServiceMock = {
+    requestPaymentCancel: vi.fn(),
+    inquirePaymentCancel: vi.fn(),
   };
   let app: INestApplication;
   let prisma: PrismaService;
@@ -146,8 +146,8 @@ describe('매장 환불 확정 저장 (실제 DB)', () => {
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
-      .overrideProvider(REFUND_PG_GATEWAY)
-      .useValue(pgGateway)
+      .overrideProvider(PgService)
+      .useValue(pgServiceMock)
       .compile();
     app = moduleRef.createNestApplication();
     await app.init();
@@ -234,7 +234,9 @@ describe('매장 환불 확정 저장 (실제 DB)', () => {
   });
 
   beforeEach(() => {
-    pgGateway.sendCancel.mockReset().mockResolvedValue({ result: 'ACCEPTED' });
+    pgServiceMock.requestPaymentCancel
+      .mockReset()
+      .mockResolvedValue({ result: 'ACCEPTED' });
   });
 
   it('매장 환불 확정 시 점주·확정 시각·사유·금액·종료 동의가 저장되고 이용권이 종료된다', async () => {
@@ -349,7 +351,7 @@ describe('매장 환불 확정 저장 (실제 DB)', () => {
     });
     expect({
       attempts,
-      pgCalls: pgGateway.sendCancel.mock.calls.length,
+      pgCalls: pgServiceMock.requestPaymentCancel.mock.calls.length,
     }).toEqual({ attempts: 0, pgCalls: 0 });
   });
 

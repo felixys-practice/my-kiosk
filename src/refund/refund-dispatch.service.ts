@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
   PaymentCancelFailureCode,
@@ -6,8 +6,7 @@ import {
   RefundPayoutStatus,
 } from '@prisma/client';
 import { randomUUID } from 'crypto';
-import { REFUND_PG_GATEWAY } from 'src/pg/refund-pg.gateway';
-import type { RefundPgGateway } from 'src/pg/refund-pg.gateway';
+import { PgService } from 'src/pg/pg.service';
 import { PgCancelSendResult } from 'src/pg/pg.types';
 import { RefundRepository } from './refund.repository';
 import { RefundLockingRepository } from './refund-locking.repository';
@@ -36,7 +35,7 @@ export class RefundDispatchService {
     private readonly lockingRepository: RefundLockingRepository,
     private readonly configService: ConfigService,
     private readonly resultService: RefundResultService,
-    @Inject(REFUND_PG_GATEWAY) private readonly pgGateway: RefundPgGateway,
+    private readonly pgService: PgService,
   ) {}
 
   /**
@@ -55,7 +54,7 @@ export class RefundDispatchService {
     actionCode: string | null;
   }> {
     // PG 호출은 트랜잭션 밖에서 하고 PG 취소 요청 ID를 멱등 키로 쓴다
-    const result = await this.pgGateway.sendCancel({
+    const result = await this.pgService.requestPaymentCancel({
       paymentCancelId: prepared.paymentCancelId,
       amount: prepared.amount,
     });
@@ -79,7 +78,7 @@ export class RefundDispatchService {
     // 1. Refund → PaymentCancel을 잠그고 담당·전송 시도를 저장한 뒤 커밋한다
     const prepared = await this.refundRepository.runInTransaction(
       async (tx) => {
-        const found = await this.refundRepository.findAttemptForResult(
+        const found = await this.refundRepository.findPaymentCancelForResult(
           paymentCancelId,
           tx,
         );
@@ -89,25 +88,34 @@ export class RefundDispatchService {
           paymentCancelIds: [found.id],
           manualRefundPayoutIds: [],
         });
-        const attempt = (await this.refundRepository.findAttemptForResult(
-          paymentCancelId,
-          tx,
-        ))!;
+        const storedPaymentCancel =
+          (await this.refundRepository.findPaymentCancelForResult(
+            paymentCancelId,
+            tx,
+          ))!;
         // 확정된 시도나 다른 작업자가 유효하게 맡은 시도는 보내지 않는다
-        if (!sendableStatuses.includes(attempt.status)) return null;
-        if (attempt.claimUntil && attempt.claimUntil > now) return null;
-        await this.refundRepository.markSendStarted(tx, attempt.id, {
-          claimToken,
-          claimUntil: new Date(now.getTime() + this.seconds('workLease')),
-          now,
-        });
-        return { amount: attempt.amount };
+        if (!sendableStatuses.includes(storedPaymentCancel.status)) return null;
+        if (
+          storedPaymentCancel.claimUntil &&
+          storedPaymentCancel.claimUntil > now
+        )
+          return null;
+        await this.refundRepository.markSendStarted(
+          tx,
+          storedPaymentCancel.id,
+          {
+            claimToken,
+            claimUntil: new Date(now.getTime() + this.seconds('workLease')),
+            now,
+          },
+        );
+        return { amount: storedPaymentCancel.amount };
       },
     );
     if (!prepared) return { sent: false };
 
     // 2. PG 호출은 트랜잭션 밖에서 한다(PG 시도 ID를 멱등 키로 쓴다)
-    const result = await this.pgGateway.sendCancel({
+    const result = await this.pgService.requestPaymentCancel({
       paymentCancelId,
       amount: prepared.amount,
     });
@@ -144,7 +152,10 @@ export class RefundDispatchService {
       counter,
     );
     if (!marked) return null;
-    const result = await this.pgGateway.sendCancel({ paymentCancelId, amount });
+    const result = await this.pgService.requestPaymentCancel({
+      paymentCancelId,
+      amount,
+    });
     await this.recordSendResult(paymentCancelId, claimToken, now, result);
     return result.result;
   }
@@ -177,7 +188,9 @@ export class RefundDispatchService {
     result: PgCancelSendResult,
   ): Promise<{ payoutStatus: RefundPayoutStatus; actionCode: string | null }> {
     await this.applySendResult(paymentCancelId, claimToken, sentAt, result);
-    return this.refundRepository.findPayoutStateByAttempt(paymentCancelId);
+    return this.refundRepository.findPayoutStateByPaymentCancelId(
+      paymentCancelId,
+    );
   }
 
   /**
@@ -196,9 +209,10 @@ export class RefundDispatchService {
     // 보내기 전에 실패가 확인되면 그 시도를 실패(SEND_FAILED)로 끝내고 조치 필요로 둔다(API 계약 §8)
     if (result.result === 'NOT_SENT') {
       await this.resultService.applyPgResult({
+        source: 'DISPATCH',
         paymentCancelId,
         claimToken,
-        outcome: {
+        pgCancelResult: {
           kind: 'FAILED',
           reason: result.reason,
           failureCode: PaymentCancelFailureCode.SEND_FAILED,
@@ -209,18 +223,20 @@ export class RefundDispatchService {
     // PG가 즉시 거절하면 그 시도를 실패(PG_REJECTED)로 끝내고 조치 필요로 둔다
     if (result.result === 'REJECTED') {
       await this.resultService.applyPgResult({
+        source: 'DISPATCH',
         paymentCancelId,
         claimToken,
-        outcome: { kind: 'FAILED', reason: result.reason },
+        pgCancelResult: { kind: 'FAILED', reason: result.reason },
       });
       return;
     }
     // PG가 즉시 취소를 확정하면 공통 결과 처리로 실제액·원장을 반영한다
     if (result.result === 'SUCCEEDED') {
       await this.resultService.applyPgResult({
+        source: 'DISPATCH',
         paymentCancelId,
         claimToken,
-        outcome: {
+        pgCancelResult: {
           kind: 'SUCCEEDED',
           pgTransactionId: result.pgTransactionId,
           actualAmount: result.cancelledAmount,

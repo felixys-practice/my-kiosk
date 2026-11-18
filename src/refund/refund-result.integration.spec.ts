@@ -25,8 +25,8 @@ import { randomUUID } from 'crypto';
 import { getQueueToken } from '@nestjs/bullmq';
 import { Job, Queue } from 'bullmq';
 import { AppModule } from 'src/app.module';
-import { DomainConflictError, DomainNotFoundError } from 'src/common/errors';
-import { REFUND_PG_GATEWAY } from 'src/pg/refund-pg.gateway';
+import { DomainNotFoundError } from 'src/common/errors';
+import { PgService } from 'src/pg/pg.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { TransactionLoggerService } from 'src/logger/transaction-logger.service';
 import {
@@ -40,7 +40,6 @@ import { RefundDispatchService } from './refund-dispatch.service';
 import { RefundRecoveryService } from './refund-recovery.service';
 import { RefundWorkRepository } from './refund-work.repository';
 import { RefundPgCheckService } from './refund-pg-check.service';
-import { RefundRetryService } from './refund-retry.service';
 import { RefundOperationsService } from './refund-operations.service';
 import { RefundOperationsRepository } from './refund-operations.repository';
 import { RefundEventRepository } from './refund-event.repository';
@@ -54,7 +53,10 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
   let prisma: PrismaService;
   let service: RefundResultService;
   /** 환불 PG 포트 대역(전송·조회 응답을 테스트마다 정한다) */
-  const pgGateway = { sendCancel: vi.fn(), inquireCancel: vi.fn() };
+  const pgServiceMock = {
+    requestPaymentCancel: vi.fn(),
+    inquirePaymentCancel: vi.fn(),
+  };
   let customerId: string;
   /** PG 재시도 실행자(MANAGER, PaymentCancel.requestedById 외래 키 대상) */
   let managerId: string;
@@ -157,8 +159,8 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
-      .overrideProvider(REFUND_PG_GATEWAY)
-      .useValue(pgGateway)
+      .overrideProvider(PgService)
+      .useValue(pgServiceMock)
       .compile();
     app = moduleRef.createNestApplication();
     await app.init();
@@ -201,8 +203,8 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
 
   beforeEach(() => {
     // 테스트마다 PG 응답과 호출 기록을 비운다
-    pgGateway.sendCancel.mockReset();
-    pgGateway.inquireCancel.mockReset();
+    pgServiceMock.requestPaymentCancel.mockReset();
+    pgServiceMock.inquirePaymentCancel.mockReset();
   });
 
   afterAll(async () => {
@@ -233,8 +235,9 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
     const pending = await createPendingRefund();
 
     await service.applyPgResult({
+      source: 'DISPATCH',
       paymentCancelId: pending.paymentCancelId,
-      outcome: {
+      pgCancelResult: {
         kind: 'SUCCEEDED',
         pgTransactionId: `pg-cancel-${randomUUID()}`,
         actualAmount: refundAmount,
@@ -262,8 +265,9 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
    */
   function succeed(paymentCancelId: string, actualAmount: number) {
     return service.applyPgResult({
+      source: 'DISPATCH',
       paymentCancelId,
-      outcome: {
+      pgCancelResult: {
         kind: 'SUCCEEDED',
         pgTransactionId: `pg-cancel-${randomUUID()}`,
         actualAmount,
@@ -341,8 +345,9 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
     const pending = await createPendingRefund();
 
     await service.applyPgResult({
+      source: 'DISPATCH',
       paymentCancelId: pending.paymentCancelId,
-      outcome: { kind: 'FAILED', reason: '취소 가능 기간 경과' },
+      pgCancelResult: { kind: 'FAILED', reason: '취소 가능 기간 경과' },
     });
 
     const refund = await prisma.refund.findUniqueOrThrow({
@@ -380,13 +385,15 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       actualAmount: refundAmount,
     };
     await service.applyPgResult({
+      source: 'DISPATCH',
       paymentCancelId: pending.paymentCancelId,
-      outcome,
+      pgCancelResult: outcome,
     });
 
     await service.applyPgResult({
+      source: 'DISPATCH',
       paymentCancelId: pending.paymentCancelId,
-      outcome,
+      pgCancelResult: outcome,
     });
 
     const refund = await prisma.refund.findUniqueOrThrow({
@@ -402,8 +409,9 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
   it('이미 실패로 확정된 PG 취소 요청에 성공 통보가 오면 검토 필요·운영자 알림을 기록하고 지급액을 더하지 않는다', async () => {
     const pending = await createPendingRefund();
     await service.applyPgResult({
+      source: 'DISPATCH',
       paymentCancelId: pending.paymentCancelId,
-      outcome: { kind: 'FAILED', reason: '취소 가능 기간 경과' },
+      pgCancelResult: { kind: 'FAILED', reason: '취소 가능 기간 경과' },
     });
 
     await succeed(pending.paymentCancelId, refundAmount);
@@ -453,9 +461,10 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
     });
 
     const result = await service.applyPgResult({
+      source: 'DISPATCH',
       paymentCancelId: pending.paymentCancelId,
       claimToken: 'token-old-owner',
-      outcome: {
+      pgCancelResult: {
         kind: 'SUCCEEDED',
         pgTransactionId: `pg-cancel-${randomUUID()}`,
         actualAmount: refundAmount,
@@ -518,7 +527,6 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       success: true,
       paymentCancelId: randomUUID(),
       pgTransactionId: `pg-cancel-${randomUUID()}`,
-      orderItemId: randomUUID(),
       amount: refundAmount,
       reason: null,
     });
@@ -533,32 +541,30 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
     });
   });
 
-  it('콜백의 PG 취소 요청이 다른 환불에 속하면 PG_CALLBACK_TARGET_MISMATCH(409)로 거절되고 아무것도 반영하지 않는다', async () => {
+  it('콜백의 paymentCancelId에 연결된 환불만 반영하고 다른 환불은 유지한다', async () => {
     const pending = await createPendingRefund();
     const other = await createPendingRefund();
-
-    const rejection = service.applyCallback({
-      success: true,
-      paymentCancelId: pending.paymentCancelId,
-      pgTransactionId: `pg-cancel-${randomUUID()}`,
-      orderItemId: other.orderItemId,
-      amount: refundAmount,
-      reason: null,
-    });
-
-    // DomainConflictError는 HttpExceptionFilter에서 409로 바뀐다
-    await expect(rejection).rejects.toBeInstanceOf(
-      PgCallbackTargetMismatchError,
-    );
-    await expect(rejection).rejects.toBeInstanceOf(DomainConflictError);
-    const refund = await prisma.refund.findUniqueOrThrow({
+    await expect(
+      service.applyCallback({
+        success: true,
+        paymentCancelId: pending.paymentCancelId,
+        pgTransactionId: `pg-cancel-${randomUUID()}`,
+        amount: refundAmount,
+        reason: null,
+      }),
+    ).resolves.toMatchObject({ applied: true });
+    const paid = await prisma.refund.findUniqueOrThrow({
       where: { id: pending.refundId },
-      include: { paymentCancels: true, ledgers: true },
+      include: { ledgers: true },
     });
-    expect({
-      attemptStatus: refund.paymentCancels[0].status,
-      ledgers: refund.ledgers.length,
-    }).toEqual({ attemptStatus: PaymentCancelStatus.REQUESTED, ledgers: 0 });
+    const untouched = await prisma.refund.findUniqueOrThrow({
+      where: { id: other.refundId },
+      include: { ledgers: true },
+    });
+    expect(paid.payoutStatus).toBe(RefundPayoutStatus.PAID);
+    expect(paid.ledgers).toHaveLength(1);
+    expect(untouched.payoutStatus).toBe(RefundPayoutStatus.PENDING);
+    expect(untouched.ledgers).toHaveLength(0);
   });
 
   it('이미 성공으로 확정된 PG 취소 요청에 실제액이 다른 성공 통보가 오면 기존 실제액·원장을 유지하고 모순·운영자 알림을 남긴다', async () => {
@@ -566,8 +572,9 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
     const pgTransactionId = `pg-cancel-${randomUUID()}`;
     const succeedWith = (actualAmount: number) =>
       service.applyPgResult({
+        source: 'DISPATCH',
         paymentCancelId: pending.paymentCancelId,
-        outcome: { kind: 'SUCCEEDED', pgTransactionId, actualAmount },
+        pgCancelResult: { kind: 'SUCCEEDED', pgTransactionId, actualAmount },
       });
     await succeedWith(refundAmount);
 
@@ -624,8 +631,9 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
     await succeed(pending.paymentCancelId, refundAmount);
 
     await service.applyPgResult({
+      source: 'DISPATCH',
       paymentCancelId: pending.paymentCancelId,
-      outcome: { kind: 'FAILED', reason: '늦은 실패 통보' },
+      pgCancelResult: { kind: 'FAILED', reason: '늦은 실패 통보' },
     });
 
     const refund = await prisma.refund.findUniqueOrThrow({
@@ -696,8 +704,9 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
     try {
       await expect(
         service.applyPgResult({
+          source: 'DISPATCH',
           paymentCancelId: pending.paymentCancelId,
-          outcome: { kind: 'FAILED', reason: 'PG 거절' },
+          pgCancelResult: { kind: 'FAILED', reason: 'PG 거절' },
         }),
       ).rejects.toThrow(failure);
     } finally {
@@ -720,8 +729,9 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
     const pending = await createPendingRefund();
 
     await service.applyPgResult({
+      source: 'DISPATCH',
       paymentCancelId: pending.paymentCancelId,
-      outcome: { kind: 'FAILED', reason: '취소 가능 기간 경과' },
+      pgCancelResult: { kind: 'FAILED', reason: '취소 가능 기간 경과' },
     });
 
     const notifications = await prisma.refundNotification.findMany({
@@ -762,8 +772,9 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
     const pending = await createPendingRefund(RefundSource.STORE);
 
     await service.applyPgResult({
+      source: 'DISPATCH',
       paymentCancelId: pending.paymentCancelId,
-      outcome: { kind: 'FAILED', reason: '취소 가능 기간 경과' },
+      pgCancelResult: { kind: 'FAILED', reason: '취소 가능 기간 경과' },
     });
 
     const notifications = await prisma.refundNotification.findMany({
@@ -779,8 +790,9 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
     const pending = await createPendingRefund(RefundSource.SYSTEM);
 
     await service.applyPgResult({
+      source: 'DISPATCH',
       paymentCancelId: pending.paymentCancelId,
-      outcome: { kind: 'FAILED', reason: '취소 가능 기간 경과' },
+      pgCancelResult: { kind: 'FAILED', reason: '취소 가능 기간 경과' },
     });
 
     const notifications = await prisma.refundNotification.findMany({
@@ -818,8 +830,9 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       'PG_REJECTED',
       (paymentCancelId: string) =>
         service.applyPgResult({
+          source: 'DISPATCH',
           paymentCancelId,
-          outcome: { kind: 'FAILED', reason: '취소 가능 기간 경과' },
+          pgCancelResult: { kind: 'FAILED', reason: '취소 가능 기간 경과' },
         }),
     ],
     [
@@ -833,8 +846,9 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       async (paymentCancelId: string) => {
         await succeed(paymentCancelId, refundAmount);
         return service.applyPgResult({
+          source: 'DISPATCH',
           paymentCancelId,
-          outcome: { kind: 'FAILED', reason: '늦은 실패 통보' },
+          pgCancelResult: { kind: 'FAILED', reason: '늦은 실패 통보' },
         });
       },
     ],
@@ -865,7 +879,7 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       );
     },
   );
-  it('콜백의 PG 취소 거래 ID가 원승인 거래 ID와 같으면 PG_CALLBACK_TARGET_MISMATCH로 거절되고 반영하지 않는다', async () => {
+  it('콜백의 대상 요청이 맞으면 PG 취소 거래 ID가 원승인 거래 ID와 같아도 성공을 반영한다', async () => {
     const pending = await createPendingRefund();
     const approvalTransactionId = `pg-approve-${randomUUID()}`;
     const attempt = await prisma.paymentCancel.findUniqueOrThrow({
@@ -881,15 +895,14 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
         success: true,
         paymentCancelId: pending.paymentCancelId,
         pgTransactionId: approvalTransactionId,
-        orderItemId: pending.orderItemId,
         amount: refundAmount,
         reason: null,
       }),
-    ).rejects.toBeInstanceOf(PgCallbackTargetMismatchError);
+    ).resolves.toMatchObject({ applied: true });
     const after = await prisma.paymentCancel.findUniqueOrThrow({
       where: { id: pending.paymentCancelId },
     });
-    expect(after.status).toBe(PaymentCancelStatus.REQUESTED);
+    expect(after.status).toBe(PaymentCancelStatus.SUCCEEDED);
   });
 
   it('콜백의 PG 취소 거래 ID가 다른 PG 취소 요청에 이미 쓰였으면 PG_CALLBACK_TARGET_MISMATCH로 거절되고 반영하지 않는다', async () => {
@@ -897,8 +910,9 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
     const second = await createPendingRefund();
     const usedTransactionId = `pg-cancel-${randomUUID()}`;
     await service.applyPgResult({
+      source: 'DISPATCH',
       paymentCancelId: first.paymentCancelId,
-      outcome: {
+      pgCancelResult: {
         kind: 'SUCCEEDED',
         pgTransactionId: usedTransactionId,
         actualAmount: refundAmount,
@@ -910,7 +924,6 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
         success: true,
         paymentCancelId: second.paymentCancelId,
         pgTransactionId: usedTransactionId,
-        orderItemId: second.orderItemId,
         amount: refundAmount,
         reason: null,
       }),
@@ -935,7 +948,6 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       success: true,
       paymentCancelId: pending.paymentCancelId,
       pgTransactionId: `pg-cancel-${randomUUID()}`,
-      orderItemId: pending.orderItemId,
       amount: refundAmount,
       reason: null,
     });
@@ -952,7 +964,6 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
         success: true,
         paymentCancelId: randomUUID(),
         pgTransactionId: `pg-cancel-${randomUUID()}`,
-        orderItemId: randomUUID(),
         amount: refundAmount,
         reason: null,
       }),
@@ -964,8 +975,9 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
     await succeed(pending.paymentCancelId, refundAmount);
 
     const result = await service.applyPgResult({
+      source: 'DISPATCH',
       paymentCancelId: pending.paymentCancelId,
-      outcome: { kind: 'FAILED', reason: '늦은 실패 통보' },
+      pgCancelResult: { kind: 'FAILED', reason: '늦은 실패 통보' },
     });
 
     const refund = await prisma.refund.findUniqueOrThrow({
@@ -978,28 +990,23 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
     });
   });
 
-  it('같은 PG 취소 거래 ID가 동시에 저장돼 DB unique 위반이 나면 503이 아니라 PG_CALLBACK_TARGET_MISMATCH로 거절된다', async () => {
+  it('같은 PG 취소 거래 ID의 DB unique 위반은 저장 장애(503) 대신 대상 불일치(409)로 처리하고 지급액·원장을 반영하지 않는다', async () => {
     const first = await createPendingRefund();
     const second = await createPendingRefund();
     const racedTransactionId = `pg-cancel-${randomUUID()}`;
     await service.applyPgResult({
+      source: 'DISPATCH',
       paymentCancelId: first.paymentCancelId,
-      outcome: {
+      pgCancelResult: {
         kind: 'SUCCEEDED',
         pgTransactionId: racedTransactionId,
         actualAmount: refundAmount,
       },
     });
-    // 두 콜백이 사전 확인을 함께 통과한 경쟁 상황: 사전 확인은 사용 중이 아니라고 답한다
-    const raced = vi
-      .spyOn(app.get(RefundRepository), 'isCancelTransactionUsedByOther')
-      .mockResolvedValueOnce(false);
-
     const rejection = service.receiveCallback({
       success: true,
       paymentCancelId: second.paymentCancelId,
       pgTransactionId: racedTransactionId,
-      orderItemId: second.orderItemId,
       amount: refundAmount,
       reason: null,
     });
@@ -1007,15 +1014,21 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
     await expect(rejection).rejects.toBeInstanceOf(
       PgCallbackTargetMismatchError,
     );
-    raced.mockRestore();
     const refund = await prisma.refund.findUniqueOrThrow({
       where: { id: second.refundId },
       include: { paymentCancels: true, ledgers: true },
     });
     expect({
       attemptStatus: refund.paymentCancels[0].status,
+      actualAmount: refund.paymentCancels[0].actualAmount,
+      paidAmount: refund.paidAmount,
       ledgers: refund.ledgers.length,
-    }).toEqual({ attemptStatus: PaymentCancelStatus.REQUESTED, ledgers: 0 });
+    }).toEqual({
+      attemptStatus: PaymentCancelStatus.REQUESTED,
+      actualAmount: null,
+      paidAmount: 0,
+      ledgers: 0,
+    });
   });
 
   it('모순 결과의 거래 로그에는 기존 결과와 새 통보의 종류·실제액·거래 ID가 함께 남는다', async () => {
@@ -1023,21 +1036,20 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
     const storedTransactionId = `pg-cancel-${randomUUID()}`;
     const receivedTransactionId = `pg-cancel-${randomUUID()}`;
     await service.applyPgResult({
+      source: 'DISPATCH',
       paymentCancelId: pending.paymentCancelId,
-      outcome: {
+      pgCancelResult: {
         kind: 'SUCCEEDED',
         pgTransactionId: storedTransactionId,
         actualAmount: refundAmount,
       },
     });
-    const txLog = vi.spyOn(
-      app.get(TransactionLoggerService),
-      'logTransaction',
-    );
+    const txLog = vi.spyOn(app.get(TransactionLoggerService), 'logTransaction');
 
     await service.applyPgResult({
+      source: 'DISPATCH',
       paymentCancelId: pending.paymentCancelId,
-      outcome: {
+      pgCancelResult: {
         kind: 'SUCCEEDED',
         pgTransactionId: receivedTransactionId,
         actualAmount: refundAmount - 500,
@@ -1066,7 +1078,7 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
 
   it('응답 없는(UNKNOWN) PG 취소 요청은 전송 시도가 기록되고 전송 60초 뒤 첫 조회가 예정된다', async () => {
     const pending = await createPendingRefund();
-    pgGateway.sendCancel.mockResolvedValueOnce({
+    pgServiceMock.requestPaymentCancel.mockResolvedValueOnce({
       result: 'UNKNOWN',
       reason: '응답 시간 초과',
     });
@@ -1092,7 +1104,7 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
 
   it('PG 전송 결과가 NOT_SENT이면 그 시도는 실패(SEND_FAILED), 환불은 조치 필요가 되고 운영자 알림이 저장된다', async () => {
     const pending = await createPendingRefund();
-    pgGateway.sendCancel.mockResolvedValueOnce({
+    pgServiceMock.requestPaymentCancel.mockResolvedValueOnce({
       result: 'NOT_SENT',
       reason: 'PG 연결 설정 누락',
     });
@@ -1126,7 +1138,7 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
 
   it('PG 전송 결과가 즉시 REJECTED이면 그 시도는 실패(PG_REJECTED), 환불은 조치 필요다', async () => {
     const pending = await createPendingRefund();
-    pgGateway.sendCancel.mockResolvedValueOnce({
+    pgServiceMock.requestPaymentCancel.mockResolvedValueOnce({
       result: 'REJECTED',
       reason: '취소 가능 기간 경과',
     });
@@ -1150,7 +1162,7 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
 
   it('PG 전송 결과가 즉시 SUCCEEDED이면 공통 결과 처리로 지급 완료와 실제액 원장을 반영한다', async () => {
     const pending = await createPendingRefund();
-    pgGateway.sendCancel.mockResolvedValueOnce({
+    pgServiceMock.requestPaymentCancel.mockResolvedValueOnce({
       result: 'SUCCEEDED',
       pgTransactionId: `pg-cancel-${randomUUID()}`,
       cancelledAmount: refundAmount,
@@ -1199,11 +1211,13 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
 
   it('PG가 미접수를 확실히 확인했고 자동 재전송 횟수가 한도보다 1 적으면 같은 ID·금액으로 다시 보내고 횟수가 1 늘어난다', async () => {
     const awaiting = await createAwaitingInquiry(2);
-    pgGateway.inquireCancel.mockResolvedValueOnce({
+    pgServiceMock.inquirePaymentCancel.mockResolvedValueOnce({
       result: 'NOT_FOUND',
       authoritative: true,
     });
-    pgGateway.sendCancel.mockResolvedValueOnce({ result: 'ACCEPTED' });
+    pgServiceMock.requestPaymentCancel.mockResolvedValueOnce({
+      result: 'ACCEPTED',
+    });
 
     await app
       .get(RefundRecoveryService)
@@ -1213,7 +1227,7 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       where: { id: awaiting.paymentCancelId },
     });
     expect({
-      sent: pgGateway.sendCancel.mock.calls,
+      sent: pgServiceMock.requestPaymentCancel.mock.calls,
       resendCount: attempt.resendCount,
       status: attempt.status,
     }).toEqual({
@@ -1227,7 +1241,7 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
 
   it('자동 재전송 횟수가 한도와 같고 PG가 미접수를 확인하면 시도 실패(RETRY_EXHAUSTED)·조치 필요·운영자 알림을 함께 기록한다', async () => {
     const awaiting = await createAwaitingInquiry(3);
-    pgGateway.inquireCancel.mockResolvedValueOnce({
+    pgServiceMock.inquirePaymentCancel.mockResolvedValueOnce({
       result: 'NOT_FOUND',
       authoritative: true,
     });
@@ -1241,7 +1255,7 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       include: { paymentCancels: true, notifications: true },
     });
     expect({
-      sent: pgGateway.sendCancel.mock.calls.length,
+      sent: pgServiceMock.requestPaymentCancel.mock.calls.length,
       attempt: refund.paymentCancels[0].status,
       failureCode: refund.paymentCancels[0].failureCode,
       nextInquiryAt: refund.paymentCancels[0].nextInquiryAt,
@@ -1267,7 +1281,9 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
 
   it('자동 재전송 한도를 소진한 뒤 PG가 처리 중이면 실패로 끝내지 않고 정상 간격(15초) 뒤 다시 조회를 예약한다', async () => {
     const awaiting = await createAwaitingInquiry(3);
-    pgGateway.inquireCancel.mockResolvedValueOnce({ result: 'IN_PROGRESS' });
+    pgServiceMock.inquirePaymentCancel.mockResolvedValueOnce({
+      result: 'IN_PROGRESS',
+    });
 
     await app
       .get(RefundRecoveryService)
@@ -1289,7 +1305,7 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
 
   it('자동 재전송 한도를 소진한 뒤 조회 오류이면 실패로 끝내지 않고 다시 조회를 예약한다', async () => {
     const awaiting = await createAwaitingInquiry(3);
-    pgGateway.inquireCancel.mockResolvedValueOnce({
+    pgServiceMock.inquirePaymentCancel.mockResolvedValueOnce({
       result: 'QUERY_ERROR',
       reason: 'PG 조회 시간 초과',
     });
@@ -1330,7 +1346,7 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       where: { id: awaiting.paymentCancelId },
       data: { inquiryFailureCount: failures },
     });
-    pgGateway.inquireCancel.mockResolvedValueOnce(result);
+    pgServiceMock.inquirePaymentCancel.mockResolvedValueOnce(result);
     await app
       .get(RefundRecoveryService)
       .inquireAttempt(awaiting.paymentCancelId, awaiting.dueAt);
@@ -1395,16 +1411,18 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
   it('응답 없는 전송 59초 시점의 정기 탐색은 조회하지 않고 60초 시점에는 조회한다', async () => {
     const sentAt = new Date('1999-03-01T00:00:00Z');
     const awaiting = await createAwaitingInquiry(0, sentAt);
-    pgGateway.inquireCancel.mockResolvedValue({ result: 'IN_PROGRESS' });
+    pgServiceMock.inquirePaymentCancel.mockResolvedValue({
+      result: 'IN_PROGRESS',
+    });
     const recovery = app.get(RefundRecoveryService);
 
     await recovery.sweep(new Date(sentAt.getTime() + 59_000));
-    const callsAt59 = pgGateway.inquireCancel.mock.calls.length;
+    const callsAt59 = pgServiceMock.inquirePaymentCancel.mock.calls.length;
     await recovery.sweep(new Date(sentAt.getTime() + 60_000));
 
     expect({
       callsAt59,
-      calledAt60: pgGateway.inquireCancel.mock.calls,
+      calledAt60: pgServiceMock.inquirePaymentCancel.mock.calls,
     }).toEqual({
       callsAt59: 0,
       calledAt60: [[{ paymentCancelId: awaiting.paymentCancelId }]],
@@ -1424,8 +1442,8 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
     await app.get(RefundRecoveryService).sweep(awaiting.dueAt);
 
     expect({
-      inquiries: pgGateway.inquireCancel.mock.calls.length,
-      sends: pgGateway.sendCancel.mock.calls.length,
+      inquiries: pgServiceMock.inquirePaymentCancel.mock.calls.length,
+      sends: pgServiceMock.requestPaymentCancel.mock.calls.length,
     }).toEqual({ inquiries: 0, sends: 0 });
   });
 
@@ -1452,11 +1470,13 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
         reason: '계좌 이체로 지급 예정',
       },
     });
-    pgGateway.inquireCancel.mockResolvedValue({ result: 'IN_PROGRESS' });
+    pgServiceMock.inquirePaymentCancel.mockResolvedValue({
+      result: 'IN_PROGRESS',
+    });
 
     await app.get(RefundRecoveryService).sweep(awaiting.dueAt);
 
-    expect(pgGateway.inquireCancel.mock.calls.length).toBe(0);
+    expect(pgServiceMock.inquirePaymentCancel.mock.calls.length).toBe(0);
   });
 
   it('커밋 뒤 전송 전에 중단된 PG 취소 요청은 담당 기한이 지나면 다시 보내지 않고 조회부터 한다', async () => {
@@ -1473,15 +1493,17 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
         nextInquiryAt: null,
       },
     });
-    pgGateway.inquireCancel.mockResolvedValue({ result: 'IN_PROGRESS' });
+    pgServiceMock.inquirePaymentCancel.mockResolvedValue({
+      result: 'IN_PROGRESS',
+    });
 
     await app
       .get(RefundRecoveryService)
       .sweep(new Date(committedAt.getTime() + 31_000));
 
     expect({
-      inquiries: pgGateway.inquireCancel.mock.calls,
-      sends: pgGateway.sendCancel.mock.calls.length,
+      inquiries: pgServiceMock.inquirePaymentCancel.mock.calls,
+      sends: pgServiceMock.requestPaymentCancel.mock.calls.length,
     }).toEqual({
       inquiries: [[{ paymentCancelId: pending.paymentCancelId }]],
       sends: 0,
@@ -1498,11 +1520,13 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
         actionCode: 'PG_RESULT_CONFLICT',
       },
     });
-    pgGateway.inquireCancel.mockResolvedValue({ result: 'IN_PROGRESS' });
+    pgServiceMock.inquirePaymentCancel.mockResolvedValue({
+      result: 'IN_PROGRESS',
+    });
 
     await app.get(RefundRecoveryService).sweep(awaiting.dueAt);
 
-    expect(pgGateway.inquireCancel.mock.calls.length).toBe(0);
+    expect(pgServiceMock.inquirePaymentCancel.mock.calls.length).toBe(0);
   });
 
   /** 장애 복구 확인 테스트용 기준 연도(테스트마다 앞 테스트보다 이른 시각) */
@@ -1541,7 +1565,7 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
     const year = recoveryYear--;
     const oldest = await createQueryFailed(new Date(Date.UTC(year, 0, 1)));
     await createQueryFailed(new Date(Date.UTC(year, 0, 2)));
-    pgGateway.inquireCancel.mockResolvedValue({
+    pgServiceMock.inquirePaymentCancel.mockResolvedValue({
       result: 'QUERY_ERROR',
       reason: 'PG 장애 지속',
     });
@@ -1549,12 +1573,13 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
     const now = new Date(Date.UTC(year, 1, 1));
 
     await recovery.recoverQueryFailed(now);
-    const firstProbe: unknown[] = pgGateway.inquireCancel.mock.calls.slice();
+    const firstProbe: unknown[] =
+      pgServiceMock.inquirePaymentCancel.mock.calls.slice();
     await recovery.recoverQueryFailed(new Date(now.getTime() + 899_000));
 
     expect({
       firstProbe,
-      totalCalls: pgGateway.inquireCancel.mock.calls.length,
+      totalCalls: pgServiceMock.inquirePaymentCancel.mock.calls.length,
     }).toEqual({
       firstProbe: [[{ paymentCancelId: oldest.paymentCancelId }]],
       totalCalls: 1,
@@ -1564,7 +1589,9 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
   it('결과 확인 실패 건이 PG 처리 중 응답을 받으면 일반 조회 일정(REQUESTED)으로 돌아간다', async () => {
     const queryFailedAt = new Date(Date.UTC(recoveryYear--, 0, 1));
     const failed = await createQueryFailed(queryFailedAt);
-    pgGateway.inquireCancel.mockResolvedValueOnce({ result: 'IN_PROGRESS' });
+    pgServiceMock.inquirePaymentCancel.mockResolvedValueOnce({
+      result: 'IN_PROGRESS',
+    });
     const now = new Date(queryFailedAt.getTime() + 86_400_000);
 
     await app
@@ -1593,7 +1620,9 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
     const oldest = await createQueryFailed(new Date(Date.UTC(year, 0, 1)));
     const second = await createQueryFailed(new Date(Date.UTC(year, 0, 2)));
     const third = await createQueryFailed(new Date(Date.UTC(year, 0, 3)));
-    pgGateway.inquireCancel.mockResolvedValue({ result: 'IN_PROGRESS' });
+    pgServiceMock.inquirePaymentCancel.mockResolvedValue({
+      result: 'IN_PROGRESS',
+    });
     const recovery = app.get(RefundRecoveryService);
     const now = new Date(Date.UTC(year, 1, 1));
 
@@ -1603,7 +1632,7 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
 
     expect({
       mode: control.mode,
-      inquired: pgGateway.inquireCancel.mock.calls.map(
+      inquired: pgServiceMock.inquirePaymentCancel.mock.calls.map(
         ([request]: [{ paymentCancelId: string }]) => request.paymentCancelId,
       ),
     }).toEqual({
@@ -1626,7 +1655,7 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       where: { id: 'PG_RESULT_RECOVERY' },
       data: { mode: 'BATCH', batchCutoffAt: now, nextProbeAt: null },
     });
-    pgGateway.inquireCancel.mockResolvedValue({
+    pgServiceMock.inquirePaymentCancel.mockResolvedValue({
       result: 'QUERY_ERROR',
       reason: 'PG 장애 재발',
     });
@@ -1635,8 +1664,9 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
 
     const control = await prisma.refundRecoveryControl.findFirstOrThrow();
     expect({
-      inquired: pgGateway.inquireCancel.mock.calls.length,
-      firstInquired: pgGateway.inquireCancel.mock.calls[0] as unknown,
+      inquired: pgServiceMock.inquirePaymentCancel.mock.calls.length,
+      firstInquired: pgServiceMock.inquirePaymentCancel.mock
+        .calls[0] as unknown,
       mode: control.mode,
       nextProbeAt: control.nextProbeAt?.getTime(),
     }).toEqual({
@@ -1727,7 +1757,7 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
     const year = recoveryYear--;
     await createQueryFailed(new Date(Date.UTC(year, 0, 1)));
     const now = new Date(Date.UTC(year, 1, 1));
-    pgGateway.inquireCancel.mockResolvedValue({
+    pgServiceMock.inquirePaymentCancel.mockResolvedValue({
       result: 'QUERY_ERROR',
       reason: 'PG 장애 지속',
     });
@@ -1741,14 +1771,15 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
     });
 
     await recovery.recoverQueryFailed(now);
-    const whileOtherRunning = pgGateway.inquireCancel.mock.calls.length;
+    const whileOtherRunning =
+      pgServiceMock.inquirePaymentCancel.mock.calls.length;
     // 다른 작업자의 처리 기한이 지난 뒤에는 직접 맡아 실행한다
     await recovery.recoverQueryFailed(new Date(now.getTime() + 31_000));
 
     const control = await prisma.refundRecoveryControl.findFirstOrThrow();
     expect({
       whileOtherRunning,
-      afterExpiry: pgGateway.inquireCancel.mock.calls.length,
+      afterExpiry: pgServiceMock.inquirePaymentCancel.mock.calls.length,
       claimToken: control.claimToken,
       claimUntil: control.claimUntil,
     }).toEqual({
@@ -1784,7 +1815,9 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
 
   it('최근 조회 후 15초가 지났으면 자동 조회 예정 시각 전이라도 그 시도 한 건을 즉시 조회한다', async () => {
     const target = await createInquiredBefore(15);
-    pgGateway.inquireCancel.mockResolvedValueOnce({ result: 'IN_PROGRESS' });
+    pgServiceMock.inquirePaymentCancel.mockResolvedValueOnce({
+      result: 'IN_PROGRESS',
+    });
 
     const result = await app
       .get(RefundPgCheckService)
@@ -1793,7 +1826,7 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
     expect({
       checkStatus: result.checkStatus,
       inquiryResult: result.inquiryResult,
-      inquired: pgGateway.inquireCancel.mock.calls,
+      inquired: pgServiceMock.inquirePaymentCancel.mock.calls,
     }).toEqual({
       checkStatus: 'CHECKED',
       inquiryResult: 'IN_PROGRESS',
@@ -1803,7 +1836,9 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
 
   it('최근 조회 후 14초에 개별 확인하면 RECENT_RESULT와 최근 조회 시각을 받고 PG는 호출되지 않는다', async () => {
     const target = await createInquiredBefore(14);
-    pgGateway.inquireCancel.mockResolvedValue({ result: 'IN_PROGRESS' });
+    pgServiceMock.inquirePaymentCancel.mockResolvedValue({
+      result: 'IN_PROGRESS',
+    });
 
     const result = await app
       .get(RefundPgCheckService)
@@ -1812,7 +1847,7 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
     expect({
       checkStatus: result.checkStatus,
       lastInquiryAt: result.lastInquiryAt,
-      inquired: pgGateway.inquireCancel.mock.calls.length,
+      inquired: pgServiceMock.inquirePaymentCancel.mock.calls.length,
     }).toEqual({
       checkStatus: 'RECENT_RESULT',
       lastInquiryAt: new Date(target.now.getTime() - 14_000).toISOString(),
@@ -1829,7 +1864,9 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
         claimUntil: new Date(target.now.getTime() + 20_000),
       },
     });
-    pgGateway.inquireCancel.mockResolvedValue({ result: 'IN_PROGRESS' });
+    pgServiceMock.inquirePaymentCancel.mockResolvedValue({
+      result: 'IN_PROGRESS',
+    });
 
     const result = await app
       .get(RefundPgCheckService)
@@ -1837,7 +1874,7 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
 
     expect({
       checkStatus: result.checkStatus,
-      inquired: pgGateway.inquireCancel.mock.calls.length,
+      inquired: pgServiceMock.inquirePaymentCancel.mock.calls.length,
     }).toEqual({ checkStatus: 'ALREADY_RUNNING', inquired: 0 });
   });
 
@@ -1847,11 +1884,13 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       where: { id: target.paymentCancelId },
       data: { resendCount: 3 },
     });
-    pgGateway.inquireCancel.mockResolvedValueOnce({
+    pgServiceMock.inquirePaymentCancel.mockResolvedValueOnce({
       result: 'NOT_FOUND',
       authoritative: true,
     });
-    pgGateway.sendCancel.mockResolvedValueOnce({ result: 'ACCEPTED' });
+    pgServiceMock.requestPaymentCancel.mockResolvedValueOnce({
+      result: 'ACCEPTED',
+    });
 
     const result = await app
       .get(RefundPgCheckService)
@@ -1861,7 +1900,7 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       checkStatus: result.checkStatus,
       inquiryResult: result.inquiryResult,
       resendResult: result.resendResult,
-      sent: pgGateway.sendCancel.mock.calls,
+      sent: pgServiceMock.requestPaymentCancel.mock.calls,
     }).toEqual({
       checkStatus: 'CHECKED',
       inquiryResult: 'NOT_FOUND',
@@ -1878,11 +1917,13 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       where: { id: target.paymentCancelId },
       data: { resendCount: 2 },
     });
-    pgGateway.inquireCancel.mockResolvedValueOnce({
+    pgServiceMock.inquirePaymentCancel.mockResolvedValueOnce({
       result: 'NOT_FOUND',
       authoritative: true,
     });
-    pgGateway.sendCancel.mockResolvedValueOnce({ result: 'ACCEPTED' });
+    pgServiceMock.requestPaymentCancel.mockResolvedValueOnce({
+      result: 'ACCEPTED',
+    });
 
     await app
       .get(RefundPgCheckService)
@@ -1905,7 +1946,7 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
     '개별 확인 조회가 %s이면 다시 보내지 않고 지급을 확정하지 않는다',
     async (_label, inquiry) => {
       const target = await createInquiredBefore(60);
-      pgGateway.inquireCancel.mockResolvedValueOnce(inquiry);
+      pgServiceMock.inquirePaymentCancel.mockResolvedValueOnce(inquiry);
 
       const result = await app
         .get(RefundPgCheckService)
@@ -1916,7 +1957,7 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       });
       expect({
         resendResult: result.resendResult,
-        sends: pgGateway.sendCancel.mock.calls.length,
+        sends: pgServiceMock.requestPaymentCancel.mock.calls.length,
         payoutStatus: refund.payoutStatus,
       }).toEqual({
         resendResult: null,
@@ -1928,7 +1969,7 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
 
   it('미확정 요청의 개별 확인에서 새로 확인한 거절은 실패·조치 필요만 기록하고 새 PG 취소 요청을 만들지 않는다', async () => {
     const target = await createInquiredBefore(60);
-    pgGateway.inquireCancel.mockResolvedValueOnce({
+    pgServiceMock.inquirePaymentCancel.mockResolvedValueOnce({
       result: 'FAILED',
       reason: '취소 가능 기간 경과',
     });
@@ -1944,7 +1985,7 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
     expect({
       attempts: refund.paymentCancels.map((a) => a.status),
       payoutStatus: refund.payoutStatus,
-      sends: pgGateway.sendCancel.mock.calls.length,
+      sends: pgServiceMock.requestPaymentCancel.mock.calls.length,
     }).toEqual({
       attempts: [PaymentCancelStatus.FAILED],
       payoutStatus: RefundPayoutStatus.ACTION_REQUIRED,
@@ -1960,7 +2001,9 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       where: { id: other.paymentCancelId },
     });
     const controlBefore = await prisma.refundRecoveryControl.findFirstOrThrow();
-    pgGateway.inquireCancel.mockResolvedValue({ result: 'IN_PROGRESS' });
+    pgServiceMock.inquirePaymentCancel.mockResolvedValue({
+      result: 'IN_PROGRESS',
+    });
 
     await app
       .get(RefundPgCheckService)
@@ -1971,7 +2014,7 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
     });
     const controlAfter = await prisma.refundRecoveryControl.findFirstOrThrow();
     expect({
-      inquired: pgGateway.inquireCancel.mock.calls,
+      inquired: pgServiceMock.inquirePaymentCancel.mock.calls,
       other: otherAfter.updatedAt,
       control: controlAfter.updatedAt,
     }).toEqual({
@@ -2010,7 +2053,9 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
           },
         });
       }
-      pgGateway.inquireCancel.mockResolvedValue({ result: 'IN_PROGRESS' });
+      pgServiceMock.inquirePaymentCancel.mockResolvedValue({
+        result: 'IN_PROGRESS',
+      });
 
       const result = await app
         .get(RefundPgCheckService)
@@ -2018,7 +2063,7 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
 
       expect({
         checkStatus: result.checkStatus,
-        inquired: pgGateway.inquireCancel.mock.calls.length,
+        inquired: pgServiceMock.inquirePaymentCancel.mock.calls.length,
       }).toEqual({ checkStatus: 'NO_PENDING_ATTEMPT', inquired: 0 });
     },
   );
@@ -2033,7 +2078,7 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
         actionCode: 'PG_RESULT_CONFLICT',
       },
     });
-    pgGateway.inquireCancel.mockResolvedValue({
+    pgServiceMock.inquirePaymentCancel.mockResolvedValue({
       result: 'NOT_FOUND',
       authoritative: true,
     });
@@ -2044,8 +2089,8 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
 
     expect({
       checkStatus: result.checkStatus,
-      inquired: pgGateway.inquireCancel.mock.calls.length,
-      sent: pgGateway.sendCancel.mock.calls.length,
+      inquired: pgServiceMock.inquirePaymentCancel.mock.calls.length,
+      sent: pgServiceMock.requestPaymentCancel.mock.calls.length,
     }).toEqual({ checkStatus: 'NO_PENDING_ATTEMPT', inquired: 0, sent: 0 });
   });
 
@@ -2056,11 +2101,13 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       where: { id: failed.paymentCancelId },
       data: { lastInquiryError: 'PG 장애' },
     });
-    pgGateway.inquireCancel.mockResolvedValueOnce({
+    pgServiceMock.inquirePaymentCancel.mockResolvedValueOnce({
       result: 'NOT_FOUND',
       authoritative: true,
     });
-    pgGateway.sendCancel.mockResolvedValueOnce({ result: 'ACCEPTED' });
+    pgServiceMock.requestPaymentCancel.mockResolvedValueOnce({
+      result: 'ACCEPTED',
+    });
     const now = new Date(queryFailedAt.getTime() + 86_400_000);
 
     await app
@@ -2087,15 +2134,17 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
 
   it('개별 확인은 잠금 안에서 최근 조회 간격을 다시 확인해, 먼저 읽은 기록이 오래됐어도 PG를 다시 부르지 않는다', async () => {
     const target = await createInquiredBefore(60);
-    pgGateway.inquireCancel.mockResolvedValue({ result: 'IN_PROGRESS' });
+    pgServiceMock.inquirePaymentCancel.mockResolvedValue({
+      result: 'IN_PROGRESS',
+    });
     const pgCheck = app.get(RefundPgCheckService);
     // 두 요청이 같은 오래된 기록을 읽은 경합: 두 번째 요청은 첫 조회 전의 기록을 보고 들어온다
     const stale = await app
       .get(RefundRepository)
-      .findPendingAttemptOfRefund(target.refundId);
+      .findPendingPaymentCancelOfRefund(target.refundId);
     await pgCheck.check(operator, target.refundId, target.now);
     const staleRead = vi
-      .spyOn(app.get(RefundRepository), 'findPendingAttemptOfRefund')
+      .spyOn(app.get(RefundRepository), 'findPendingPaymentCancelOfRefund')
       .mockResolvedValueOnce(stale);
 
     const second = await pgCheck.check(
@@ -2107,7 +2156,7 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
 
     expect({
       checkStatus: second.checkStatus,
-      inquiries: pgGateway.inquireCancel.mock.calls.length,
+      inquiries: pgServiceMock.inquirePaymentCancel.mock.calls.length,
     }).toEqual({ checkStatus: 'RECENT_RESULT', inquiries: 1 });
   });
 
@@ -2153,7 +2202,7 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
     });
     await work.releaseRecoveryControl('setup');
     // 앞 건의 PG 조회가 1.1초 걸린다
-    pgGateway.inquireCancel
+    pgServiceMock.inquirePaymentCancel
       .mockImplementationOnce(
         () =>
           new Promise((resolve) =>
@@ -2174,15 +2223,14 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
 
   it('개별 확인 재전송은 실행자·시각·개별 확인 재전송임을 거래 로그에 남긴다', async () => {
     const target = await createInquiredBefore(60);
-    pgGateway.inquireCancel.mockResolvedValueOnce({
+    pgServiceMock.inquirePaymentCancel.mockResolvedValueOnce({
       result: 'NOT_FOUND',
       authoritative: true,
     });
-    pgGateway.sendCancel.mockResolvedValueOnce({ result: 'ACCEPTED' });
-    const txLog = vi.spyOn(
-      app.get(TransactionLoggerService),
-      'logTransaction',
-    );
+    pgServiceMock.requestPaymentCancel.mockResolvedValueOnce({
+      result: 'ACCEPTED',
+    });
+    const txLog = vi.spyOn(app.get(TransactionLoggerService), 'logTransaction');
 
     await app
       .get(RefundPgCheckService)
@@ -2211,7 +2259,7 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
     await createAwaitingInquiry(0, base);
     const later = await createAwaitingInquiry(0, new Date(base.getTime() + 1));
     // 앞 건의 PG 조회가 1.1초 걸린다
-    pgGateway.inquireCancel
+    pgServiceMock.inquirePaymentCancel
       .mockImplementationOnce(
         () =>
           new Promise((resolve) =>
@@ -2262,19 +2310,22 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
 
   const manager = () => ({ userId: managerId, role: UserRole.MANAGER });
 
-  describe('MANAGER의 PG 직접 재시도', () => {
-    const retryReason = 'PG 연결 설정을 복구해 다시 요청';
+  describe('개별 확인 후 PG 재시도', () => {
+    const retryReason = '개별 확인에서 PG 미접수 확인 후 재시도';
 
     it('확정 실패·지급액 0원이면 같은 금액의 새 PG 취소 요청을 만들어 보내고 이전 실패 기록·이용 종료는 그대로 둔다', async () => {
       const failed = await createFailedRefund();
-      pgGateway.sendCancel.mockResolvedValueOnce({ result: 'ACCEPTED' });
+      pgServiceMock.inquirePaymentCancel.mockResolvedValueOnce({
+        result: 'NOT_FOUND',
+        authoritative: true,
+      });
+      pgServiceMock.requestPaymentCancel.mockResolvedValueOnce({
+        result: 'ACCEPTED',
+      });
 
       const response = await app
-        .get(RefundRetryService)
-        .retryByManager(manager(), failed.refundId, {
-          reason: retryReason,
-          idempotencyKey: `retry-${randomUUID()}`,
-        });
+        .get(RefundPgCheckService)
+        .check(manager(), failed.refundId, new Date());
 
       const attempts = await prisma.paymentCancel.findMany({
         where: { refundId: failed.refundId },
@@ -2287,7 +2338,11 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
         where: { orderItemId: failed.orderItemId },
       });
       expect({
-        response: { status: response.status, body: response.body },
+        response: {
+          checkStatus: response.checkStatus,
+          inquiryResult: response.inquiryResult,
+          resendResult: response.resendResult,
+        },
         attempts: attempts.map((attempt) => ({
           attemptNumber: attempt.attemptNumber,
           status: attempt.status,
@@ -2296,7 +2351,8 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
           requestedById: attempt.requestedById,
           retryReason: attempt.retryReason,
         })),
-        sent: pgGateway.sendCancel.mock.calls,
+        inquired: pgServiceMock.inquirePaymentCancel.mock.calls,
+        sent: pgServiceMock.requestPaymentCancel.mock.calls,
         refund: {
           payoutStatus: refund.payoutStatus,
           payoutMethod: refund.payoutMethod,
@@ -2305,12 +2361,9 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
         ticket: ticket.status,
       }).toEqual({
         response: {
-          status: 202,
-          body: {
-            refundId: failed.refundId,
-            paymentCancelId: attempts[1]?.id,
-            payoutStatus: RefundPayoutStatus.PENDING,
-          },
+          checkStatus: 'CHECKED',
+          inquiryResult: 'NOT_FOUND',
+          resendResult: 'ACCEPTED',
         },
         attempts: [
           {
@@ -2330,6 +2383,7 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
             retryReason,
           },
         ],
+        inquired: [[{ paymentCancelId: failed.paymentCancelId }]],
         sent: [[{ paymentCancelId: attempts[1]?.id, amount: refundAmount }]],
         refund: {
           payoutStatus: RefundPayoutStatus.PENDING,
@@ -2358,23 +2412,26 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
           data: { refundId: failed.refundId, orderItemId: null },
         });
       });
-      pgGateway.sendCancel.mockResolvedValueOnce({ result: 'ACCEPTED' });
+      pgServiceMock.inquirePaymentCancel.mockResolvedValueOnce({
+        result: 'NOT_FOUND',
+        authoritative: true,
+      });
+      pgServiceMock.requestPaymentCancel.mockResolvedValueOnce({
+        result: 'ACCEPTED',
+      });
 
       const response = await app
-        .get(RefundRetryService)
-        .retryByManager(manager(), failed.refundId, {
-          reason: retryReason,
-          idempotencyKey: `retry-${randomUUID()}`,
-        });
+        .get(RefundPgCheckService)
+        .check(manager(), failed.refundId, new Date());
 
       const created = await prisma.paymentCancel.findFirst({
         where: { refundId: failed.refundId, attemptNumber: 2 },
       });
       expect({
-        status: response.status,
+        checkStatus: response.checkStatus,
         created: created && [created.status, created.orderItemId],
       }).toEqual({
-        status: 202,
+        checkStatus: 'CHECKED',
         created: [PaymentCancelStatus.REQUESTED, null],
       });
     });
@@ -2384,14 +2441,17 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
         PaymentCancelFailureCode.RETRY_EXHAUSTED,
         5,
       );
-      pgGateway.sendCancel.mockResolvedValueOnce({ result: 'ACCEPTED' });
+      pgServiceMock.inquirePaymentCancel.mockResolvedValueOnce({
+        result: 'NOT_FOUND',
+        authoritative: true,
+      });
+      pgServiceMock.requestPaymentCancel.mockResolvedValueOnce({
+        result: 'ACCEPTED',
+      });
 
       await app
-        .get(RefundRetryService)
-        .retryByManager(manager(), failed.refundId, {
-          reason: retryReason,
-          idempotencyKey: `retry-${randomUUID()}`,
-        });
+        .get(RefundPgCheckService)
+        .check(manager(), failed.refundId, new Date());
 
       const attempts = await prisma.paymentCancel.findMany({
         where: { refundId: failed.refundId },
@@ -2421,8 +2481,10 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       inquiry: unknown,
     ) {
       const failed = await createFailedRefund(failureCode);
-      pgGateway.inquireCancel.mockResolvedValueOnce(inquiry);
-      pgGateway.sendCancel.mockResolvedValueOnce({ result: 'ACCEPTED' });
+      pgServiceMock.inquirePaymentCancel.mockResolvedValueOnce(inquiry);
+      pgServiceMock.requestPaymentCancel.mockResolvedValueOnce({
+        result: 'ACCEPTED',
+      });
       const result = await app
         .get(RefundPgCheckService)
         .check(manager(), failed.refundId, new Date());
@@ -2438,22 +2500,184 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
           resendResult: result.resendResult,
           attempts: attempts.map((attempt) => attempt.status),
           previousFailure: attempts[0].failureCode,
-          inquiries: pgGateway.inquireCancel.mock.calls.length,
-          sends: pgGateway.sendCancel.mock.calls.length,
+          inquiries: pgServiceMock.inquirePaymentCancel.mock.calls.length,
+          sends: pgServiceMock.requestPaymentCancel.mock.calls.length,
         },
       };
     }
+
+    it('전송 전 실패한 요청의 개별 조회에서 성공이 확인되면 기존 요청에 실제 지급액과 원장을 반영하고 새 요청이나 추가 전송을 만들지 않는다 (RC-03 SEND_FAILED)', async () => {
+      const failed = await createFailedRefund(
+        PaymentCancelFailureCode.SEND_FAILED,
+      );
+      const pgTransactionId = `pg-cancel-${randomUUID()}`;
+      pgServiceMock.inquirePaymentCancel.mockResolvedValueOnce({
+        result: 'SUCCEEDED',
+        paymentCancelId: failed.paymentCancelId,
+        pgTransactionId,
+        cancelledAmount: refundAmount,
+      });
+
+      const result = await app
+        .get(RefundPgCheckService)
+        .check(manager(), failed.refundId, new Date());
+
+      const refund = await prisma.refund.findUniqueOrThrow({
+        where: { id: failed.refundId },
+        include: { paymentCancels: true, notifications: true },
+      });
+      const ledgers = await prisma.ledger.findMany({
+        where: { refundId: failed.refundId },
+      });
+
+      expect(result).toMatchObject({
+        checkStatus: 'CHECKED',
+        inquiryResult: 'SUCCEEDED',
+        resendResult: null,
+      });
+      expect(pgServiceMock.inquirePaymentCancel.mock.calls).toEqual([
+        [{ paymentCancelId: failed.paymentCancelId }],
+      ]);
+      expect(pgServiceMock.requestPaymentCancel).not.toHaveBeenCalled();
+      expect(refund).toMatchObject({
+        payoutStatus: RefundPayoutStatus.PAID,
+        paidAmount: refundAmount,
+        reviewRequired: false,
+        actionCode: null,
+        paymentCancels: [
+          expect.objectContaining({
+            id: failed.paymentCancelId,
+            status: PaymentCancelStatus.SUCCEEDED,
+            actualAmount: refundAmount,
+            pgTransactionId,
+            failureCode: null,
+            failureReason: null,
+            failedAt: null,
+          }),
+        ],
+      });
+      expect(refund.paidAt).toBeInstanceOf(Date);
+      expect(refund.paymentCancels).toHaveLength(1);
+      expect(ledgers).toEqual([
+        expect.objectContaining({
+          refundId: failed.refundId,
+          paymentCancelId: failed.paymentCancelId,
+          orderId: failed.orderId,
+          shopId,
+          amount: -refundAmount,
+          status: LedgerStatus.RELEASABLE,
+        }),
+      ]);
+      expect(
+        refund.notifications.filter(
+          (notification) => notification.kind === 'PG_RESULT_CONFLICT',
+        ),
+      ).toHaveLength(0);
+    });
+
+    it('자동 재전송 한도를 소진한 요청의 개별 조회에서 성공이 확인되면 기존 요청에 실제 지급액과 원장을 반영하고 새 요청이나 추가 전송을 만들지 않는다 (RC-03 RETRY_EXHAUSTED)', async () => {
+      const failed = await createFailedRefund(
+        PaymentCancelFailureCode.RETRY_EXHAUSTED,
+        5,
+      );
+      const txLog = vi.spyOn(
+        app.get(TransactionLoggerService),
+        'logTransaction',
+      );
+      const previous = await prisma.paymentCancel.findUniqueOrThrow({
+        where: { id: failed.paymentCancelId },
+      });
+      const pgTransactionId = `pg-cancel-${randomUUID()}`;
+      pgServiceMock.inquirePaymentCancel.mockResolvedValueOnce({
+        result: 'SUCCEEDED',
+        paymentCancelId: failed.paymentCancelId,
+        pgTransactionId,
+        cancelledAmount: refundAmount,
+      });
+
+      const result = await app
+        .get(RefundPgCheckService)
+        .check(manager(), failed.refundId, new Date());
+
+      const refund = await prisma.refund.findUniqueOrThrow({
+        where: { id: failed.refundId },
+        include: { paymentCancels: true, notifications: true },
+      });
+      const ledgers = await prisma.ledger.findMany({
+        where: { refundId: failed.refundId },
+      });
+
+      expect(result).toMatchObject({
+        checkStatus: 'CHECKED',
+        inquiryResult: 'SUCCEEDED',
+        resendResult: null,
+      });
+      expect(pgServiceMock.inquirePaymentCancel.mock.calls).toEqual([
+        [{ paymentCancelId: failed.paymentCancelId }],
+      ]);
+      expect(pgServiceMock.requestPaymentCancel).not.toHaveBeenCalled();
+      expect(refund).toMatchObject({
+        payoutStatus: RefundPayoutStatus.PAID,
+        paidAmount: refundAmount,
+        reviewRequired: false,
+        actionCode: null,
+        paymentCancels: [
+          expect.objectContaining({
+            id: failed.paymentCancelId,
+            status: PaymentCancelStatus.SUCCEEDED,
+            actualAmount: refundAmount,
+            pgTransactionId,
+            failureCode: null,
+            failureReason: null,
+            failedAt: null,
+            resendCount: 5,
+            manualResendCount: 0,
+          }),
+        ],
+      });
+      expect(refund.paidAt).toBeInstanceOf(Date);
+      expect(refund.paymentCancels).toHaveLength(1);
+      expect(txLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: 'RETRY_EXHAUSTED_CORRECTED_BY_PG_QUERY',
+          metadata: expect.objectContaining({
+            paymentCancelId: failed.paymentCancelId,
+            previousStatus: PaymentCancelStatus.FAILED,
+            previousFailureCode: PaymentCancelFailureCode.RETRY_EXHAUSTED,
+            previousFailureReason: previous.failureReason,
+            previousFailedAt: previous.failedAt,
+          }) as unknown,
+        }),
+      );
+      expect(ledgers).toEqual([
+        expect.objectContaining({
+          refundId: failed.refundId,
+          paymentCancelId: failed.paymentCancelId,
+          orderId: failed.orderId,
+          shopId,
+          amount: -refundAmount,
+          status: LedgerStatus.RELEASABLE,
+        }),
+      ]);
+      expect(
+        refund.notifications.filter(
+          (notification) => notification.kind === 'PG_RESULT_CONFLICT',
+        ),
+      ).toHaveLength(0);
+    });
 
     it('한도 소진으로 실패한 요청을 개별 확인해 PG 미접수가 확인되면 같은 금액의 새 PG 취소 요청을 즉시 보내고 이전 실패 기록은 그대로 둔다', async () => {
       const failed = await createFailedRefund(
         PaymentCancelFailureCode.RETRY_EXHAUSTED,
         5,
       );
-      pgGateway.inquireCancel.mockResolvedValueOnce({
+      pgServiceMock.inquirePaymentCancel.mockResolvedValueOnce({
         result: 'NOT_FOUND',
         authoritative: true,
       });
-      pgGateway.sendCancel.mockResolvedValueOnce({ result: 'ACCEPTED' });
+      pgServiceMock.requestPaymentCancel.mockResolvedValueOnce({
+        result: 'ACCEPTED',
+      });
 
       const result = await app
         .get(RefundPgCheckService)
@@ -2470,14 +2694,14 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
         checkStatus: result.checkStatus,
         inquiryResult: result.inquiryResult,
         resendResult: result.resendResult,
-        inquired: pgGateway.inquireCancel.mock.calls,
+        inquired: pgServiceMock.inquirePaymentCancel.mock.calls,
         attempts: attempts.map((attempt) => ({
           status: attempt.status,
           failureCode: attempt.failureCode,
           resendCount: attempt.resendCount,
           amount: attempt.amount,
         })),
-        sent: pgGateway.sendCancel.mock.calls,
+        sent: pgServiceMock.requestPaymentCancel.mock.calls,
         payoutStatus: refund.payoutStatus,
       }).toEqual({
         checkStatus: 'CHECKED',
@@ -2558,7 +2782,7 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       const failed = await createFailedRefund(
         PaymentCancelFailureCode.RETRY_EXHAUSTED,
       );
-      pgGateway.inquireCancel.mockResolvedValueOnce({
+      pgServiceMock.inquirePaymentCancel.mockResolvedValueOnce({
         result: 'QUERY_ERROR',
         reason: 'PG 조회 지연',
       });
@@ -2582,7 +2806,7 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
           attempt.failureCode,
         ]),
         payoutStatus: refund.payoutStatus,
-        sends: pgGateway.sendCancel.mock.calls.length,
+        sends: pgServiceMock.requestPaymentCancel.mock.calls.length,
       }).toEqual({
         checkStatus: 'CHECKED',
         inquiryResult: 'QUERY_ERROR',
@@ -2603,11 +2827,12 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
      * @param inquiry 모순되는 재조회 결과
      * @returns 모순 기록·알림·요청 수 요약
      */
-    async function checkContradiction(inquiry: unknown) {
-      const failed = await createFailedRefund(
-        PaymentCancelFailureCode.RETRY_EXHAUSTED,
-      );
-      pgGateway.inquireCancel.mockResolvedValueOnce(inquiry);
+    async function checkContradiction(
+      inquiry: unknown,
+      failureCode: PaymentCancelFailureCode = PaymentCancelFailureCode.RETRY_EXHAUSTED,
+    ) {
+      const failed = await createFailedRefund(failureCode);
+      pgServiceMock.inquirePaymentCancel.mockResolvedValueOnce(inquiry);
 
       const result = await app
         .get(RefundPgCheckService)
@@ -2628,7 +2853,7 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
             notification.kind === 'PG_RESULT_CONFLICT',
         ).length,
         attempts: refund.paymentCancels.map((attempt) => attempt.status),
-        sends: pgGateway.sendCancel.mock.calls.length,
+        sends: pgServiceMock.requestPaymentCancel.mock.calls.length,
       };
     }
 
@@ -2643,21 +2868,108 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       sends: 0,
     };
 
-    it('실패한 요청의 재조회가 취소 성공이면 PG_RESULT_CONFLICT와 운영자 알림을 기록하고 새 요청을 만들지 않는다', async () => {
+    it('PG 거절로 실패한 요청의 재조회가 취소 성공이면 PG_RESULT_CONFLICT와 운영자 알림을 기록하고 새 요청을 만들지 않는다', async () => {
       expect(
-        await checkContradiction({
-          result: 'SUCCEEDED',
-          pgTransactionId: `pg-cancel-${randomUUID()}`,
-          cancelledAmount: refundAmount,
-        }),
+        await checkContradiction(
+          {
+            result: 'SUCCEEDED',
+            pgTransactionId: `pg-cancel-${randomUUID()}`,
+            cancelledAmount: refundAmount,
+          },
+          PaymentCancelFailureCode.PG_REJECTED,
+        ),
       ).toEqual(contradictionRecorded);
     });
 
-    it('실패한 요청의 재조회가 처리 중이면 PG_RESULT_CONFLICT와 운영자 알림을 기록하고 새 요청을 만들지 않는다', async () => {
-      expect(await checkContradiction({ result: 'IN_PROGRESS' })).toEqual(
-        contradictionRecorded,
-      );
+    it('PG 거절로 실패한 요청의 재조회가 처리 중이면 PG_RESULT_CONFLICT와 운영자 알림을 기록하고 새 요청을 만들지 않는다', async () => {
+      expect(
+        await checkContradiction(
+          { result: 'IN_PROGRESS' },
+          PaymentCancelFailureCode.PG_REJECTED,
+        ),
+      ).toEqual(contradictionRecorded);
     });
+
+    it.each([
+      PaymentCancelFailureCode.SEND_FAILED,
+      PaymentCancelFailureCode.RETRY_EXHAUSTED,
+    ])(
+      '내부 실패 %s의 처리 중 조회에서 기존 요청의 조회를 재개한다 (RC-04)',
+      async (failureCode) => {
+        const failed = await createFailedRefund(failureCode, 5);
+        const previous = await prisma.paymentCancel.update({
+          where: { id: failed.paymentCancelId },
+          data: { failureReason: '내부 처리 중단', manualResendCount: 2 },
+        });
+        const txLog = vi.spyOn(
+          app.get(TransactionLoggerService),
+          'logTransaction',
+        );
+        pgServiceMock.inquirePaymentCancel.mockResolvedValueOnce({
+          result: 'IN_PROGRESS',
+        });
+        const now = new Date();
+        const result = await app
+          .get(RefundPgCheckService)
+          .check(manager(), failed.refundId, now);
+        const refund = await prisma.refund.findUniqueOrThrow({
+          where: { id: failed.refundId },
+          include: { paymentCancels: true, notifications: true },
+        });
+        expect(result).toMatchObject({
+          checkStatus: 'CHECKED',
+          inquiryResult: 'IN_PROGRESS',
+          resendResult: null,
+        });
+        expect(pgServiceMock.inquirePaymentCancel.mock.calls).toEqual([
+          [{ paymentCancelId: failed.paymentCancelId }],
+        ]);
+        expect(pgServiceMock.requestPaymentCancel).not.toHaveBeenCalled();
+        expect(refund).toMatchObject({
+          payoutStatus: RefundPayoutStatus.PENDING,
+          paidAmount: 0,
+          reviewRequired: false,
+          actionCode: null,
+          actionReason: null,
+        });
+        expect(refund.paymentCancels).toHaveLength(1);
+        expect(refund.paymentCancels[0]).toMatchObject({
+          id: failed.paymentCancelId,
+          status: PaymentCancelStatus.REQUESTED,
+          failureCode: null,
+          failureReason: null,
+          failedAt: null,
+          claimToken: null,
+          claimUntil: null,
+          resendCount: 5,
+          manualResendCount: 2,
+          sendAttemptCount: previous.sendAttemptCount,
+          inquiryFailureCount: 0,
+          lastInquiryError: null,
+        });
+        expect(
+          refund.paymentCancels[0].nextInquiryAt!.getTime(),
+        ).toBeGreaterThan(now.getTime());
+        expect(
+          refund.notifications.filter((n) => n.kind === 'PG_RESULT_CONFLICT'),
+        ).toHaveLength(0);
+        expect(
+          await prisma.ledger.count({ where: { refundId: failed.refundId } }),
+        ).toBe(0);
+        expect(txLog).toHaveBeenCalledWith(
+          expect.objectContaining({
+            status: `${failureCode}_CORRECTED_BY_PG_QUERY`,
+            metadata: expect.objectContaining({
+              paymentCancelId: failed.paymentCancelId,
+              previousFailureCode: failureCode,
+              previousFailureReason: previous.failureReason,
+              previousFailedAt: previous.failedAt,
+              received: { result: 'IN_PROGRESS' },
+            }) as unknown,
+          }),
+        );
+      },
+    );
 
     it('지급 방식이 별도 지급(MANUAL)인 환불은 개별 확인으로 새 요청을 만들지 않고 PG를 호출하지 않는다', async () => {
       const failed = await createFailedRefund(
@@ -2668,7 +2980,7 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
         where: { id: failed.refundId },
         data: { payoutMethod: RefundPayoutMethod.MANUAL },
       });
-      pgGateway.inquireCancel.mockResolvedValueOnce({
+      pgServiceMock.inquirePaymentCancel.mockResolvedValueOnce({
         result: 'NOT_FOUND',
         authoritative: true,
       });
@@ -2683,8 +2995,8 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       expect({
         checkStatus: result.checkStatus,
         attempts,
-        inquiries: pgGateway.inquireCancel.mock.calls.length,
-        sends: pgGateway.sendCancel.mock.calls.length,
+        inquiries: pgServiceMock.inquirePaymentCancel.mock.calls.length,
+        sends: pgServiceMock.requestPaymentCancel.mock.calls.length,
       }).toEqual({
         checkStatus: 'NO_PENDING_ATTEMPT',
         attempts: 1,
@@ -2697,11 +3009,13 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
       const failed = await createFailedRefund(
         PaymentCancelFailureCode.RETRY_EXHAUSTED,
       );
-      pgGateway.inquireCancel.mockResolvedValueOnce({
+      pgServiceMock.inquirePaymentCancel.mockResolvedValueOnce({
         result: 'NOT_FOUND',
         authoritative: true,
       });
-      pgGateway.sendCancel.mockResolvedValueOnce({ result: 'ACCEPTED' });
+      pgServiceMock.requestPaymentCancel.mockResolvedValueOnce({
+        result: 'ACCEPTED',
+      });
       const now = new Date();
 
       await app
@@ -3220,7 +3534,9 @@ describe('환불금 지급 결과 반영 (실제 DB)', () => {
     it('정기 탐색이 기준 시간 뒤 반복돼도 별도 지급 미확인 알림은 1건이고 예약은 유지된다', async () => {
       const reserved = await oldReservation();
       // 같은 시각 이전에 조회 예정인 다른 테스트 데이터가 있어도 조회가 끝나도록 처리 중으로 응답한다
-      pgGateway.inquireCancel.mockResolvedValue({ result: 'IN_PROGRESS' });
+      pgServiceMock.inquirePaymentCancel.mockResolvedValue({
+        result: 'IN_PROGRESS',
+      });
       const after = new Date(
         reserved.reservedAt.getTime() + manualConfirmAlertSeconds * 1000,
       );

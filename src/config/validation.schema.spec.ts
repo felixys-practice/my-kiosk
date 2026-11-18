@@ -4,6 +4,7 @@ describe('validationSchema', () => {
   // 유효한 env 기본 세트 — 각 테스트에서 특정 키만 변경하여 사용
   const validEnv = {
     NODE_ENV: 'development',
+    PG_MODE: 'production',
     PORT: 3000,
     DATABASE_URL: 'postgresql://postgres:password@localhost:5432/db',
     JWT_SECRET: 'valid-secret-key',
@@ -21,19 +22,23 @@ describe('validationSchema', () => {
     });
 
     it('PORT 미설정 시 기본값 3000으로 통과한다', () => {
-      const { error, value } = validationSchema.validate(
+      const result = validationSchema.validate(
         { ...validEnv, PORT: undefined },
         { abortEarly: false, allowUnknown: true },
       );
+      const error = result.error;
+      const value = result.value as Record<string, unknown>;
       expect(error).toBeUndefined();
       expect(value.PORT).toBe(3000);
     });
 
     it('REDIS_HOST 미설정 시 기본값 localhost로 통과한다', () => {
-      const { error, value } = validationSchema.validate(
+      const result = validationSchema.validate(
         { ...validEnv, REDIS_HOST: undefined },
         { abortEarly: false, allowUnknown: true },
       );
+      const error = result.error;
+      const value = result.value as Record<string, unknown>;
       expect(error).toBeUndefined();
       expect(value.REDIS_HOST).toBe('localhost');
     });
@@ -107,18 +112,22 @@ describe('validationSchema', () => {
 
   describe('고정석 선점 유효시간(SEAT_HOLD_MINUTES)', () => {
     it('미설정 시 기본값 10으로 통과한다', () => {
-      const { error, value } = validationSchema.validate(validEnv, {
+      const result = validationSchema.validate(validEnv, {
         abortEarly: false,
       });
+      const error = result.error;
+      const value = result.value as Record<string, unknown>;
       expect(error).toBeUndefined();
       expect(value.SEAT_HOLD_MINUTES).toBe(10);
     });
 
     it('1 이상의 정수는 통과한다', () => {
-      const { error, value } = validationSchema.validate(
+      const result = validationSchema.validate(
         { ...validEnv, SEAT_HOLD_MINUTES: 5 },
         { abortEarly: false },
       );
+      const error = result.error;
+      const value = result.value as Record<string, unknown>;
       expect(error).toBeUndefined();
       expect(value.SEAT_HOLD_MINUTES).toBe(5);
     });
@@ -425,5 +434,39 @@ describe('validationSchema', () => {
         )?.type,
       ).toBe('number.min');
     });
+  });
+});
+
+describe('PG_MODE 선택 계약', () => {
+  const env = {
+    DATABASE_URL: 'postgresql://unused',
+    JWT_SECRET: 'secret',
+    JWT_REFRESH_SECRET: 'refresh',
+    PG_CALLBACK_SECRET: 'callback-secret-longer-than-32-chars',
+  };
+  it.each([undefined, '', 'unsupported'])('모드 %s를 거부한다', (pgMode) => {
+    expect(
+      validationSchema
+        .validate({ ...env, PG_MODE: pgMode })
+        .error?.details.some((detail) => detail.path[0] === 'PG_MODE'),
+    ).toBe(true);
+  });
+  it.each(['development', 'test'])('%s 환경의 모의를 허용한다', (nodeEnv) => {
+    expect(
+      validationSchema.validate({
+        ...env,
+        NODE_ENV: nodeEnv,
+        PG_MODE: 'simulated',
+      }).error,
+    ).toBeUndefined();
+  });
+  it('운영 모의 선택을 거부한다', () => {
+    expect(
+      validationSchema.validate({
+        ...env,
+        NODE_ENV: 'production',
+        PG_MODE: 'simulated',
+      }).error?.message,
+    ).toContain('PG_MODE_FORBIDDEN');
   });
 });

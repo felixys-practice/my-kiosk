@@ -1,7 +1,8 @@
+import { PG_CLIENT } from '../src/pg/pg.client';
+import { SimulatedPgClient } from '../src/pg/simulated-pg.client';
 import { Test } from '@nestjs/testing';
 import { AppModule } from '../src/app.module';
 import { PgService } from '../src/pg/pg.service';
-import { REFUND_PG_GATEWAY } from '../src/pg/refund-pg.gateway';
 import { RefundAccessService } from '../src/refund/refund-access.service';
 import { RefundIdempotencyService } from '../src/refund/refund-idempotency.service';
 import { RefundLockingRepository } from '../src/refund/refund-locking.repository';
@@ -25,7 +26,8 @@ describe('환불 공통 기반 모듈 연결 (E2E)', () => {
     await app.init();
 
     try {
-      expect(app.get(REFUND_PG_GATEWAY)).toBe(app.get(PgService));
+      expect(app.get(PgService)).toBeInstanceOf(PgService);
+      expect(app.get(PG_CLIENT)).toBeInstanceOf(SimulatedPgClient);
       expect(app.get(RefundIdempotencyService)).toBeInstanceOf(
         RefundIdempotencyService,
       );
@@ -46,7 +48,7 @@ describe('환불 공통 기반 모듈 연결 (E2E)', () => {
       ctx = await createRefundTestContext({
         label: 'bootstrap',
         configure: (builder) =>
-          builder.overrideProvider(REFUND_PG_GATEWAY).useValue(pgStub),
+          builder.overrideProvider(PgService).useValue(pgStub),
       });
     });
 
@@ -54,9 +56,9 @@ describe('환불 공통 기반 모듈 연결 (E2E)', () => {
       await ctx.close();
     });
 
-    it('환불 PG 포트만 테스트 대역으로 바뀌고 결제용 PgService는 그대로다', () => {
-      expect(ctx.app.get(REFUND_PG_GATEWAY)).toBe(pgStub);
-      expect(ctx.app.get(PgService)).toBeInstanceOf(PgService);
+    it('PgService를 대역으로 교체하고 선택된 클라이언트 등록은 유지한다', () => {
+      expect(ctx.app.get(PgService)).toBe(pgStub);
+      expect(ctx.app.get(PG_CLIENT)).toBeInstanceOf(SimulatedPgClient);
     });
   });
 });

@@ -12,7 +12,7 @@ import {
   TicketStatus,
   UsageSessionStatus,
 } from '@prisma/client';
-import { REFUND_PG_GATEWAY } from '../src/pg/refund-pg.gateway';
+import { PgService } from '../src/pg/pg.service';
 import {
   createRefundTestContext,
   IssuedTicket,
@@ -33,7 +33,7 @@ describe('매장 환불 (E2E)', () => {
     ctx = await createRefundTestContext({
       label: 'store',
       configure: (builder) =>
-        builder.overrideProvider(REFUND_PG_GATEWAY).useValue(pgStub),
+        builder.overrideProvider(PgService).useValue(pgStub),
     });
   });
 
@@ -243,7 +243,6 @@ describe('매장 환불 (E2E)', () => {
       success: true,
       paymentCancelId: body.data.paymentCancelId,
       pgTransactionId: `pg-cancel-${body.data.paymentCancelId}`,
-      orderItemId: issued.orderItemId,
       amount: 7000,
       reason: null,
     }).expect(200);
@@ -592,7 +591,6 @@ describe('매장 환불 (E2E)', () => {
       success: false,
       paymentCancelId: body.data.paymentCancelId,
       pgTransactionId: `pg-cancel-${body.data.paymentCancelId}`,
-      orderItemId: issued.orderItemId,
       amount: 5000,
       reason: '취소 가능 기간 경과',
     }).expect(200);

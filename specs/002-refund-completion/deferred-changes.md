@@ -2,7 +2,11 @@
 
 작성일: 2026-10-28
 
-## 적용 시점과 문서의 지위
+## 현재 기준과의 관계 — 2026-11-18
+
+아래 내용은 2026-10-28에 작성한 과거 제안이며 현행 구현 기준이 아니다. 이후 승인된 계약은 미확정 요청과 FAILED/SEND_FAILED·FAILED/RETRY_EXHAUSTED·FAILED/PG_REJECTED 요청의 재확인·재시도를 점주·운영자의 `pg-check`로 통합한다. 일반 PG 재시도용 `payout-retries` API는 제거했다. 현재 기준은 `spec.md` FR-057과 `contracts/rest-api.md` §8을 따른다. 아래의 대상 제한·기존 API 유지 설명을 현재 동작으로 해석하지 않는다.
+
+## 작성 당시 적용 시점과 문서의 지위
 
 이 문서는 현재 진행 중인 환불 기능의 구현·검증을 모두 마친 뒤 적용할 후속 변경안이다. 현재 구현의 명세나 작업 지시로 사용하지 않는다. 기존 `spec.md`, `plan.md`, `contracts/rest-api.md`, `data-model.md`, `tasks.md`, `tdd/test-list.md`의 구현 기준을 이 문서로 대체하지 않는다.
 

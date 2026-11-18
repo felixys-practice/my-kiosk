@@ -10,7 +10,7 @@ import {
   RefundPayoutStatus,
   TicketStatus,
 } from '@prisma/client';
-import { REFUND_PG_GATEWAY } from '../src/pg/refund-pg.gateway';
+import { PgService } from '../src/pg/pg.service';
 import {
   createRefundTestContext,
   RefundTestContext,
@@ -30,7 +30,7 @@ describe('PG 결과 조회·재전송·장애 복구 (E2E)', () => {
     ctx = await createRefundTestContext({
       label: 'recovery',
       configure: (builder) =>
-        builder.overrideProvider(REFUND_PG_GATEWAY).useValue(pgStub),
+        builder.overrideProvider(PgService).useValue(pgStub),
     });
   });
 
@@ -79,6 +79,10 @@ describe('PG 결과 조회·재전송·장애 복구 (E2E)', () => {
       operatorNotified: true,
       ticket: TicketStatus.REVOKED,
     });
+    expect(refund.paymentCancels[0].actualAmount).toBeNull();
+    expect(
+      await ctx.prisma.ledger.count({ where: { refundId: refund.id } }),
+    ).toBe(0);
   });
 
   /**

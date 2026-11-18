@@ -171,3 +171,19 @@ describe('configuration', () => {
     });
   });
 });
+
+describe('PG 구조화 설정', () => {
+  it.each(['simulated', 'production'])(
+    '선택한 %s를 pg.mode로 전달한다',
+    (mode) => {
+      const original = process.env.PG_MODE;
+      try {
+        process.env.PG_MODE = mode;
+        expect(configuration().pg.mode).toBe(mode);
+      } finally {
+        if (original === undefined) delete process.env.PG_MODE;
+        else process.env.PG_MODE = original;
+      }
+    },
+  );
+});

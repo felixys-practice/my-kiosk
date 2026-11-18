@@ -2,352 +2,313 @@ import { vi } from 'vitest';
 import { ConfigService } from '@nestjs/config';
 import { TransactionLoggerService } from '../logger/transaction-logger.service';
 import { PgService } from './pg.service';
-import {
-  PgCancelClient,
-  PgRawResponse,
-  UnconfiguredPgCancelClient,
-} from './pg-cancel.client';
-
-/**
- * 원래 응답을 미리 정해 두는 PG 전송 계층 대역
- */
-/**
- * 중단 신호를 받으면 AbortError로 거부하고, 그 전에는 응답하지 않는 전송 계층 응답
- * @param signal 중단 신호
- * @returns 응답하지 않는 Promise
- */
-function rejectOnAbort(signal: AbortSignal): Promise<PgRawResponse> {
-  return new Promise<PgRawResponse>((_resolve, reject) => {
-    signal.addEventListener('abort', () =>
-      reject(new DOMException('aborted', 'AbortError')),
-    );
-  });
-}
-
-class FakePgCancelClient implements PgCancelClient {
-  configured = true;
-  sendResponse: (signal: AbortSignal) => Promise<PgRawResponse> = () =>
-    Promise.resolve({ httpStatus: 202, body: { status: 'ACCEPTED' } });
-  inquireResponse: (signal: AbortSignal) => Promise<PgRawResponse> = () =>
-    Promise.resolve({ httpStatus: 200, body: { status: 'IN_PROGRESS' } });
-
-  send(_request: unknown, signal: AbortSignal): Promise<PgRawResponse> {
-    return this.sendResponse(signal);
-  }
-
-  inquire(_request: unknown, signal: AbortSignal): Promise<PgRawResponse> {
-    return this.inquireResponse(signal);
-  }
-}
+import type {
+  PgClient,
+  PgPaymentCancelRequest,
+  PgPaymentCancelInquiry,
+  PgClientConfigurationResult,
+} from './pg.client';
+import type { PgCancelSendResult, PgCancelQueryResult } from './pg.types';
 
 describe('PgService', () => {
-  /** PG 전송·조회 응답 제한(초) — 설정 기본값 */
-  const pgTimeoutSeconds = 10;
-  const cancelRequest = { paymentCancelId: 'payment-cancel-1' };
-
-  let client: FakePgCancelClient;
+  let client: {
+    validateConfiguration: () => PgClientConfigurationResult;
+    requestPaymentCancel: (
+      request: PgPaymentCancelRequest,
+      signal: AbortSignal,
+    ) => Promise<PgCancelSendResult>;
+    inquirePaymentCancel: (
+      request: PgPaymentCancelInquiry,
+      signal: AbortSignal,
+    ) => Promise<PgCancelQueryResult>;
+  };
   let service: PgService;
-
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
+  const request = { paymentCancelId: 'cancel-service', amount: 10000 };
   beforeEach(() => {
-    client = new FakePgCancelClient();
-    const configService = {
-      get: (path: string) =>
-        path === 'refund.pgTimeoutSeconds' ? pgTimeoutSeconds : undefined,
-    } as unknown as ConfigService;
-    const transactionLogger = {
-      logTransaction: vi.fn(),
-      logPaymentRequest: vi.fn(),
-      logRefundRequest: vi.fn(),
-    } as unknown as TransactionLoggerService;
-    service = new PgService(transactionLogger, client, configService);
+    client = {
+      validateConfiguration: () => ({ ready: true }),
+      requestPaymentCancel: vi.fn().mockResolvedValue({ result: 'ACCEPTED' }),
+      inquirePaymentCancel: vi
+        .fn()
+        .mockResolvedValue({ result: 'IN_PROGRESS' }),
+    };
+    service = new PgService({} as TransactionLoggerService, client, {
+      get: () => 10,
+    } as unknown as ConfigService);
   });
+  afterEach(() => vi.useRealTimers());
 
-  describe('PG 취소 조회 결과 분류 (API 계약 §8)', () => {
-    it('authoritative=true인 미접수 응답만 NOT_FOUND로 분류된다', async () => {
-      client.inquireResponse = () =>
-        Promise.resolve({
-          httpStatus: 200,
-          body: { status: 'NOT_FOUND', authoritative: true },
-        });
-
-      await expect(service.inquireCancel(cancelRequest)).resolves.toEqual({
-        result: 'NOT_FOUND',
-        authoritative: true,
-      });
-    });
-
-    it('일반 HTTP 404 응답은 NOT_FOUND가 아니라 QUERY_ERROR로 분류된다', async () => {
-      client.inquireResponse = () => Promise.resolve({ httpStatus: 404 });
-
-      await expect(service.inquireCancel(cancelRequest)).resolves.toMatchObject(
-        {
-          result: 'QUERY_ERROR',
-        },
+  it.each<PgCancelSendResult>([
+    { result: 'NOT_SENT', reason: '전송 전 설정 오류' },
+    { result: 'ACCEPTED' },
+    { result: 'UNKNOWN', reason: 'HTTP 401·판단 불가' },
+    {
+      result: 'SUCCEEDED',
+      paymentCancelId: 'cancel-service',
+      pgTransactionId: 'pg-success',
+      cancelledAmount: 9000,
+    },
+    { result: 'REJECTED', reason: '취소 가능 기간 경과' },
+  ])(
+    '취소 요청의 클라이언트 결과 $result와 실제액·사유를 보존한다',
+    async (result) => {
+      vi.mocked(client.requestPaymentCancel).mockResolvedValue(result);
+      expect(await service.requestPaymentCancel(request)).toEqual(result);
+      expect(client.requestPaymentCancel).toHaveBeenCalledWith(
+        request,
+        expect.any(AbortSignal),
       );
-    });
-
-    it('성공 응답에 거래 ID와 실제 취소액이 있으면 SUCCEEDED로 분류된다', async () => {
-      client.inquireResponse = () =>
-        Promise.resolve({
-          httpStatus: 200,
-          body: {
-            status: 'SUCCEEDED',
-            pgTransactionId: 'pg-cancel-tx-1',
-            cancelledAmount: 9000,
-          },
-        });
-
-      await expect(service.inquireCancel(cancelRequest)).resolves.toEqual({
-        result: 'SUCCEEDED',
-        pgTransactionId: 'pg-cancel-tx-1',
-        cancelledAmount: 9000,
-      });
-    });
-
-    it('성공 응답에 실제 취소 금액이 없으면 QUERY_ERROR로 분류된다', async () => {
-      client.inquireResponse = () =>
-        Promise.resolve({
-          httpStatus: 200,
-          body: { status: 'SUCCEEDED', pgTransactionId: 'pg-cancel-tx-1' },
-        });
-
-      await expect(service.inquireCancel(cancelRequest)).resolves.toMatchObject(
-        {
-          result: 'QUERY_ERROR',
-        },
+    },
+  );
+  it.each<PgCancelQueryResult>([
+    {
+      result: 'SUCCEEDED',
+      paymentCancelId: 'cancel-service',
+      pgTransactionId: 'pg-success',
+      cancelledAmount: 9000,
+    },
+    { result: 'FAILED', reason: '이미 정산된 거래' },
+    { result: 'IN_PROGRESS' },
+    { result: 'NOT_FOUND', authoritative: true },
+    { result: 'QUERY_ERROR', reason: 'HTTP 404' },
+    { result: 'QUERY_ERROR', reason: '상태 없는 오류 문자열' },
+    { result: 'QUERY_ERROR', reason: 'PG 인증 오류' },
+    { result: 'QUERY_ERROR', reason: '클라이언트가 조회 불가를 확인함' },
+  ])(
+    '취소 조회의 클라이언트 결과 $result와 실제액·사유를 보존한다',
+    async (result) => {
+      vi.mocked(client.inquirePaymentCancel).mockResolvedValue(result);
+      expect(await service.inquirePaymentCancel(request)).toEqual(result);
+      expect(client.inquirePaymentCancel).toHaveBeenCalledWith(
+        request,
+        expect.any(AbortSignal),
       );
-    });
-
-    it('실패 확정 응답은 FAILED와 사유로 분류된다', async () => {
-      client.inquireResponse = () =>
-        Promise.resolve({
-          httpStatus: 200,
-          body: { status: 'FAILED', reason: '이미 정산된 거래' },
+    },
+  );
+  for (const operation of [
+    'requestPaymentCancel',
+    'inquirePaymentCancel',
+  ] as const) {
+    for (const kind of ['동기 예외', '비동기 거부'] as const) {
+      it(`${operation}의 ${kind}는 미전송·실패 확정으로 추정하지 않는다`, async () => {
+        vi.mocked(client[operation]).mockImplementation(() => {
+          if (kind === '동기 예외') throw new Error('socket reset');
+          return Promise.reject(new Error('socket reset'));
         });
-
-      await expect(service.inquireCancel(cancelRequest)).resolves.toEqual({
-        result: 'FAILED',
-        reason: '이미 정산된 거래',
-      });
-    });
-
-    it('실패 상태 없이 오류 문자열만 있는 조회 응답은 거절 확정이 아니라 QUERY_ERROR로 분류된다', async () => {
-      client.inquireResponse = () =>
-        Promise.resolve({
-          httpStatus: 200,
-          body: { reason: '취소 처리 중 오류가 발생했습니다' },
+        expect(await service[operation](request)).toMatchObject({
+          result:
+            operation === 'requestPaymentCancel' ? 'UNKNOWN' : 'QUERY_ERROR',
         });
-
-      await expect(service.inquireCancel(cancelRequest)).resolves.toMatchObject(
-        {
-          result: 'QUERY_ERROR',
-        },
-      );
-    });
-
-    it('처리 중 응답은 IN_PROGRESS로 분류된다', async () => {
-      client.inquireResponse = () =>
-        Promise.resolve({ httpStatus: 200, body: { status: 'IN_PROGRESS' } });
-
-      await expect(service.inquireCancel(cancelRequest)).resolves.toEqual({
-        result: 'IN_PROGRESS',
       });
-    });
-
-    it('PG 인증 오류 응답은 실패 확정이 아니라 QUERY_ERROR로 분류된다', async () => {
-      client.inquireResponse = () =>
-        Promise.resolve({
-          httpStatus: 401,
-          body: { status: 'FAILED', reason: '가맹점 인증 실패' },
+    }
+    for (const abortReject of [false, true]) {
+      it(`${operation} 제한 시간 초과는 중단 신호를 전달하고 타이머를 정리한다 (중단 거부=${abortReject})`, async () => {
+        vi.useFakeTimers();
+        let received: AbortSignal | undefined;
+        vi.mocked(client[operation]).mockImplementation(
+          (_request: unknown, signal: AbortSignal) =>
+            new Promise<never>((_resolve, reject) => {
+              received = signal;
+              if (abortReject)
+                signal.addEventListener('abort', () =>
+                  reject(new Error('aborted')),
+                );
+            }),
+        );
+        const pending = service[operation](request);
+        await vi.advanceTimersByTimeAsync(10000);
+        expect(await pending).toEqual({
+          result:
+            operation === 'requestPaymentCancel' ? 'UNKNOWN' : 'QUERY_ERROR',
+          reason:
+            operation === 'requestPaymentCancel'
+              ? 'PG 송신 응답 시간 초과'
+              : 'PG 조회 응답 시간 초과',
         });
-
-      await expect(service.inquireCancel(cancelRequest)).resolves.toMatchObject(
-        {
-          result: 'QUERY_ERROR',
-        },
-      );
-    });
-
-    it('조회 응답이 제한 시간(REFUND_PG_TIMEOUT_SECONDS)을 넘으면 QUERY_ERROR로 분류된다', async () => {
-      vi.useFakeTimers();
-      client.inquireResponse = () => new Promise<PgRawResponse>(() => {});
-
-      const pending = service.inquireCancel(cancelRequest);
-      await vi.advanceTimersByTimeAsync(pgTimeoutSeconds * 1000);
-
-      await expect(pending).resolves.toMatchObject({ result: 'QUERY_ERROR' });
-    });
-
-    it('PG 미연동 상태의 조회 결과는 QUERY_ERROR다', async () => {
-      const unconfigured = new PgService(
-        {} as TransactionLoggerService,
-        new UnconfiguredPgCancelClient(),
-        { get: () => pgTimeoutSeconds } as unknown as ConfigService,
-      );
-
-      await expect(
-        unconfigured.inquireCancel(cancelRequest),
-      ).resolves.toMatchObject({ result: 'QUERY_ERROR' });
-    });
-
-    it.each([
-      [
-        '비동기 거부',
-        (): Promise<PgRawResponse> => Promise.reject(new Error('socket reset')),
-      ],
-      [
-        '동기 throw',
-        (): Promise<PgRawResponse> => {
-          throw new Error('socket reset');
-        },
-      ],
-    ])(
-      '조회 중 전송 계층이 예외(%s)를 내면 QUERY_ERROR다',
-      async (_kind, failure) => {
-        client.inquireResponse = failure;
-
-        await expect(
-          service.inquireCancel(cancelRequest),
-        ).resolves.toMatchObject({ result: 'QUERY_ERROR' });
-      },
-    );
-
-    it('중단 신호에 반응해 거부하는 전송 계층이라도 조회 시간 초과는 시간 초과 사유의 QUERY_ERROR다', async () => {
-      vi.useFakeTimers();
-      client.inquireResponse = rejectOnAbort;
-
-      const pending = service.inquireCancel(cancelRequest);
-      await vi.advanceTimersByTimeAsync(pgTimeoutSeconds * 1000);
-
-      await expect(pending).resolves.toEqual({
-        result: 'QUERY_ERROR',
-        reason: 'PG 조회 응답 시간 초과',
+        expect(received?.aborted).toBe(true);
+        expect(vi.getTimerCount()).toBe(0);
       });
-    });
+    }
+  }
+  it('정상 응답 후 응답 제한 타이머를 정리한다', async () => {
+    vi.useFakeTimers();
+    await service.requestPaymentCancel(request);
+    await service.inquirePaymentCancel(request);
+    expect(vi.getTimerCount()).toBe(0);
   });
+});
 
-  describe('PG 취소 송신 결과 분류 (API 계약 §8)', () => {
-    const sendRequest = { paymentCancelId: 'payment-cancel-1', amount: 10000 };
-
-    it('PG 미연동 상태의 취소 전송 결과는 NOT_SENT다', async () => {
-      const unconfigured = new PgService(
-        {} as TransactionLoggerService,
-        new UnconfiguredPgCancelClient(),
-        { get: () => pgTimeoutSeconds } as unknown as ConfigService,
-      );
-
-      await expect(unconfigured.sendCancel(sendRequest)).resolves.toMatchObject(
-        { result: 'NOT_SENT' },
-      );
-    });
-
-    it('PG가 접수만 한 응답은 ACCEPTED로 분류된다', async () => {
-      client.sendResponse = () =>
-        Promise.resolve({ httpStatus: 202, body: { status: 'ACCEPTED' } });
-
-      await expect(service.sendCancel(sendRequest)).resolves.toEqual({
-        result: 'ACCEPTED',
-      });
-    });
-
-    it('PG가 즉시 취소한 응답은 거래 ID·실제 취소액과 함께 SUCCEEDED로 분류된다', async () => {
-      client.sendResponse = () =>
+describe('PgService 성공 결과 검증', () => {
+  it('거래 ID가 비어 있는 취소 성공은 UNKNOWN이다', async () => {
+    const client = {
+      requestPaymentCancel: () =>
         Promise.resolve({
-          httpStatus: 200,
-          body: {
-            status: 'SUCCEEDED',
-            pgTransactionId: 'pg-cancel-tx-1',
-            cancelledAmount: 10000,
-          },
-        });
-
-      await expect(service.sendCancel(sendRequest)).resolves.toEqual({
-        result: 'SUCCEEDED',
-        pgTransactionId: 'pg-cancel-tx-1',
-        cancelledAmount: 10000,
-      });
-    });
-
-    it('PG가 거절한 응답은 사유와 함께 REJECTED로 분류된다', async () => {
-      client.sendResponse = () =>
-        Promise.resolve({
-          httpStatus: 200,
-          body: { status: 'REJECTED', reason: '취소 가능 기간 경과' },
-        });
-
-      await expect(service.sendCancel(sendRequest)).resolves.toEqual({
-        result: 'REJECTED',
-        reason: '취소 가능 기간 경과',
-      });
-    });
-
-    it('취소 전송 응답이 제한 시간을 넘으면 결과 불명(UNKNOWN)이다', async () => {
-      vi.useFakeTimers();
-      client.sendResponse = () => new Promise<PgRawResponse>(() => {});
-
-      const pending = service.sendCancel(sendRequest);
-      await vi.advanceTimersByTimeAsync(pgTimeoutSeconds * 1000);
-
-      await expect(pending).resolves.toMatchObject({ result: 'UNKNOWN' });
-    });
-
-    it.each([
-      [
-        '비동기 거부',
-        (): Promise<PgRawResponse> => Promise.reject(new Error('socket reset')),
-      ],
-      [
-        '동기 throw',
-        (): Promise<PgRawResponse> => {
-          throw new Error('socket reset');
-        },
-      ],
-    ])(
-      '송신 중 전송 계층이 예외(%s)를 내면 보내졌는지 모르므로 UNKNOWN이다',
-      async (_kind, failure) => {
-        client.sendResponse = failure;
-
-        await expect(service.sendCancel(sendRequest)).resolves.toMatchObject({
-          result: 'UNKNOWN',
-        });
-      },
-    );
-
-    it('중단 신호에 반응해 거부하는 전송 계층이라도 송신 시간 초과는 시간 초과 사유의 UNKNOWN이다', async () => {
-      vi.useFakeTimers();
-      client.sendResponse = rejectOnAbort;
-
-      const pending = service.sendCancel(sendRequest);
-      await vi.advanceTimersByTimeAsync(pgTimeoutSeconds * 1000);
-
-      await expect(pending).resolves.toEqual({
-        result: 'UNKNOWN',
-        reason: 'PG 송신 응답 시간 초과',
-      });
-    });
-
-    it.each([
-      [{ status: 'ACCEPTED' }],
-      [
-        {
-          status: 'SUCCEEDED',
-          pgTransactionId: 'untrusted-id',
+          result: 'SUCCEEDED',
+          paymentCancelId: 'invalid',
+          pgTransactionId: '',
           cancelledAmount: 100,
-        },
-      ],
-    ])(
-      '비정상 HTTP 상태(401) 응답은 본문이 %p여도 UNKNOWN이다',
-      async (body) => {
-        client.sendResponse = () => Promise.resolve({ httpStatus: 401, body });
+        }),
+    } as unknown as PgClient;
+    const service = new PgService({} as TransactionLoggerService, client, {
+      get: () => 10,
+    } as unknown as ConfigService);
+    expect(
+      await service.requestPaymentCancel({
+        paymentCancelId: 'invalid',
+        amount: 100,
+      }),
+    ).toMatchObject({ result: 'UNKNOWN' });
+  });
+});
+describe('PgService 조회 거래 ID 검증', () => {
+  it('조회 성공의 빈 거래 ID는 QUERY_ERROR다', async () => {
+    const client = {
+      inquirePaymentCancel: () =>
+        Promise.resolve({
+          result: 'SUCCEEDED',
+          paymentCancelId: 'invalid',
+          pgTransactionId: '',
+          cancelledAmount: 100,
+        }),
+    } as unknown as PgClient;
+    const service = new PgService({} as TransactionLoggerService, client, {
+      get: () => 10,
+    } as unknown as ConfigService);
+    expect(
+      await service.inquirePaymentCancel({ paymentCancelId: 'invalid' }),
+    ).toMatchObject({ result: 'QUERY_ERROR' });
+  });
+});
+describe('PgService 실제 취소액 검증', () => {
+  it('요청 성공의 음수 실제액은 UNKNOWN이다', async () => {
+    const client = {
+      requestPaymentCancel: () =>
+        Promise.resolve({
+          result: 'SUCCEEDED',
+          paymentCancelId: 'invalid',
+          pgTransactionId: 'tx',
+          cancelledAmount: -1,
+        }),
+    } as unknown as PgClient;
+    const service = new PgService({} as TransactionLoggerService, client, {
+      get: () => 10,
+    } as unknown as ConfigService);
+    expect(
+      await service.requestPaymentCancel({
+        paymentCancelId: 'invalid',
+        amount: 100,
+      }),
+    ).toMatchObject({ result: 'UNKNOWN' });
+  });
+});
+describe('PgService 조회 실제액 검증', () => {
+  it('조회 성공의 음수 실제액은 QUERY_ERROR다', async () => {
+    const client = {
+      inquirePaymentCancel: () =>
+        Promise.resolve({
+          result: 'SUCCEEDED',
+          paymentCancelId: 'invalid',
+          pgTransactionId: 'tx',
+          cancelledAmount: -1,
+        }),
+    } as unknown as PgClient;
+    const service = new PgService({} as TransactionLoggerService, client, {
+      get: () => 10,
+    } as unknown as ConfigService);
+    expect(
+      await service.inquirePaymentCancel({ paymentCancelId: 'invalid' }),
+    ).toMatchObject({ result: 'QUERY_ERROR' });
+  });
+});
 
-        await expect(service.sendCancel(sendRequest)).resolves.toMatchObject({
-          result: 'UNKNOWN',
+describe('PgService 성공 정보 경계', () => {
+  for (const operation of [
+    'requestPaymentCancel',
+    'inquirePaymentCancel',
+  ] as const) {
+    it.each([
+      { pgTransactionId: undefined, cancelledAmount: 100 },
+      { pgTransactionId: '   ', cancelledAmount: 100 },
+      ...[undefined, 0.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1].map(
+        (cancelledAmount) => ({ pgTransactionId: 'tx', cancelledAmount }),
+      ),
+    ])(
+      `${operation}의 잘못된 성공 정보 %j를 지급 근거로 전달하지 않는다`,
+      async (fields) => {
+        const client = {
+          [operation]: () =>
+            Promise.resolve({
+              result: 'SUCCEEDED',
+              paymentCancelId: 'invalid',
+              ...fields,
+            }),
+        } as unknown as PgClient;
+        const service = new PgService({} as TransactionLoggerService, client, {
+          get: () => 10,
+        } as unknown as ConfigService);
+        expect(
+          await service[operation]({ paymentCancelId: 'invalid', amount: 100 }),
+        ).toMatchObject({
+          result:
+            operation === 'requestPaymentCancel' ? 'UNKNOWN' : 'QUERY_ERROR',
         });
       },
     );
-  });
+    it.each([0, Number.MAX_SAFE_INTEGER])(
+      `${operation}의 유효한 실제액 %s를 그대로 전달한다`,
+      async (cancelledAmount) => {
+        const result = {
+          result: 'SUCCEEDED',
+          paymentCancelId: 'valid',
+          pgTransactionId: 'tx',
+          cancelledAmount,
+        };
+        const client = {
+          [operation]: () => Promise.resolve(result),
+        } as unknown as PgClient;
+        const service = new PgService({} as TransactionLoggerService, client, {
+          get: () => 10,
+        } as unknown as ConfigService);
+        expect(
+          await service[operation]({ paymentCancelId: 'valid', amount: 100 }),
+        ).toEqual(result);
+      },
+    );
+  }
+});
+
+describe('PG 성공 응답의 요청 식별자 대조', () => {
+  for (const operation of [
+    'requestPaymentCancel',
+    'inquirePaymentCancel',
+  ] as const) {
+    it.each([undefined, '', 'another-cancel', 'requested-cancel'])(
+      `${operation}: 응답 paymentCancelId=%s를 요청 ID와 대조한다`,
+      async (paymentCancelId) => {
+        const response = {
+          result: 'SUCCEEDED',
+          paymentCancelId,
+          pgTransactionId: 'pg-cancel',
+          cancelledAmount: 100,
+        };
+        const client = {
+          [operation]: () => Promise.resolve(response),
+        } as unknown as PgClient;
+        const service = new PgService({} as TransactionLoggerService, client, {
+          get: () => 10,
+        } as unknown as ConfigService);
+        const result = await service[operation]({
+          paymentCancelId: 'requested-cancel',
+          amount: 100,
+        });
+        if (paymentCancelId === 'requested-cancel')
+          expect(result).toEqual(response);
+        else
+          expect(result).toMatchObject({
+            result:
+              operation === 'requestPaymentCancel' ? 'UNKNOWN' : 'QUERY_ERROR',
+          });
+      },
+    );
+  }
 });

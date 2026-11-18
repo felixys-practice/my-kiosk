@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import * as Joi from 'joi';
 
 /**
@@ -65,6 +66,13 @@ export const validationSchema = Joi.object({
     .valid('development', 'production', 'test')
     .default('development'),
   PORT: Joi.number().default(3000),
+  PG_MODE: Joi.string().valid('simulated', 'production').required().messages({
+    'any.required':
+      'PG_MODE_INVALID: PG_MODE를 simulated 또는 production으로 지정해야 합니다',
+    'any.only':
+      'PG_MODE_INVALID: PG_MODE는 simulated 또는 production이어야 합니다',
+    'string.empty': 'PG_MODE_INVALID: PG_MODE를 지정해야 합니다',
+  }),
 
   // PostgreSQL
   DATABASE_URL: Joi.string().required(),
@@ -111,8 +119,52 @@ export const validationSchema = Joi.object({
   PG_CALLBACK_MAX_SKEW_SECONDS: Joi.number().integer().min(1).default(300), // 콜백 서명 시각 오차 허용(초)
   PG_CALLBACK_SECRET: Joi.string().min(32).required(), // 공유 서명 비밀값(최소 32자), 기본값 없음
 })
+  .custom((env: Record<string, unknown>, helpers) => {
+    if (env.NODE_ENV === 'production' && env.PG_MODE === 'simulated') {
+      return helpers.error(
+        'pg.forbidden',
+        {},
+        { ...helpers.state, path: ['PG_MODE'] },
+      );
+    }
+    return env;
+  })
   .custom(checkRefundRelations)
   .messages({
+    'pg.forbidden':
+      'PG_MODE_FORBIDDEN: 운영 환경에서는 모의 PG를 사용할 수 없습니다',
     'number.greater': '{{#label}} must be greater than {{#limit}}',
     'number.min': '{{#label}} must be greater than or equal to {{#limit}}',
   });
+
+/** 설정값을 출력하지 않고 항목명과 고정된 사유로 서버 시작을 거부한다. */
+export function validateEnvironment(
+  env: Record<string, unknown>,
+): Record<string, unknown> {
+  const result = validationSchema.validate(env, {
+    allowUnknown: true,
+    abortEarly: false,
+  });
+  const error = result.error;
+  if (!error) return result.value as Record<string, unknown>;
+  const fields = [
+    ...new Set(error.details.map((detail) => detail.path.join('.'))),
+  ];
+  const modeError = error.details.find(
+    (detail) => detail.path[0] === 'PG_MODE',
+  );
+  const forbidden =
+    env.NODE_ENV === 'production' && env.PG_MODE === 'simulated';
+  const code = modeError
+    ? forbidden
+      ? 'PG_MODE_FORBIDDEN'
+      : 'PG_MODE_INVALID'
+    : 'CONFIGURATION_INVALID';
+  const reason = modeError
+    ? forbidden
+      ? '운영 환경에서는 모의 PG를 사용할 수 없습니다'
+      : 'PG_MODE를 simulated 또는 production으로 지정해야 합니다'
+    : '서버 필수 설정이 없거나 유효하지 않습니다';
+  new Logger('Configuration').error({ code, fields, reason });
+  throw new Error(`${code}: ${reason} (${fields.join(', ')})`);
+}
