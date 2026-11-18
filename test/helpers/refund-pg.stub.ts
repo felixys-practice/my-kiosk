@@ -3,13 +3,13 @@
  * - 실제 PG 대신 송신·조회 결과를 테스트가 미리 정한다
  * - 호출된 PG 취소 요청 식별자(PaymentCancel.id)와 금액을 기록해 테스트가 확인할 수 있게 한다
  * - 응답 지연과 응답 전 중단(연결 끊김·프로세스 중단 흉내)을 제어한다
- * - 결과 타입은 운영 코드의 계약 §8 타입(src/pg/pg.types.ts)을 그대로 쓰고, RefundPgGateway를 구현한다
+ * - 결과 타입은 운영 코드의 계약 §8 타입(src/pg/pg.types.ts)을 그대로 쓰고, PgService의 취소 요청·조회 메서드만 구현한다
  */
 import type {
   PgCancelQueryResult,
   PgCancelSendResult,
 } from '../../src/pg/pg.types';
-import type { RefundPgGateway } from '../../src/pg/refund-pg.gateway';
+import { PgService } from '../../src/pg/pg.service';
 
 /** 대역이 받은 송신 호출 기록 */
 export type PgCancelSendCall = {
@@ -34,17 +34,25 @@ export class PgStubInterruptedError extends Error {
 
 type Operation = 'send' | 'inquiry';
 
+// PG 대역은 호출받은 ID를 성공 응답에 되돌려준다. 계획에는 결과·금액만 지정할 수 있다.
+type PlannedResult<T> = T extends { result: 'SUCCEEDED' }
+  ? Omit<T, 'paymentCancelId'> & { paymentCancelId?: string }
+  : T;
+
 /** 다음 호출 하나에 적용할 동작: 결과를 돌려주거나 응답 전에 중단한다 */
 type Planned<T> = { kind: 'respond'; value: T } | { kind: 'interrupt' };
 
-export class RefundPgStub implements RefundPgGateway {
+export class RefundPgStub implements Pick<
+  PgService,
+  'requestPaymentCancel' | 'inquirePaymentCancel'
+> {
   /** 받은 송신 호출 (호출 순서대로) */
   readonly sendCalls: PgCancelSendCall[] = [];
   /** 받은 조회 호출 (호출 순서대로) */
   readonly inquiryCalls: PgCancelInquiryCall[] = [];
 
-  private sendPlan: Planned<PgCancelSendResult>[] = [];
-  private inquiryPlan: Planned<PgCancelQueryResult>[] = [];
+  private sendPlan: Planned<PlannedResult<PgCancelSendResult>>[] = [];
+  private inquiryPlan: Planned<PlannedResult<PgCancelQueryResult>>[] = [];
   private delayMs = 0;
 
   /**
@@ -61,7 +69,7 @@ export class RefundPgStub implements RefundPgGateway {
    * @param results 호출 순서대로 돌려줄 결과
    * @returns 이 대역(연쇄 호출용)
    */
-  respondToSend(...results: PgCancelSendResult[]): this {
+  respondToSend(...results: PlannedResult<PgCancelSendResult>[]): this {
     // 결과마다 호출 하나를 소비하도록 계획에 추가한다
     this.sendPlan.push(
       ...results.map((value) => ({ kind: 'respond' as const, value })),
@@ -74,7 +82,7 @@ export class RefundPgStub implements RefundPgGateway {
    * @param results 호출 순서대로 돌려줄 결과
    * @returns 이 대역(연쇄 호출용)
    */
-  respondToInquiry(...results: PgCancelQueryResult[]): this {
+  respondToInquiry(...results: PlannedResult<PgCancelQueryResult>[]): this {
     // 결과마다 호출 하나를 소비하도록 계획에 추가한다
     this.inquiryPlan.push(
       ...results.map((value) => ({ kind: 'respond' as const, value })),
@@ -125,7 +133,7 @@ export class RefundPgStub implements RefundPgGateway {
    * @returns 정해 둔 송신 결과
    * @throws PgStubInterruptedError 응답 전 중단이 계획돼 있을 때
    */
-  async sendCancel(request: {
+  async requestPaymentCancel(request: {
     paymentCancelId: string;
     amount: number;
   }): Promise<PgCancelSendResult> {
@@ -135,12 +143,18 @@ export class RefundPgStub implements RefundPgGateway {
     // 계획된 동작을 꺼내 지연 후 적용한다
     const planned = this.sendPlan.shift();
     await this.wait();
-    return this.apply(
+    const result = this.apply(
       planned,
       this.defaultSend,
       'send',
       request.paymentCancelId,
     );
+    return result.result === 'SUCCEEDED'
+      ? {
+          ...result,
+          paymentCancelId: result.paymentCancelId ?? request.paymentCancelId,
+        }
+      : result;
   }
 
   /**
@@ -149,7 +163,7 @@ export class RefundPgStub implements RefundPgGateway {
    * @returns 정해 둔 조회 결과
    * @throws PgStubInterruptedError 응답 전 중단이 계획돼 있을 때
    */
-  async inquireCancel(request: {
+  async inquirePaymentCancel(request: {
     paymentCancelId: string;
   }): Promise<PgCancelQueryResult> {
     // 호출을 기록한다
@@ -158,12 +172,18 @@ export class RefundPgStub implements RefundPgGateway {
     // 계획된 동작을 꺼내 지연 후 적용한다
     const planned = this.inquiryPlan.shift();
     await this.wait();
-    return this.apply(
+    const result = this.apply(
       planned,
       this.defaultInquiry,
       'inquiry',
       request.paymentCancelId,
     );
+    return result.result === 'SUCCEEDED'
+      ? {
+          ...result,
+          paymentCancelId: result.paymentCancelId ?? request.paymentCancelId,
+        }
+      : result;
   }
 
   /**

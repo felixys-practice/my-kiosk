@@ -2,7 +2,7 @@
 import { vi } from 'vitest';
 import request from 'supertest';
 import { PaymentCancelStatus, RefundPayoutStatus } from '@prisma/client';
-import { REFUND_PG_GATEWAY } from '../src/pg/refund-pg.gateway';
+import { PgService } from '../src/pg/pg.service';
 import {
   createRefundTestContext,
   RefundTestContext,
@@ -50,7 +50,7 @@ describe('PG 콜백 서명 인증 (E2E)', () => {
     ctx = await createRefundTestContext({
       label: 'callback-auth',
       configure: (builder) =>
-        builder.overrideProvider(REFUND_PG_GATEWAY).useValue(pgStub),
+        builder.overrideProvider(PgService).useValue(pgStub),
     });
   });
 
@@ -72,7 +72,6 @@ describe('PG 콜백 서명 인증 (E2E)', () => {
         success: true,
         paymentCancelId: pending.paymentCancelId,
         pgTransactionId: `pg-cancel-${pending.paymentCancelId}`,
-        orderItemId: pending.orderItemId,
         amount: pending.amount,
       });
 
@@ -103,7 +102,6 @@ describe('PG 콜백 서명 인증 (E2E)', () => {
       success: true,
       paymentCancelId: pending.paymentCancelId,
       pgTransactionId: `pg-cancel-${pending.paymentCancelId}`,
-      orderItemId: pending.orderItemId,
       amount: pending.amount,
     };
   }

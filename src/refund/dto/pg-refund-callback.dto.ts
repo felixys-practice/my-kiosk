@@ -28,18 +28,6 @@ export class PgRefundCallbackDto {
   })
   pgTransactionId!: string;
 
-  // 상품 대상이면 그 주문 상품, 결제 전체(PAYMENT) 대상이면 null(API 계약 §7)
-  @IsOptional()
-  @IsUUID()
-  @ApiPropertyOptional({
-    type: String,
-    description: '주문 상품 ID. 결제 전체 대상이면 null입니다.',
-    format: 'uuid',
-    nullable: true,
-    example: '123e4567-e89b-42d3-a456-426614174000',
-  })
-  orderItemId!: string | null;
-
   @IsUUID()
   @ApiProperty({
     type: String,

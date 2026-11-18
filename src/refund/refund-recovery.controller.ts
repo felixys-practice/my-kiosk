@@ -7,8 +7,8 @@ import { RefundAccessService } from './refund-access.service';
 import { RefundRecoveryService } from './refund-recovery.service';
 import { ApiOperation, ApiTags, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
 import {
-  ApiRefundResponse,
-  ApiRefundErrors,
+  apiRefundResponse,
+  apiRefundErrors,
   recoveryResumeSchema,
   recoveryStatusSchema,
 } from './refund.swagger';
@@ -30,8 +30,8 @@ export class RefundRecoveryController {
    * @param user 요청한 사용자(JWT)
    * @returns 모드·실행 여부·건수·가장 오래된 결과 확인 실패 시각·다음 확인 시각
    */
-  @ApiRefundResponse(200, '운영자 전용 복구 현황', recoveryStatusSchema)
-  @ApiRefundErrors(400, 401, 403, 404)
+  @apiRefundResponse(200, '운영자 전용 복구 현황', recoveryStatusSchema)
+  @apiRefundErrors(400, 401, 403, 404)
   @ApiOperation({ summary: '운영자의 PG 취소 결과 장애 복구 현황 조회' })
   @Get('status')
   async status(@CurrentUser() user: JwtValidationResult) {
@@ -54,9 +54,9 @@ export class RefundRecoveryController {
     description: '본문 생략 또는 빈 객체만 허용합니다.',
     schema: { type: 'object', additionalProperties: false },
   })
-  @ApiRefundResponse(200, '작업 없음 또는 이미 실행 중', recoveryResumeSchema)
-  @ApiRefundResponse(202, '전체 재조회 예약 완료', recoveryResumeSchema)
-  @ApiRefundErrors(400, 401, 403, 404)
+  @apiRefundResponse(200, '작업 없음 또는 이미 실행 중', recoveryResumeSchema)
+  @apiRefundResponse(202, '전체 재조회 예약 완료', recoveryResumeSchema)
+  @apiRefundErrors(400, 401, 403, 404)
   @ApiOperation({ summary: '운영자가 결과 확인 실패 건의 전체 재조회를 예약' })
   @Post('resume')
   async resume(

@@ -32,9 +32,9 @@ PG 결과는 NOT_SENT·UNKNOWN·ACCEPTED·정상액 성공·거절·authoritativ
 - 정기권 대기 시간·시간권 소진 기한을 정지/연장하지 않는다. 이미 종료한 이용권은 지급에 따라 이용 기간이 다시 생기지 않는다.
 - 백그라운드 자동 작업은 미접수 확인 뒤 모든 경로에 같은 자동 재전송 한도를 적용한다. 한도 소진과 PG 미접수 확인이 함께 있어야 FAILED·운영자 처리로 전환한다. 이후 sweep·PROBE·BATCH에서 해당 FAILED 시도의 PG 호출이 더 생기지 않는지 확인한다. 결과 미확정이면 계속 조회하며 새 지급은 차단한다.
 - QUERY_FAILED는 긴 간격마다 전체에서 1건 조회, 정상 응답 뒤 배치 조회다. PG 처리 중은 정상 통신일 뿐 PAID가 아니다.
-- 자동 횟수 0·한도 직전·소진에서도 미확정 시도의 확실한 미접수는 기존 ID로 즉시 재전송한다. 최근 시도가 이미 세 실패 사유로 FAILED이면 10-1a 조건으로 새 ID를 만든다. 미확정 요청의 조회에서 새로 확인한 거절은 실패·조치 필요만 기록하고 같은 실행에서 새 요청을 만들지 않는다. 조회 오류·처리 중·실제 지급액 있음·활성 예약에는 전송하지 않는다. 최근 시도가 RETRY_EXHAUSTED·SEND_FAILED·PG_REJECTED로 이미 FAILED인 경우를 각각 준비한다. 개별 조회에서 authoritative NOT_FOUND 또는 거절 확정이면 실제 환불금 지급액 0원·다른 미확정 지급 없음·지급 방식 PG·활성 별도 지급 예약 없음·유효한 자기 담당 토큰을 확인해 별도 버튼·사유 입력 없이 같은 환불 금액의 새 PaymentCancel을 즉시 전송한다. 이전 실패 이력·횟수·이용 종료와 조회 시각 승계를 확인한다. QUERY_ERROR이면 새 요청을 만들지 않고, 처리 중·취소 성공 등 모순이면 PG_RESULT_CONFLICT·운영자 알림과 추가 지급 차단을 검증한다. 기존 미확정 요청 재전송은 manualResendCount만 증가시키고 자동 횟수는 바꾸지 않는다.
-- 점주·운영자는 개별 확인으로 세 실패 사유의 최근 FAILED 요청을 다시 보낼 수 있다. 직접 payout-retries는 MANAGER만 실행하며 사유·요청 키·같은 키 재응답·권한·상태 오류를 검증한다.
-- 알려진 실패 뒤 MANAGER 재시도는 같은 Refund·확정된 환불 금액·새 식별자를 발급한 PG 취소 요청으로 수행한다. 이미 일부 지급됐으면 PG 전액 재시도를 막는다.
+- 자동 횟수 0·한도 직전·소진에서도 미확정 시도의 확실한 미접수는 기존 ID로 즉시 재전송한다. 최근 시도가 이미 세 실패 사유로 FAILED이면 10-1a 조건으로 새 ID를 만든다. 미확정 요청의 조회에서 새로 확인한 거절은 실패·조치 필요만 기록하고 같은 실행에서 새 요청을 만들지 않는다. 조회 오류·처리 중·실제 지급액 있음·활성 예약에는 전송하지 않는다. 최근 시도가 RETRY_EXHAUSTED·SEND_FAILED·PG_REJECTED로 이미 FAILED인 경우를 각각 준비한다. 개별 조회에서 authoritative NOT_FOUND 또는 거절 확정이면 실제 환불금 지급액 0원·다른 미확정 지급 없음·지급 방식 PG·활성 별도 지급 예약 없음·유효한 자기 담당 토큰을 확인해 별도 버튼·사유 입력 없이 같은 환불 금액의 새 PaymentCancel을 즉시 전송한다. 이전 실패 이력·횟수·이용 종료와 조회 시각 승계를 확인한다. QUERY_ERROR이면 새 요청을 만들지 않는다. SEND_FAILED·RETRY_EXHAUSTED의 성공 조회는 기존 요청에 실제 취소 결과·환불 지급액·원장을 반영하고, 처리 중 조회는 기존 요청의 조회를 재개한다. PG_REJECTED의 성공·처리 중 조회만 기존 거절과의 모순으로 처리해 PG_RESULT_CONFLICT·운영자 알림과 추가 지급 차단을 검증한다. 기존 미확정 요청 재전송은 manualResendCount만 증가시키고 자동 횟수는 바꾸지 않는다.
+- 점주·운영자는 같은 pg-check로 세 실패 사유의 최근 FAILED 요청을 조회하고, 미접수·최종 거절이 확인되면 새 요청을 전송한다. 사유·요청 키는 필수가 아니다. 반복·동시 실행, 지급 완료·예약·일부 지급 시 PG 미호출, 폐지한 payout-retries의 404 응답을 검증한다.
+- 실패한 요청의 점주·운영자 개별 확인에서 미접수·최종 거절이 확인되면 같은 Refund·확정된 환불 금액으로 새 PaymentCancel을 생성해 전송한다. 이미 일부 지급됐으면 PG 전액 재시도를 막는다.
 - 별도 환불금 지급은 미지급액 예약→실제 외부 지급→증빙 확정이다. 예약 중 다른 환불금 지급을 막고 환불금 지급 여부 불명은 TTL로 해제하지 않는다.
 - PG 부족액은 실제액 원장 후 부족액만 환불금을 별도로 지급한다. 초과액은 추가 환불금 지급 없이 검토 기록을 남긴다. 금액·원장 덮어쓰기는 없다.
 - 같은 지급의 중복 콜백·조회·수동 확정은 합계·원장·알림을 한 번만 바꾼다. 같은 외부 거래 키를 다른 환불에 재사용하면 거부한다.
@@ -46,7 +46,7 @@ PG 결과는 NOT_SENT·UNKNOWN·ACCEPTED·정상액 성공·거절·authoritativ
 1. 고객/점주가 동시에 환불을 요청해도 확정된 `Refund`는 1건만 생성한다. 입실이 먼저 완료되면 사용 이력 때문에 고객 환불 요청을 거절한다. 환불 확정이 먼저면 이용권은 종료 상태이므로 뒤이은 입실 요청에 HTTP 409와 `TICKET_TERMINATED` 오류 코드를 반환한다.
 2. 확정 커밋 전 중단은 이용 종료·환불 모두 롤백하고 PG 호출 0회다. 커밋 뒤 전송 전 중단은 종료·환불·시도를 유지하고 조회로 확인한다.
 3. PG 성공 직후 DB 저장 실패·콜백 중복·조회 경쟁은 같은 시도와 원장을 한 번만 반영한다. 합계를 중복 가산하지 않는다.
-4. 점주·MANAGER의 개별 확인, MANAGER 직접 재시도와 별도 예약이 동시에 요청되면, 각 처리는 Refund 행 잠금을 획득한 트랜잭션에서 다른 지급 처리의 상태를 재검사해 중복 지급을 막는다. 각 테이블의 partial unique만 검사하고 교차 경합을 놓치지 않는다.
+4. 점주·MANAGER의 개별 확인과 별도 지급 예약이 동시에 요청되면, 각 처리는 Refund 행 잠금을 획득한 트랜잭션에서 다른 지급 처리의 상태를 재검사해 중복 지급을 막는다. 각 테이블의 partial unique만 검사하고 교차 경합을 놓치지 않는다.
 5. 별도 환불금 지급 예약 뒤 중단·운영자 변경·증빙 확인 지연에도 다른 환불금 지급을 시작하지 않는다. 확인되지 않은 송금의 재실행을 막는다.
 6. 기존 자동 종료·정지 재개·좌석 타입/배정 변경이 REVOKED를 덮어쓰지 않는다. 남은 퇴실 Job이 이중 차감하지 않는다.
 7. 서비스 전 개발 데이터를 폐기할 수 있으므로 과거 환불 이관은 제외한다. 빈 검증용 DB에 스키마·제약을 적용하고 테스트 데이터를 생성해 전체 회귀를 확인한다. 기존 운영 데이터 복제본 전환 검증은 하지 않는다.
@@ -139,12 +139,12 @@ SC-004는 PG 최종 결과 정상 응답·무적체 조건에서 60초 대기+15
 | 9-4a | 환불·알림 GET/PATCH | 자기 환불의 알림만 보인다. | test/refund-notifications.e2e-spec.ts / QS-9-4a |
 | 9-4b | 환불·알림 GET/PATCH | 안 읽은 알림 조회에서 빠지고 전체 조회에는 읽음으로 남는다. 다른 사람의 알림은 읽음 처리할 수 없다. | test/refund-notifications.e2e-spec.ts / QS-9-4b |
 | 9-5 | 환불·알림 GET/PATCH | 그 알림이 보인다. | test/refund-notifications.e2e-spec.ts / QS-9-5 |
-| 10-1 | POST /refund/:refundId/payout-retries | 같은 환불·같은 금액(확정된 환불 금액)으로 취소 요청을 새 PG 취소 요청 식별자로 기록하고 실행자·사유를 기록한다. 이용권·좌석은 복구하지 않는다. | test/refund-operations.e2e-spec.ts / QS-10-1 |
-| 10-1a | POST /refund/:refundId/pg-check | 최근 시도가 RETRY_EXHAUSTED·SEND_FAILED·PG_REJECTED로 이미 FAILED인 경우를 각각 준비한다. 개별 조회에서 authoritative NOT_FOUND 또는 거절 확정이면 실제 환불금 지급액 0원·다른 미확정 지급 없음·지급 방식 PG·활성 별도 지급 예약 없음·유효한 자기 담당 토큰을 확인해 별도 버튼·사유 입력 없이 같은 환불 금액의 새 PaymentCancel을 즉시 전송한다. 이전 실패 이력·횟수·이용 종료와 조회 시각 승계를 확인한다. QUERY_ERROR이면 새 요청을 만들지 않고, 처리 중·취소 성공 등 모순이면 PG_RESULT_CONFLICT·운영자 알림과 추가 지급 차단을 검증한다. | test/refund-operations.e2e-spec.ts / QS-10-1a |
+| 10-1 | POST /refund/:refundId/pg-check | 기존 실패 요청으로 PG 미접수를 조회한 뒤 같은 환불·같은 확정 금액의 새 요청을 생성해 전송하고 실행자·재시도 사유를 기록한다. 이용권·좌석은 복구하지 않는다. | test/refund-operations.e2e-spec.ts / QS-10-1 |
+| 10-1a | POST /refund/:refundId/pg-check | 최근 시도가 RETRY_EXHAUSTED·SEND_FAILED·PG_REJECTED로 이미 FAILED인 경우를 각각 준비한다. 개별 조회에서 authoritative NOT_FOUND 또는 거절 확정이면 실제 환불금 지급액 0원·다른 미확정 지급 없음·지급 방식 PG·활성 별도 지급 예약 없음·유효한 자기 담당 토큰을 확인해 별도 버튼·사유 입력 없이 같은 환불 금액의 새 PaymentCancel을 즉시 전송한다. 이전 실패 이력·횟수·이용 종료와 조회 시각 승계를 확인한다. QUERY_ERROR이면 새 요청을 만들지 않는다. SEND_FAILED의 IN_PROGRESS 조회는 기존 요청의 조회를 재개하고 충돌 알림을 만들지 않는지 확인한다. | test/refund-operations.e2e-spec.ts / QS-10-1a |
 | 10-1b | POST /refund/:refundId/pg-check · 자동 작업 | 10-1a로 PG에 취소 요청을 새 PG 취소 요청 식별자로 보낸 뒤 자동 작업은 정해진 횟수까지만 재전송한다. 이전 실패 시도의 상태·횟수는 바꾸지 않는다. 새 식별자를 발급한 PG 취소 요청도 한도 소진과 미접수로 실패하면 자동 처리를 멈추되, 점주·운영자의 개별 확인은 다시 실행할 수 있다. | test/refund-operations.e2e-spec.ts / QS-10-1b |
-| 10-1c | POST /refund/:refundId/payout-retries | K1로 만든 환불 R의 취소 요청 A를 미확정으로 유지한다. 첫 요청을 보낸 운영자가 K1을 다시 사용하면 환불 대상과 입력 사유를 첫 요청과 비교한다. 내용이 같으면 A가 담긴 최초 202 응답을 반환하고, 바뀌었으면 409 IDEMPOTENCY_KEY_REUSED로 거절한다. K2·K3 동시 요청은 환불 R 잠금 뒤 409 REFUND_PAYOUT_UNRESOLVED로 거절한다. 취소 요청 행과 PG 취소 호출이 추가되지 않는지 확인한다. | test/refund-operations.e2e-spec.ts / QS-10-1c |
-| 10-1d | POST /refund/:refundId/payout-retries | 고객·점주는 403 REFUND_FORBIDDEN. 운영자의 같은 키·같은 내용은 최초 응답 반환. 새 요청의 지급 완료·재처리 불가는 409 REFUND_PAYOUT_NOT_ACTIONABLE, 미확정 결과·활성 예약은 409 REFUND_PAYOUT_UNRESOLVED, 미지급액이 남은 일부 지급은 409 REFUND_PARTIAL_PAYOUT_REQUIRES_MANUAL. 거절·재응답에 기록·PG 호출 추가 없음. | test/refund-operations.e2e-spec.ts / QS-10-1d |
-| 10-2 | POST payout-retries / manual-payouts | 환불금 지급 결과 미확정 오류로 거부한다. | test/refund-operations.e2e-spec.ts / QS-10-2 |
+| 10-1c | POST /refund/:refundId/pg-check | 새 요청 생성 후 점주·운영자의 반복·동시 확인이 최근 조회 간격 안에서 200 RECENT_RESULT를 반환하고 PG 조회·전송과 요청 행을 추가하지 않는지 확인한다. 진행 중 조회와의 경쟁은 concurrency E2E에서 202 ALREADY_RUNNING으로 확인한다. | test/refund-operations.e2e-spec.ts / QS-10-1c · test/refund-concurrency.e2e-spec.ts |
+| 10-1d | POST /refund/:refundId/pg-check | 고객은 403 REFUND_FORBIDDEN. 지급 완료·활성 별도 지급 예약·일부 지급 환불은 200 NO_PENDING_ATTEMPT로 저장 상태만 반환하고 PG 호출·새 요청을 추가하지 않는다. 점주와 운영자는 같은 개별 확인 권한 규칙을 따른다. | test/refund-operations.e2e-spec.ts / QS-10-1d |
+| 10-2 | POST pg-check / manual-payouts | REQUESTED·QUERY_FAILED 요청의 개별 확인은 PG 처리 중 결과를 조회하고 새 요청을 만들지 않는다. 별도 지급 예약은 409 REFUND_PAYOUT_UNRESOLVED로 거부한다. | test/refund-operations.e2e-spec.ts / QS-10-2 |
 | 10-3 | POST /refund/:refundId/manual-payouts | 미지급액과 같은 금액을 예약하고 다른 PG 취소 요청·별도 환불금 지급을 차단한다. 예약은 환불금 지급 완료가 아니다. | test/refund-operations.e2e-spec.ts / QS-10-3 |
 | 10-4 | POST manual-payouts/:payoutId/confirm | 별도 환불금 지급과 실제 금액의 원장을 함께 한 번만 기록한다. 합계가 확정된 환불 금액에 이르고 검토 사항이 없으면 환불금 지급 완료가 된다. | test/refund-operations.e2e-spec.ts / QS-10-4 |
 | 10-5 | GET /refund/:refundId · GET /refund/notifications | 예약을 유지하고 운영자에게 확인을 요구한다. 시간 초과만으로 예약을 풀거나 다른 환불금 지급을 허용하지 않는다. | test/refund-operations.e2e-spec.ts / QS-10-5 |

@@ -11,7 +11,7 @@ export type PayoutRetryState = {
   amount: number; // 확정된 환불 금액
   paidAmount: number; // 실제 환불금 지급액 합계
   actionCode: string | null; // 조치 사유 코드(PG_RESULT_CONFLICT 등)
-  attempts: { status: PaymentCancelStatus; claimUntil: Date | null }[]; // 이 환불의 PG 취소 요청들
+  paymentCancels: { status: PaymentCancelStatus; claimUntil: Date | null }[]; // 이 환불의 PG 취소 요청들
   activeManualPayout: boolean; // 활성(RESERVED) 별도 환불금 지급 예약 여부
 };
 
@@ -45,10 +45,10 @@ export function hasUnresolvedPayout(
   return (
     state.activeManualPayout ||
     state.actionCode === 'PG_RESULT_CONFLICT' ||
-    state.attempts.some(
-      (attempt) =>
-        !finalStatuses.includes(attempt.status) ||
-        (attempt.claimUntil !== null && attempt.claimUntil > now),
+    state.paymentCancels.some(
+      (paymentCancel) =>
+        !finalStatuses.includes(paymentCancel.status) ||
+        (paymentCancel.claimUntil !== null && paymentCancel.claimUntil > now),
     )
   );
 }

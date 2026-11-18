@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
   PaymentCancelFailureCode,
@@ -6,9 +6,8 @@ import {
   RefundRecoveryMode,
 } from '@prisma/client';
 import { randomUUID } from 'crypto';
-import { REFUND_PG_GATEWAY } from 'src/pg/refund-pg.gateway';
-import type { RefundPgGateway } from 'src/pg/refund-pg.gateway';
-import { AttemptForResult, RefundRepository } from './refund.repository';
+import { PgService } from 'src/pg/pg.service';
+import { PaymentCancelForResult, RefundRepository } from './refund.repository';
 import { RefundLockingRepository } from './refund-locking.repository';
 import { RefundDispatchService } from './refund-dispatch.service';
 import { RefundResultService } from './refund-result.service';
@@ -49,7 +48,7 @@ export class RefundRecoveryService {
     private readonly workRepository: RefundWorkRepository,
     private readonly operationsService: RefundOperationsService,
     @InjectQueue(refundRecoveryQueueName) private readonly recoveryQueue: Queue,
-    @Inject(REFUND_PG_GATEWAY) private readonly pgGateway: RefundPgGateway,
+    private readonly pgService: PgService,
   ) {}
 
   /**
@@ -68,7 +67,8 @@ export class RefundRecoveryService {
       const itemNow = new Date(now.getTime() + (Date.now() - startedAt));
       await this.inquireAttempt(paymentCancelId, itemNow);
     }
-    // 예약 뒤 확인 기준 시간이 지난 별도 지급마다 운영자 미확인 알림을 한 번 남긴다(data-model §9)
+    // 별도 환불금 지급 예약 후 설정된 확인 대기 시간이 지나도록 지급 결과가 등록되지 않으면,
+    // 예약 건마다 운영자 미확인 알림을 한 번 남긴다. 예약은 해제하지 않는다.(data-model §9)
     await this.operationsService.alertUnconfirmedManualPayouts(
       new Date(now.getTime() + (Date.now() - startedAt)),
     );
@@ -263,16 +263,18 @@ export class RefundRecoveryService {
     const inquired = await this.runInquiry(paymentCancelId, now, true);
     // 개별 확인에 따른 재전송은 실행자·시각·사유를 거래 로그에 남긴다(API 계약 §8)
     if (inquired && inquired !== 'RECENT' && inquired.resendResult !== null) {
-      const attempt =
-        await this.refundRepository.findAttemptRefundIds(paymentCancelId);
+      const refundAndOrderIds =
+        await this.refundRepository.findRefundAndOrderIdsByPaymentCancelId(
+          paymentCancelId,
+        );
       this.txLogger.logTransaction({
-        transactionId: `REFUND-${attempt.refundId}-${paymentCancelId}-MANUAL-RESEND`,
+        transactionId: `REFUND-${refundAndOrderIds.refundId}-${paymentCancelId}-MANUAL-RESEND`,
         type: 'REFUND',
         userId: actorId,
-        orderId: attempt.orderId,
+        orderId: refundAndOrderIds.orderId,
         status: 'MANUAL_RESEND',
         metadata: {
-          refundId: attempt.refundId,
+          refundId: refundAndOrderIds.refundId,
           paymentCancelId,
           requestedAt: now.toISOString(),
           reason: '개별 확인에서 PG 미접수 확인 후 같은 요청 재전송',
@@ -288,7 +290,7 @@ export class RefundRecoveryService {
    * @param paymentCancelId 조회할 PG 취소 요청
    * @param now 조회 시각
    * @param manual 개별 확인이면 true
-   * @returns 조회·재전송 결과, 최근 조회 간격 안이면 RECENT, 담당을 맡지 못했으면 null
+   * @returns 조회·재전송 결과, 마지막 PG 조회 이후 대기 시간이 지나지 않았으면 RECENT, 담당을 맡지 못했으면 null
    */
   private async runInquiry(
     paymentCancelId: string,
@@ -297,18 +299,21 @@ export class RefundRecoveryService {
   ): Promise<InquiryOutcome | 'RECENT' | null> {
     // 1. Refund → PaymentCancel을 잠그고 조회 담당을 정한 뒤 커밋한다
     const claimToken = randomUUID();
-    const attempt = await this.claimForInquiry(
+    const inquiryClaimResult = await this.claimForInquiry(
       paymentCancelId,
       claimToken,
       now,
       manual,
     );
-    if (attempt === null || attempt === 'RECENT') return attempt;
+    if (inquiryClaimResult === null || inquiryClaimResult === 'RECENT')
+      return inquiryClaimResult;
 
     // 2. PG 조회는 트랜잭션 밖에서 한다
-    const result = await this.pgGateway.inquireCancel({ paymentCancelId });
+    const result = await this.pgService.inquirePaymentCancel({
+      paymentCancelId,
+    });
     const resendResult = await this.applyInquiryResult(
-      attempt,
+      inquiryClaimResult,
       claimToken,
       now,
       result,
@@ -319,7 +324,7 @@ export class RefundRecoveryService {
 
   /**
    * 조회 결과에 따라 반영·재전송·재조회 예약을 한다
-   * @param attempt 조회를 맡은 PG 취소 요청
+   * @param storedPaymentCancel 조회를 맡은 PG 취소 요청
    * @param claimToken 조회 담당 토큰
    * @param now 조회 시각
    * @param result PG 조회 결과
@@ -327,20 +332,21 @@ export class RefundRecoveryService {
    * @returns 다시 보냈으면 그 전송 결과 종류, 아니면 null
    */
   private async applyInquiryResult(
-    attempt: AttemptForResult,
+    storedPaymentCancel: PaymentCancelForResult,
     claimToken: string,
     now: Date,
     result: PgCancelQueryResult,
     manual: boolean,
   ): Promise<PgCancelSendResult['result'] | null> {
-    const paymentCancelId = attempt.id;
+    const paymentCancelId = storedPaymentCancel.id;
 
     // PG가 결과를 확정했으면 공통 결과 처리로 반영한다(성공: 실제액·원장, 거절: 시도 실패·조치 필요)
     if (result.result === 'SUCCEEDED') {
       await this.resultService.applyPgResult({
+        source: 'RECOVERY',
         paymentCancelId,
         claimToken,
-        outcome: {
+        pgCancelResult: {
           kind: 'SUCCEEDED',
           pgTransactionId: result.pgTransactionId,
           actualAmount: result.cancelledAmount,
@@ -350,9 +356,10 @@ export class RefundRecoveryService {
     }
     if (result.result === 'FAILED') {
       await this.resultService.applyPgResult({
+        source: 'RECOVERY',
         paymentCancelId,
         claimToken,
-        outcome: { kind: 'FAILED', reason: result.reason },
+        pgCancelResult: { kind: 'FAILED', reason: result.reason },
       });
       return null;
     }
@@ -364,25 +371,26 @@ export class RefundRecoveryService {
       if (manual) {
         return this.dispatchService.resendClaimed(
           paymentCancelId,
-          attempt.amount,
+          storedPaymentCancel.amount,
           claimToken,
           now,
           'manualResendCount',
         );
       }
-      if (attempt.resendCount < this.config('resendLimit')) {
+      if (storedPaymentCancel.resendCount < this.config('resendLimit')) {
         return this.dispatchService.resendClaimed(
           paymentCancelId,
-          attempt.amount,
+          storedPaymentCancel.amount,
           claimToken,
           now,
           'resendCount',
         );
       }
       await this.resultService.applyPgResult({
+        source: 'RECOVERY',
         paymentCancelId,
         claimToken,
-        outcome: {
+        pgCancelResult: {
           kind: 'FAILED',
           reason: '자동 재전송 한도를 소진한 뒤 PG 미접수 확인',
           failureCode: PaymentCancelFailureCode.RETRY_EXHAUSTED,
@@ -409,9 +417,9 @@ export class RefundRecoveryService {
 
     // 5. 조회 오류이면 결과를 단정하지 않고 지수 백오프 간격 뒤 다시 조회한다
     if (result.result === 'QUERY_ERROR') {
-      const failures = attempt.inquiryFailureCount + 1;
+      const failures = storedPaymentCancel.inquiryFailureCount + 1;
       // 이미 결과 확인 실패인 건은 진입 시각·알림을 반복하지 않고 오류만 기록한다(다음 확인은 장애 복구 확인)
-      if (attempt.status === PaymentCancelStatus.QUERY_FAILED) {
+      if (storedPaymentCancel.status === PaymentCancelStatus.QUERY_FAILED) {
         await this.refundRepository.recordRepeatedQueryError(
           paymentCancelId,
           claimToken,
@@ -458,49 +466,59 @@ export class RefundRecoveryService {
    * @param paymentCancelId PG 취소 요청
    * @param claimToken 새 담당 토큰
    * @param now 조회 시각
-   * @param manual 개별 확인이면 true(최근 조회 간격 안이면 맡지 않는다)
-   * @returns 맡은 시도, 최근 조회 간격 안이면 RECENT, 맡지 못하면 null
+   * @param manual 개별 확인이면 true. 마지막 PG 조회 이후 대기 시간이 지나지 않았으면 조회하지 않는다.
+   * @returns 맡은 시도, 마지막 PG 조회 이후 대기 시간이 지나지 않았으면 RECENT, 맡지 못하면 null
    */
   private claimForInquiry(
     paymentCancelId: string,
     claimToken: string,
     now: Date,
     manual: boolean,
-  ): Promise<AttemptForResult | 'RECENT' | null> {
+  ): Promise<PaymentCancelForResult | 'RECENT' | null> {
     return this.refundRepository.runInTransaction(async (tx) => {
-      const found = await this.refundRepository.findAttemptForResult(
+      const found = await this.refundRepository.findPaymentCancelForResult(
         paymentCancelId,
         tx,
       );
       if (!found) return null;
+      // 환불 처리 중 업데이트가 필요한 행들을 잠근다.
       await this.lockingRepository.lockForPayout(tx, {
         refundId: found.refund.id,
         paymentCancelIds: [found.id],
         manualRefundPayoutIds: [],
       });
-      const attempt = (await this.refundRepository.findAttemptForResult(
-        paymentCancelId,
-        tx,
-      ))!;
-      if (!inquirableStatuses.includes(attempt.status)) return null;
-      if (attempt.claimUntil && attempt.claimUntil > now) return null;
+      const storedPaymentCancel =
+        (await this.refundRepository.findPaymentCancelForResult(
+          paymentCancelId,
+          tx,
+        ))!;
+      if (!inquirableStatuses.includes(storedPaymentCancel.status)) return null;
+      if (
+        storedPaymentCancel.claimUntil &&
+        storedPaymentCancel.claimUntil > now
+      )
+        return null;
       // 개별 확인은 잠금 안에서 최근 조회 간격을 다시 확인한다(먼저 읽은 기록이 오래됐을 수 있다)
       if (
         manual &&
-        attempt.lastInquiryAt &&
-        now.getTime() - attempt.lastInquiryAt.getTime() <
+        storedPaymentCancel.lastInquiryAt &&
+        now.getTime() - storedPaymentCancel.lastInquiryAt.getTime() <
           this.config('queryIntervalSeconds') * 1000
       ) {
         return 'RECENT';
       }
-      await this.refundRepository.markInquiryStarted(tx, attempt.id, {
-        claimToken,
-        claimUntil: new Date(
-          now.getTime() + this.config('workLeaseSeconds') * 1000,
-        ),
-        now,
-      });
-      return attempt;
+      await this.refundRepository.markPgCancelStatusCheckAttempt(
+        tx,
+        storedPaymentCancel.id,
+        {
+          claimToken,
+          claimUntil: new Date(
+            now.getTime() + this.config('workLeaseSeconds') * 1000,
+          ),
+          now,
+        },
+      );
+      return storedPaymentCancel;
     });
   }
 

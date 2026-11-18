@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
 import request from 'supertest';
 import { randomUUID } from 'crypto';
-import { REFUND_PG_GATEWAY } from '../src/pg/refund-pg.gateway';
+import { PgService } from '../src/pg/pg.service';
 import {
   createRefundTestContext,
   RefundTestContext,
@@ -16,8 +16,7 @@ describe('환불 상태와 수신자별 알림 (E2E)', () => {
   beforeAll(async () => {
     ctx = await createRefundTestContext({
       label: 'notifications',
-      configure: (builder) =>
-        builder.overrideProvider(REFUND_PG_GATEWAY).useValue(pg),
+      configure: (builder) => builder.overrideProvider(PgService).useValue(pg),
     });
   });
   beforeEach(() => pg.reset());
@@ -61,7 +60,7 @@ describe('환불 상태와 수신자별 알림 (E2E)', () => {
     await signedCallback(ctx.server, '/refund/callback', {
       success: false,
       paymentCancelId: accepted.paymentCancelId,
-      orderItemId: accepted.orderItemId,
+
       pgTransactionId: randomUUID(),
       amount: accepted.amount,
       reason: '공개하지 않는 PG 원문',
@@ -162,7 +161,7 @@ describe('환불 상태와 수신자별 알림 (E2E)', () => {
     await signedCallback(ctx.server, '/refund/callback', {
       success: true,
       paymentCancelId: accepted.paymentCancelId,
-      orderItemId: accepted.orderItemId,
+
       pgTransactionId: randomUUID(),
       amount: accepted.amount - 1000,
     }).expect(200);
@@ -190,7 +189,7 @@ describe('환불 상태와 수신자별 알림 (E2E)', () => {
     const payload = {
       success: false,
       paymentCancelId: accepted.paymentCancelId,
-      orderItemId: accepted.orderItemId,
+
       pgTransactionId: randomUUID(),
       amount: accepted.amount,
       reason: '공개하지 않는 PG 원문',
@@ -251,7 +250,7 @@ describe('환불 상태와 수신자별 알림 (E2E)', () => {
     await signedCallback(ctx.server, '/refund/callback', {
       success: true,
       paymentCancelId: mismatch.paymentCancelId,
-      orderItemId: mismatch.orderItemId,
+
       pgTransactionId: randomUUID(),
       amount: mismatch.amount - 1000,
     }).expect(200);

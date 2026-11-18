@@ -168,7 +168,7 @@
 - [X] T069 [US4] [U130] `src/ledger/refund-ledger.repository.ts`에 실제 지급액의 음수·원래 shopId/orderId·RELEASABLE 원장을 현재 트랜잭션으로 저장한다. paymentCancelId, manualRefundPayoutId, 0원 refundId 고유성으로 지급별 중복을 막는다.
 - [X] T070 [US4] [U129] [U130] [U131] [U132] [U133] [U137] `src/refund/refund-result.service.ts`, `src/refund/refund.repository.ts`에 Refund→PaymentCancel 잠금 후 최종 상태·실제액·paidAmount·원장·필요 알림을 원자적으로 반영한다. 정상액은 PAID, 부족/초과액은 ACTION_REQUIRED·reviewRequired로 기록하고 확정된 환불 금액을 바꾸지 않는다. 실패·미확정에는 원장을 생성하지 않는다.
 - [X] T071 [US4] [U134] [U135] [U136] `src/refund/refund-result.service.ts`, `src/refund/refund-event.repository.ts`에 같은 최종 결과 재반영 방지와 모순되는 늦은 통보의 검토 필요·알림 기록을 구현한다. 담당 토큰이 바뀐 작업은 저장 결과를 반환하고 합산하지 않는다.
-- [X] T072 [US4] [U138] [U139] `src/refund/refund.controller.ts`, `src/refund/dto/pg-refund-callback.dto.ts`에서 콜백 대상을 PaymentCancel→Refund로 대조하고 공통 결과 처리로 연결한다. PAYMENT 대상 orderItemId는 null, PG 취소 거래 ID는 원승인과 구별한다. US7 완료 전에는 콜백을 공개 배포하지 않는다.
+- [X] T072 [US4] [U138] [U139] `src/refund/refund.controller.ts`, `src/refund/dto/pg-refund-callback.dto.ts`에서 콜백 대상을 PaymentCancel→Refund로 대조하고 공통 결과 처리로 연결한다. 콜백은 orderItemId를 받지 않으며, paymentCancelId로 취소 요청을 식별하고 PG 취소 거래 ID는 별도 저장한다. US7 완료 전에는 콜백을 공개 배포하지 않는다.
 
 - [X] T182 [US4] [A30] [A31] [A32] [A33] `test/refund-ledger.e2e-spec.ts`의 사용자 스토리 4 인수 테스트 A30부터 A33까지 4개가 모두 통과하는지 실행해 확인한 뒤에만 이 스토리를 완료로 표시한다.
 
@@ -434,3 +434,15 @@ Phase 번호는 명세 우선순위별 문서 구성이다. 실제 실행은 다
 
 형식 검사·92개 시나리오 대응 확인은 문서 검증이다. 구현 완료는 실제 테스트·DB 제약·동시성·중단 복구·빌드·린트와 TDD 실행 증거로 판단한다.
 
+
+## 2026-11-17 후속 작업: 개별 확인으로 일반 PG 재시도 통합
+
+기존 체크 완료 항목은 당시 구현·검증 이력으로 보존한다. 변경된 FR-044·050·052~057은 아래 미완료 작업과 tdd/test-list.md의 RC-01~RC-11로 추적한다. 기존 완료 표시가 새 규칙 검증 완료를 뜻하지 않는다. 현재는 계획만 작성했으며 테스트·구현·DB 실행은 하지 않았다.
+
+- [ ] RC-T01 기존 A54·A77~A81 및 QS-10-1·QS-10-1a~1d, U135·U182~U204의 실제 테스트·호출처를 대조하고 유지·변경·폐지 대상을 구분한다. MANUAL→PG 미결 기능을 임의로 확정하거나 공통 보호 테스트를 삭제하지 않는다.
+- [ ] RC-T02 RC-01~RC-07의 상태·조회 결과 조합을 하나씩 테스트로 작성·수정한다. 기존 동작이 이미 맞는 조합은 회귀 테스트로 유지한다. 동작 변경 테스트의 실패가 요구사항 불일치인지 확인하고 기록한 뒤 구현한다.
+- [ ] RC-T03 RC-08의 pg-check 권한·경로 통합을 검증한다. 일반 payout-retries 계약 전용 테스트를 대체하고 서버 라우트·DTO·서비스·문서·대역의 호출처 정리를 구현 단계에서 수행한다.
+- [ ] RC-T04 RC-09·RC-10의 동시 실행·작업 토큰·조회 간격·지급 및 예약 보호 회귀를 검증한다. 실패 기록 재조회와 늦은 콜백의 경계를 구분한다.
+- [ ] RC-T05 RC-11 및 관련 전체 회귀·타입·프로젝트 필수 검사를 실행하고 실행 범위·실패 원인·결과를 기록한다. 기존 자동 한도와 원장 중복 방지를 유지한다.
+
+테스트 실행 전 실제 DATABASE_URL 대상과 Redis 사용 범위를 확인하고 사용자에게 설명한다. DB 통합·E2E는 데이터를 생성·정리하므로 별도 단계 확인 후 직렬 실행한다. 마이그레이션·DB 초기화·시드는 이 계획에 포함하지 않는다.

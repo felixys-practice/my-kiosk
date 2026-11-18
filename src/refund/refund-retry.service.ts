@@ -1,154 +1,33 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { PaymentCancelFailureCode, RefundPayoutStatus } from '@prisma/client';
+import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
-import {
-  REFUND_PG_GATEWAY,
-  type RefundPgGateway,
-} from 'src/pg/refund-pg.gateway';
+import { PgService } from 'src/pg/pg.service';
 import type { PgCancelQueryResult } from 'src/pg/pg.types';
 import { TransactionClient } from 'src/prisma/prisma.service';
-import { RefundAccessService, RefundActor } from './refund-access.service';
-import {
-  IdempotentResult,
-  RefundIdempotencyService,
-} from './refund-idempotency.service';
 import { RefundLockingRepository } from './refund-locking.repository';
 import { RefundRepository } from './refund.repository';
 import { RefundDispatchService } from './refund-dispatch.service';
 import { RefundResultService } from './refund-result.service';
 import type { TransactionLog } from 'src/logger/transaction-logger.service';
 import { PendingSend } from './refund-acceptance.service';
-import {
-  evaluatePayoutRetry,
-  PayoutRetryRejection,
-} from './refund-retry.policy';
-import {
-  IdempotencyKeyRequiredError,
-  RefundNotFoundError,
-  RefundPartialPayoutRequiresManualError,
-  RefundPayoutNotActionableError,
-  RefundPayoutUnresolvedError,
-} from './errors';
-
-/** MANAGER의 PG 직접 재시도 요청 */
-export type PayoutRetryCommand = {
-  reason: string; // DTO에서 앞뒤 공백을 지운 사유
-  idempotencyKey?: string;
-};
-
-/** PG 재시도 접수 응답(API 계약 §5, 접수 당시 정보) */
-export type PayoutRetryAcceptance = {
-  refundId: string;
-  paymentCancelId: string;
-  payoutStatus: 'PENDING';
-};
+import { evaluatePayoutRetry } from './refund-retry.policy';
 
 /**
- * 확정된 환불의 PG 취소 재요청 서비스 (API 계약 §5)
+ * 개별 확인에서 실패한 PG 취소 요청을 조회하고 결과에 따라 정정·재시도하는 서비스 (API 계약 §8)
  * - Refund를 잠근 뒤 지급 상태를 다시 확인하고, 이전 실패 기록을 보존한 채 같은 금액의 새 PG 취소 요청을 만든다
- * - 새 요청은 커밋 뒤 바로 보낸다. 최초 응답은 접수 당시 정보(PENDING)다
+ * - 새 요청이 필요하면 커밋 뒤 바로 보내고 개별 확인 결과를 반환한다
  */
 @Injectable()
 export class RefundRetryService {
   constructor(
-    private readonly accessService: RefundAccessService,
-    private readonly idempotencyService: RefundIdempotencyService,
     private readonly lockingRepository: RefundLockingRepository,
     private readonly refundRepository: RefundRepository,
     private readonly dispatchService: RefundDispatchService,
     private readonly configService: ConfigService,
     private readonly resultService: RefundResultService,
-    @Inject(REFUND_PG_GATEWAY) private readonly pgGateway: RefundPgGateway,
+    private readonly pgService: PgService,
   ) {}
-
-  /**
-   * MANAGER의 PG 직접 재시도
-   * @param actor 요청한 운영자
-   * @param refundId 재시도할 환불
-   * @param command 사유·멱등 키
-   * @returns 202 접수 응답(같은 키·같은 내용이면 최초 응답)
-   * @throws RefundForbiddenError MANAGER가 아닐 때(403)
-   * @throws IdempotencyKeyRequiredError 멱등 키가 없을 때(400)
-   * @throws RefundNotFoundError 없는 환불(404)
-   */
-  async retryByManager(
-    actor: RefundActor,
-    refundId: string,
-    command: PayoutRetryCommand,
-  ): Promise<IdempotentResult<PayoutRetryAcceptance>> {
-    // 1. 역할 확인: 고객·점주는 상태와 관계없이 403
-    this.accessService.assertOperator(actor);
-    // 운영 변경은 멱등 키가 필수다
-    if (command.idempotencyKey === undefined) {
-      throw new IdempotencyKeyRequiredError();
-    }
-    // 없는 환불은 404
-    if (!(await this.refundRepository.findPayoutRetryTarget(refundId))) {
-      throw new RefundNotFoundError();
-    }
-
-    // 2. 같은 키·같은 내용이면 최초 응답을 돌려주고, 새 요청만 3·4단계로 상태를 검사한다
-    let pending: PendingSend | undefined;
-    const result =
-      await this.idempotencyService.executeInTransaction<PayoutRetryAcceptance>(
-        {
-          requesterId: actor.userId,
-          operation: 'PAYOUT_RETRY',
-          key: command.idempotencyKey,
-          request: { refundId, reason: command.reason },
-          authorize: () => Promise.resolve(),
-        },
-        async (tx) => {
-          const now = new Date();
-          // 3. Refund → PG 취소 요청 → 별도 지급 순서로 잠근 뒤 다시 읽어 판정한다
-          const unlocked = (await this.refundRepository.findPayoutRetryTarget(
-            refundId,
-            tx,
-          ))!;
-          await this.lockingRepository.lockForPayout(tx, {
-            refundId,
-            paymentCancelIds: unlocked.paymentCancelIds,
-            manualRefundPayoutIds: unlocked.manualRefundPayoutIds,
-          });
-          const target = (await this.refundRepository.findPayoutRetryTarget(
-            refundId,
-            tx,
-          ))!;
-          const decision = evaluatePayoutRetry(target.state, now);
-          if (!decision.allowed) throw retryRejectionError(decision.code);
-
-          // 4. 이전 실패를 보존한 채 같은 금액의 새 요청과 커밋 뒤 전송 기록을 저장한다
-          const sendClaim = this.dispatchService.newSendClaim(now);
-          const paymentCancelId =
-            await this.refundRepository.createRetryAttempt(tx, {
-              refundId,
-              paymentId: target.paymentId,
-              orderItemId: target.orderItemId,
-              attemptNumber: target.nextAttemptNumber,
-              amount: target.state.amount,
-              requestedById: actor.userId,
-              retryReason: command.reason,
-              now,
-              sendClaim,
-            });
-          pending = {
-            paymentCancelId,
-            amount: target.state.amount,
-            claimToken: sendClaim.claimToken,
-            sentAt: now,
-          };
-          return {
-            status: 202,
-            refundId,
-            body: { refundId, paymentCancelId, payoutStatus: 'PENDING' },
-          };
-        },
-      );
-
-    // 이번 요청이 만든 새 요청만 커밋 뒤 보낸다(최초 응답 반환·거절은 PG를 호출하지 않는다)
-    if (pending) await this.dispatchService.sendPrepared(pending);
-    return result;
-  }
 
   /**
    * 최근 시도가 RETRY_EXHAUSTED·SEND_FAILED·PG_REJECTED로 이미 실패한 환불을 개별 확인한다 (API 계약 §8, FR-057)
@@ -191,29 +70,51 @@ export class RefundRetryService {
       if (!evaluatePayoutRetry(target.state, now).allowed) {
         return { kind: 'NOT_ELIGIBLE' } as const;
       }
-      await this.refundRepository.markInquiryStarted(tx, failed.id, {
-        claimToken,
-        claimUntil: new Date(
-          now.getTime() + this.seconds('workLeaseSeconds') * 1000,
-        ),
-        now,
-      });
+      await this.refundRepository.markPgCancelStatusCheckAttempt(
+        tx,
+        failed.id,
+        {
+          claimToken,
+          claimUntil: new Date(
+            now.getTime() + this.seconds('workLeaseSeconds') * 1000,
+          ),
+          now,
+        },
+      );
       return null;
     });
     if (claimed) return claimed;
 
     // 2. PG 조회는 트랜잭션 밖에서 한다
-    const inquiry = await this.pgGateway.inquireCancel({
+    const inquiry = await this.pgService.inquirePaymentCancel({
       paymentCancelId: candidate.id,
     });
 
+    if (inquiry.result === 'SUCCEEDED') {
+      await this.resultService.applyPgResult({
+        source: 'INDIVIDUAL_CHECK',
+        paymentCancelId: candidate.id,
+        claimToken,
+        pgCancelResult: {
+          kind: 'SUCCEEDED',
+          pgTransactionId: inquiry.pgTransactionId,
+          actualAmount: inquiry.cancelledAmount,
+        },
+      });
+      return {
+        kind: 'CHECKED',
+        inquiryResult: inquiry.result,
+        resendResult: null,
+      };
+    }
+
     // 3. 결과 반영: 담당을 내려놓고 조건을 다시 확인한 뒤 미접수면 새 요청을 저장한다
     let pending: PendingSend | undefined;
-    let conflictLogs: TransactionLog[] = [];
+    let actionLogs: TransactionLog[] = [];
     await this.refundRepository.runInTransaction(async (tx) => {
       await this.lockRetryTarget(tx, refundId);
       if (
-        !(await this.refundRepository.releaseAttemptClaim(
+        !(await this.refundRepository.releasePaymentCancelClaim(
           tx,
           candidate.id,
           claimToken,
@@ -223,9 +124,61 @@ export class RefundRetryService {
       ) {
         return;
       }
-      // 취소 성공·처리 중은 기존 확정 실패와 모순된다. 새 요청 없이 모순·운영자 확인으로 남겨 추가 지급을 막는다
-      if (inquiry.result === 'SUCCEEDED' || inquiry.result === 'IN_PROGRESS') {
-        conflictLogs = await this.resultService.recordFailedAttemptConflict(
+      // 처리 중 조회는 내부 실패만 정정한다. PG 최종 거절과의 모순은 추가 지급을 차단한다.
+      if (inquiry.result === 'IN_PROGRESS') {
+        const failed = await this.refundRepository.findFailedRetryCandidate(
+          refundId,
+          tx,
+        );
+        const target = await this.refundRepository.findPayoutRetryTarget(
+          refundId,
+          tx,
+        );
+        const stored = await this.refundRepository.findPaymentCancelForResult(
+          candidate.id,
+          tx,
+        );
+        if (
+          !stored ||
+          failed?.id !== candidate.id ||
+          !target ||
+          !evaluatePayoutRetry(target.state, now).allowed
+        )
+          return;
+        if (
+          stored.failureCode === PaymentCancelFailureCode.SEND_FAILED ||
+          stored.failureCode === PaymentCancelFailureCode.RETRY_EXHAUSTED
+        ) {
+          await this.refundRepository.resumePgCancelStatusInquiry(
+            tx,
+            candidate.id,
+            new Date(
+              now.getTime() + this.seconds('queryIntervalSeconds') * 1000,
+            ),
+          );
+          await this.refundRepository.updateRefundPayout(tx, refundId, {
+            payoutStatus: RefundPayoutStatus.PENDING,
+            actionCode: null,
+            actionReason: null,
+          });
+          actionLogs.push({
+            transactionId: `REFUND-${refundId}-${candidate.id}`,
+            type: 'REFUND',
+            userId: stored.refund.customerId,
+            orderId: stored.refund.orderId,
+            status: `${stored.failureCode}_CORRECTED_BY_PG_QUERY`,
+            metadata: {
+              paymentCancelId: candidate.id,
+              previousStatus: stored.status,
+              previousFailureCode: stored.failureCode,
+              previousFailureReason: stored.failureReason,
+              previousFailedAt: stored.failedAt,
+              received: inquiry,
+            },
+          });
+          return;
+        }
+        actionLogs = await this.resultService.recordFailedAttemptConflict(
           tx,
           candidate.id,
           inquiry,
@@ -251,9 +204,8 @@ export class RefundRetryService {
         return;
       }
       const sendClaim = this.dispatchService.newSendClaim(now);
-      const paymentCancelId = await this.refundRepository.createRetryAttempt(
-        tx,
-        {
+      const paymentCancelId =
+        await this.refundRepository.createRetryPaymentCancel(tx, {
           refundId,
           paymentId: target.paymentId,
           orderItemId: target.orderItemId,
@@ -267,8 +219,7 @@ export class RefundRetryService {
           now,
           sendClaim,
           lastInquiryAt: failed.lastInquiryAt,
-        },
-      );
+        });
       pending = {
         paymentCancelId,
         amount: target.state.amount,
@@ -277,8 +228,8 @@ export class RefundRetryService {
       };
     });
 
-    // 모순 기록의 거래 로그는 커밋 뒤에 남긴다
-    this.resultService.writeActionLogs(conflictLogs);
+    // 내부 실패 정정·모순 기록의 거래 로그는커밋 뒤에 남긴다
+    this.resultService.writeActionLogs(actionLogs);
     // 4. 새 요청은 커밋 뒤 바로 보낸다
     const sent = pending
       ? await this.dispatchService.sendPrepared(pending)
@@ -330,18 +281,3 @@ export type FailedCheckOutcome =
       inquiryResult: PgCancelQueryResult['result'];
       resendResult: string | null; // 새 요청의 최초 전송 결과, 보내지 않았으면 null
     };
-
-/**
- * 재시도 판정 거절을 계약 오류로 바꾼다 (API 계약 §10)
- * @param code 거절 코드
- * @returns 409 도메인 오류
- */
-function retryRejectionError(code: PayoutRetryRejection): Error {
-  if (code === 'REFUND_PAYOUT_UNRESOLVED') {
-    return new RefundPayoutUnresolvedError();
-  }
-  if (code === 'REFUND_PARTIAL_PAYOUT_REQUIRES_MANUAL') {
-    return new RefundPartialPayoutRequiresManualError();
-  }
-  return new RefundPayoutNotActionableError();
-}

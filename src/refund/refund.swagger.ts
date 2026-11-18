@@ -201,11 +201,6 @@ export const pgCheckSchema = object({
     actionCode: nullable(text),
   }),
 });
-export const retrySchema = object({
-  refundId: uuid,
-  paymentCancelId: uuid,
-  payoutStatus: { type: 'string', enum: ['PENDING'] },
-});
 export const reservationSchema = object({
   refundId: uuid,
   payoutId: uuid,
@@ -244,7 +239,7 @@ export const recoveryResumeSchema = object({
 });
 
 /** 전역 TransformInterceptor가 만드는 성공 응답 형식을 문서화한다. */
-export function ApiRefundResponse(
+export function apiRefundResponse(
   status: number,
   description: string,
   data?: SchemaObject,
@@ -262,7 +257,7 @@ export function ApiRefundResponse(
 }
 
 /** HttpExceptionFilter의 오류 응답 형식. 각 API에서 발생할 수 있는 상태만 지정한다. */
-export function ApiRefundErrors(...statuses: number[]) {
+export function apiRefundErrors(...statuses: number[]) {
   const descriptions: Record<number, string> = {
     400: '입력 형식 또는 업무 조건 위반',
     401: '인증 실패',

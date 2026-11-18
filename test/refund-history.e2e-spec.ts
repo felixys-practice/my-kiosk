@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
 import request from 'supertest';
 import { randomUUID } from 'crypto';
-import { REFUND_PG_GATEWAY } from '../src/pg/refund-pg.gateway';
+import { PgService } from '../src/pg/pg.service';
 import {
   createRefundTestContext,
   RefundTestContext,
@@ -16,7 +16,7 @@ describe('환불 내역 조회 (E2E)', () => {
     ctx = await createRefundTestContext({
       label: 'history',
       configure: (builder) =>
-        builder.overrideProvider(REFUND_PG_GATEWAY).useValue(pgStub),
+        builder.overrideProvider(PgService).useValue(pgStub),
     });
   });
   afterAll(async () => {

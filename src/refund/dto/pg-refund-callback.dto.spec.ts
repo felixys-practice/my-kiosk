@@ -26,7 +26,6 @@ describe('PG 취소 결과 콜백 DTO(PgRefundCallbackDto)', () => {
     success: true,
     paymentCancelId: '2d0f2c7a-6f62-4f5c-9b1a-0f8d2d3c4b5a',
     pgTransactionId: 'pg-cancel-1',
-    orderItemId: '7a1e9b3c-2d4f-4a6b-8c0d-1e2f3a4b5c6d',
     amount: 5000,
     reason: null,
   };
@@ -37,18 +36,16 @@ describe('PG 취소 결과 콜백 DTO(PgRefundCallbackDto)', () => {
     expect(Object.keys(constraints)).toEqual(['amount']);
   });
 
-  it('orderItemId가 null(결제 전체 대상)이어도 형식 오류가 아니다', async () => {
-    await expect(
-      constraintsOf({ ...validBody, orderItemId: null }),
-    ).resolves.toEqual({});
+  it('paymentCancelId만으로 대상을 지정한 콜백을 허용한다', async () => {
+    await expect(constraintsOf(validBody)).resolves.toEqual({});
   });
 
-  it('orderItemId가 UUID 형식이 아닌 문자열이면 형식 오류다', async () => {
-    const constraints = await constraintsOf({
-      ...validBody,
-      orderItemId: 'item-1',
-    });
-
-    expect(Object.keys(constraints)).toEqual(['orderItemId']);
+  it('제거된 orderItemId 필드를 보내면 허용하지 않는다', async () => {
+    expect(
+      await constraintsOf({
+        ...validBody,
+        orderItemId: '7a1e9b3c-2d4f-4a6b-8c0d-1e2f3a4b5c6d',
+      }),
+    ).toEqual({ orderItemId: ['whitelistValidation'] });
   });
 });

@@ -6,10 +6,7 @@ const refundQueryInclude = {
   payment: { include: { order: true } },
   orderItem: { include: { ticket: { select: { id: true } } } },
   paymentCancels: {
-    orderBy: [
-      { attemptNumber: 'desc' },
-      { id: 'desc' },
-    ],
+    orderBy: [{ attemptNumber: 'desc' }, { id: 'desc' }],
   },
   manualPayouts: { orderBy: [{ reservedAt: 'desc' }, { id: 'desc' }] },
 } satisfies Prisma.RefundInclude;

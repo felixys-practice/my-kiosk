@@ -1,3 +1,5 @@
+import { vi } from 'vitest';
+import { PgService } from '../src/pg/pg.service';
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
 import request from 'supertest';
 import { signedCallback } from './helpers/pg-callback';
@@ -411,7 +413,11 @@ describe('좌석 타입 (E2E)', () => {
   afterAll(async () => {
     // 역순 정리 (FK 제약 충돌 방지)
     const userIds = [ownerUser.id, normalUser.id, otherUser.id];
-    // 002 환불의 사건 알림(PG 미연동으로 전송 전 실패가 기록됨)은 PG 취소 요청보다 먼저 지운다
+    // 모의 취소 성공으로 생성된 이 테스트의 원장을 PG 취소 요청보다 먼저 지운다.
+    await prisma.ledger.deleteMany({
+      where: { order: { userId: { in: userIds } } },
+    });
+    // 환불의 사건 알림은 PG 취소 요청보다 먼저 지운다.
     await prisma.refundNotification.deleteMany({
       where: { refund: { payment: { order: { userId: { in: userIds } } } } },
     });
@@ -761,7 +767,39 @@ describe('좌석 타입 (E2E)', () => {
       await payOrder(otherOrder.data.id as string, true, other);
 
       // 첫 결제의 승인 콜백 - 좌석을 줄 수 없는 이용권은 승인과 같은 트랜잭션에서 이용 종료·자동 취소 환불 확정(환불 명세 API 계약 §7)
-      await sendPaymentCallback(firstPaymentId, true);
+      const pgService = app.get(PgService);
+      const originalRequest = pgService.requestPaymentCancel.bind(
+        pgService,
+      ) as PgService['requestPaymentCancel'];
+      const committedCalls: Array<{
+        paymentCancelId: string;
+        amount: number;
+        ticketStatus: string;
+        decisionStatus: string;
+      }> = [];
+      const cancelSpy = vi
+        .spyOn(pgService, 'requestPaymentCancel')
+        .mockImplementation(async (command) => {
+          // PG 호출 시 별도 DB 조회로 읽혀야 환불 확정 트랜잭션의 커밋이 끝난 것이다.
+          const attempt = await prisma.paymentCancel.findUniqueOrThrow({
+            where: { id: command.paymentCancelId },
+            include: { refund: true },
+          });
+          const ticket = await prisma.ticket.findFirstOrThrow({
+            where: { orderItemId: attempt.refund.orderItemId! },
+          });
+          committedCalls.push({
+            ...command,
+            ticketStatus: ticket.status,
+            decisionStatus: attempt.refund.decisionStatus,
+          });
+          return originalRequest(command);
+        });
+      try {
+        await sendPaymentCallback(firstPaymentId, true);
+      } finally {
+        cancelSpy.mockRestore();
+      }
       const firstTicketId = await findTicketIdByOrder(
         firstOrder.data.id as string,
       );
@@ -792,6 +830,14 @@ describe('좌석 타입 (E2E)', () => {
         ],
         attempts: 1,
       });
+      expect(committedCalls).toEqual([
+        {
+          paymentCancelId: refund.paymentCancels[0].id,
+          amount: refund.amount,
+          ticketStatus: 'REVOKED',
+          decisionStatus: 'ACCEPTED',
+        },
+      ]);
     });
 
     it('결제 실패 후 같은 좌석으로 새 주문이 성공한다 (QS-9)', async () => {

@@ -7,7 +7,7 @@ import {
   SeatAssignmentStatus,
   TicketStatus,
 } from '@prisma/client';
-import { REFUND_PG_GATEWAY } from '../src/pg/refund-pg.gateway';
+import { PgService } from '../src/pg/pg.service';
 import {
   createRefundTestContext,
   IssuedTicket,
@@ -27,7 +27,7 @@ describe('종료된 이용권의 입실 차단 (E2E)', () => {
     ctx = await createRefundTestContext({
       label: 'entry',
       configure: (builder) =>
-        builder.overrideProvider(REFUND_PG_GATEWAY).useValue(pgStub),
+        builder.overrideProvider(PgService).useValue(pgStub),
     });
   });
 
@@ -82,7 +82,6 @@ describe('종료된 이용권의 입실 차단 (E2E)', () => {
       success: true,
       paymentCancelId: refunded.paymentCancelId,
       pgTransactionId: `pg-cancel-${refunded.paymentCancelId}`,
-      orderItemId: refunded.orderItemId,
       amount: refunded.amount,
       reason: null,
     }).expect(200);
@@ -132,7 +131,6 @@ describe('종료된 이용권의 입실 차단 (E2E)', () => {
       success: false,
       paymentCancelId: refunded.paymentCancelId,
       pgTransactionId: `pg-cancel-${refunded.paymentCancelId}`,
-      orderItemId: refunded.orderItemId,
       amount: refunded.amount,
       reason: '취소 가능 기간 경과',
     }).expect(200);

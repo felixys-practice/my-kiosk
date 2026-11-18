@@ -25,7 +25,9 @@ describe('evaluateManualReservation', () => {
       amount: refundAmount,
       paidAmount: 0,
       actionCode: 'PG_REJECTED',
-      attempts: [{ status: PaymentCancelStatus.FAILED, claimUntil: null }],
+      paymentCancels: [
+        { status: PaymentCancelStatus.FAILED, claimUntil: null },
+      ],
       activeManualPayout: false,
       ...override,
     };
@@ -33,7 +35,7 @@ describe('evaluateManualReservation', () => {
 
   it('결과가 확정되지 않은 PG 취소 요청이 있으면 REFUND_PAYOUT_UNRESOLVED로 거절한다', () => {
     const state = stateWith({
-      attempts: [
+      paymentCancels: [
         { status: PaymentCancelStatus.QUERY_FAILED, claimUntil: null },
       ],
     });
@@ -62,7 +64,7 @@ describe('evaluateManualReservation', () => {
           payoutStatus: RefundPayoutStatus.PAID,
           paidAmount: refundAmount,
           actionCode: null,
-          attempts: [
+          paymentCancels: [
             { status: PaymentCancelStatus.SUCCEEDED, claimUntil: null },
           ],
         }),
@@ -73,7 +75,7 @@ describe('evaluateManualReservation', () => {
         stateWith({
           paidAmount: refundAmount + 1000,
           actionCode: 'AMOUNT_MISMATCH',
-          attempts: [
+          paymentCancels: [
             { status: PaymentCancelStatus.SUCCEEDED, claimUntil: null },
           ],
         }),
@@ -87,7 +89,9 @@ describe('evaluateManualReservation', () => {
     const underpaid = stateWith({
       paidAmount: 9000,
       actionCode: 'AMOUNT_MISMATCH',
-      attempts: [{ status: PaymentCancelStatus.SUCCEEDED, claimUntil: null }],
+      paymentCancels: [
+        { status: PaymentCancelStatus.SUCCEEDED, claimUntil: null },
+      ],
     });
 
     expect(evaluateManualReservation(underpaid, 3000, now)).toEqual({
@@ -100,7 +104,9 @@ describe('evaluateManualReservation', () => {
     const inProgress = stateWith({
       payoutStatus: RefundPayoutStatus.PENDING,
       actionCode: null,
-      attempts: [{ status: PaymentCancelStatus.REQUESTED, claimUntil: null }],
+      paymentCancels: [
+        { status: PaymentCancelStatus.REQUESTED, claimUntil: null },
+      ],
     });
 
     expect(evaluateManualReservation(inProgress, refundAmount, now)).toEqual({

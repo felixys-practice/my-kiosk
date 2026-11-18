@@ -15,6 +15,32 @@ suite_baseline: green
 - **추적(traces) 표기**: `QS-스토리-시나리오`는 `spec.md` 해당 사용자 스토리의 인수 시나리오 번호다(예: `QS-1-1a`는 사용자 스토리 1의 시나리오 1a). quickstart·tasks의 E2E 테스트 이름 끝에 붙는 번호와 같다. `FR-`는 `spec.md`의 기능 요구사항, `INV-`는 아래 "불변식"에 근거와 함께 적은 항목이다.
 - **상태**: 모든 동작은 `PENDING`(테스트 미작성)이다. 기준선은 2026-10-27 커밋 `0f6338f`에서 통과(단위 163개, E2E 57개)로 기록했다(`cycle-log.md`).
 
+## 2026-11-17 개별 확인·일반 PG 재시도 통합 검증 계획
+
+이 절은 FR-044·050·052~057의 변경에 대한 새 검증 계획이다. 아래 PENDING은 테스트 미작성·미실행을 뜻한다. 기존 표의 DONE과 상단 기준선은 당시 규칙의 실행 이력이며, 변경된 규칙의 통과 증거가 아니다. 이 절과 과거 동작 설명이 다르면 현재 요구사항은 이 절 및 최신 spec.md를 따른다. 기존 테스트의 삭제·변경은 후속 테스트 작성 단계에서 수행한다.
+
+| 변경 항목 | 기존 기록의 취급 | 후속 작업 |
+|---|---|---|
+| A77·A80·A81 및 U182~U194의 일반 직접 재시도 계약 | 과거 완료 이력 보존, 일반 PG 재시도 API 계약으로는 대체 대상 | MANAGER 전용·사유 DTO·필수 키·최초 응답 재생 테스트의 사용처를 확인한 뒤 폐지 경로 전용 테스트만 제거하고 보호 조건은 pg-check에서 검증 |
+| A54·A78·A79 및 QS-5-19·QS-10-1a·QS-10-1b, U195~U204 | 기존 ID/새 ID 및 오류·보호 조건 중 유지되는 기대값은 재사용 | 실패 사유별 성공·처리 중 처리를 분리하고 전체 결과 조합 보강 |
+| U135·U200·U201 및 관련 콜백·충돌 테스트 | 모든 FAILED를 일괄 충돌로 취급하는 기대값은 변경 검토 대상 | 내부 실패의 개별 조회 결과 반영과 PG_REJECTED 충돌 처리 구분. 콜백 경로는 별도 조건을 확인하고 무조건 완화하지 않음 |
+
+| ID | 검증할 동작 | 근거 | 상태 | 대상 |
+|---|---|---|---|---|
+| RC-01 | REQUESTED·QUERY_FAILED를 조회해 NOT_FOUND이면 기존 ID·금액으로 재전송하고 PaymentCancel 행을 추가하지 않는다. 자동 resendCount는 유지하고 manualResendCount를 증가시킨다 | FR-054 | PENDING | refund-result.integration.spec.ts / refund-recovery.e2e-spec.ts |
+| RC-02 | FAILED/SEND_FAILED·FAILED/RETRY_EXHAUSTED·FAILED/PG_REJECTED 각각의 NOT_FOUND·FAILED 조회는 기존 실패 상태·사유·횟수를 보존하고 새 ID로 같은 금액을 전송한다. Refund.payoutStatus=PENDING, 새 요청 자동·개별 재전송 횟수 0, 실행자·시각·사유·조회 시각 승계를 확인한다 | FR-057 | PENDING | refund-result.integration.spec.ts / refund-operations.e2e-spec.ts |
+| RC-03 | FAILED/SEND_FAILED·FAILED/RETRY_EXHAUSTED 각각의 SUCCEEDED 조회는 새 행·추가 전송 없이 기존 요청에 실제액·거래 ID·원장을 한 번 반영하고 내부 실패 기록 해제·로그 보존·금액 불일치 규칙을 확인한다 | FR-053·057 | PENDING | refund-result.integration.spec.ts |
+| RC-04 | FAILED/SEND_FAILED·FAILED/RETRY_EXHAUSTED 각각의 IN_PROGRESS 조회는 기존 요청을 REQUESTED, Refund를 PENDING으로 바꾸고 조회를 이어가며 새 행·전송·충돌 알림을 만들지 않는다. 기존 자동 횟수는 유지한다 | FR-057 | PENDING | refund-result.integration.spec.ts / refund-operations.e2e-spec.ts |
+| RC-05 | FAILED/PG_REJECTED의 SUCCEEDED·IN_PROGRESS 조회는 PG_RESULT_CONFLICT·reviewRequired·운영자 알림으로 남기고 새 요청·별도 지급을 차단한다 | FR-057 | PENDING | refund-result.integration.spec.ts |
+| RC-06 | REQUESTED·QUERY_FAILED·세 FAILED 사유의 QUERY_ERROR 조회는 전송·새 요청 생성 없이 오류를 기록하고 결과를 성공·실패로 새로 단정하지 않는다 | FR-053·057 | PENDING | refund-result.integration.spec.ts / refund-recovery.e2e-spec.ts |
+| RC-07 | REQUESTED·QUERY_FAILED 조회에서 새로 FAILED가 확인되면 PG_REJECTED로 기록하고 같은 실행에서 새 요청을 만들지 않는다 | FR-054 | PENDING | refund-recovery.e2e-spec.ts |
+| RC-08 | OWNER·MANAGER는 같은 pg-check 규칙으로 실행하고 USER·다른 매장 OWNER는 기존 권한 규칙으로 거부한다. 일반 payout-retries 경로는 제거돼 호출되지 않는다 | FR-044·050·052 | PENDING | refund-operations.e2e-spec.ts |
+| RC-09 | 반복·동시 개별 확인, 자동 작업·콜백 경합에서 토큰·조회 간격·행 잠금·활성 시도 제약으로 중복 조회·전송·새 행·지급액·원장 반영을 막는다 | FR-055·057 | PENDING | refund-concurrency.e2e-spec.ts / refund-result.integration.spec.ts |
+| RC-10 | 지급 완료·일부 지급·다른 미확정 지급·활성 별도 지급 예약·MANUAL·검토 필요 상태에서 해당 보호 규칙을 유지하고 결과 저장 직전에도 재검사한다 | FR-043·056·057 | PENDING | refund-result.integration.spec.ts / refund-operations.e2e-spec.ts |
+| RC-11 | 개별 확인 뒤 기존 요청·새 요청에 자동 복구의 미접수·한도 규칙을 적용하고, 한도 소진만으로 결과 불명을 실패로 바꾸지 않는다 | FR-024·054·057 | PENDING | refund-recovery.e2e-spec.ts / refund-operations.e2e-spec.ts |
+
+MANUAL에서 PG 지급으로 전환하는 API는 미결이므로 새 동작을 이 목록으로 확정하지 않는다. 기존 직접 재시도 테스트를 제거할 때 별도 지급·공통 DTO·멱등성 기능의 다른 사용처를 함께 삭제하지 않는다.
+
 ## 외부 루프: 인수 동작
 
 `spec.md`의 인수 시나리오마다 하나다. 동작 문장은 명세의 Given/When/Then 원문을 그대로 옮겼다. 실제 진입점(HTTP API)으로 호출해 확인하며, 기능이 끝까지 동작할 때까지 실패 상태로 남는다.
@@ -228,14 +254,14 @@ suite_baseline: green
 | U318 | PG 실제액 불일치는 운영자 알림을 저장한다 (Phase 6 검수 3) | FR-027 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
 | U319 | PG 거절·금액 불일치·모순 결과는 거래 로그에 기록된다 (Phase 6 검수 3) | FR-037 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
 | U320 | 환불 콜백의 amount가 정수가 아니면 400을 받는다 (Phase 6 검수 4) | FR-032 | example | DONE | `src/refund/dto/pg-refund-callback.dto.spec.ts` |
-| U321 | 환불 콜백의 orderItemId는 null(PAYMENT 대상)을 형식상 허용한다 (Phase 6 검수 4) | FR-032 | example | DONE | `src/refund/dto/pg-refund-callback.dto.spec.ts` |
-| U322 | 환불 콜백의 PG 취소 거래 ID가 원승인 거래 ID와 같으면 PG_CALLBACK_TARGET_MISMATCH(409)로 거절된다 (Phase 6 검수 4) | FR-032 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
+| U321 | 콜백은 orderItemId 없이 paymentCancelId로 대상을 지정하며 orderItemId를 보내면 형식 오류다 (2026-11-16 계약 변경) | FR-032 | example | DONE | `src/refund/dto/pg-refund-callback.dto.spec.ts` |
+| U322 | 콜백의 paymentCancelId가 맞으면 원승인 거래 ID와 취소 거래 ID가 같아도 성공을 반영한다 (2026-11-16 계약 변경) | FR-032 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
 | U323 | 환불 콜백의 PG 취소 거래 ID가 다른 PG 취소 요청에 이미 쓰였으면 PG_CALLBACK_TARGET_MISMATCH(409)로 거절된다 (Phase 6 검수 4) | FR-032 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
 | U324 | 환불 콜백 결과 저장이 실패하면 503 REFUND_STORAGE_UNAVAILABLE을 받는다 (Phase 6 검수 5) | FR-032 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
-| U325 | 기존 경로가 만든 PG 취소 요청에 orderItemId null 콜백이 오면 PG_CALLBACK_TARGET_MISMATCH(409)로 거절된다 (Phase 6 검수 4 진행 중 발견) | FR-032 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
+| U325 | 콜백의 환불 대상은 paymentCancelId에 저장된 연결 관계를 따른다 (기존 orderItemId null 대조 계약 폐지) (2026-11-16 계약 변경) | FR-032 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
 | U326 | 일시적 처리 불가 도메인 오류(DomainServiceUnavailableError)는 503과 지정한 code로 응답한다 (Phase 6 검수 5, U324의 선행) | FR-032 | example | DONE | `src/common/filters/http-exception.filter.spec.ts` |
 | U327 | 콜백 대상 오류(PG_CALLBACK_TARGET_NOT_FOUND)는 저장 실패로 바뀌지 않고 그대로 전달된다 (U324 과대 변환 방지) | FR-032 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
-| U328 | (E2E) orderItemId를 생략한 콜백도 상품 대상 환불이면 PG_CALLBACK_TARGET_MISMATCH(409)로 거절되고 반영하지 않는다 (Phase 6 재검수 P1) | FR-032 | example | DONE | `test/refund-ledger.e2e-spec.ts` |
+| U328 | (E2E) paymentCancelId만 전달한 콜백으로 상품 대상 환불의 지급액·원장을 반영한다 (2026-11-16 계약 변경) | FR-032 | example | DONE | `test/refund-ledger.e2e-spec.ts` |
 | U329 | 다른 요청과 같은 PG 취소 거래 ID가 동시에 저장돼 DB unique 위반이 나면 503이 아니라 PG_CALLBACK_TARGET_MISMATCH(409)로 거절된다 (Phase 6 재검수 P2) | FR-032 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
 | U330 | 모순 결과 처리의 반환 상태는 처리 후 저장된 환불 상태(ACTION_REQUIRED)와 같다 (Phase 6 재검수 P2) | FR-032 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
 | U331 | 모순 결과의 거래 로그에는 기존 결과와 새 통보의 종류·실제액·거래 ID가 함께 남는다 (Phase 6 재검수 권고) | FR-032 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
@@ -448,7 +474,7 @@ suite_baseline: green
 | U136 | 담당 토큰이 바뀐 작업의 결과 저장은 지급액을 더하지 않고 저장된 상태를 반환한다 | FR-055 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
 | U137 | 결과 저장 중 중단되면 PAID·원장 어느 것도 저장되지 않는다 | FR-018 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
 | U138 | 콜백의 PG 취소 요청이 없으면 404 PG_CALLBACK_TARGET_NOT_FOUND를 받는다 | FR-032 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
-| U139 | 콜백의 PG 취소 요청이 다른 환불에 속하면 409 PG_CALLBACK_TARGET_MISMATCH를 받는다 | FR-032 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
+| U139 | 콜백의 paymentCancelId에 연결된 환불만 반영하고 다른 환불은 유지한다 (2026-11-16 계약 변경) | FR-032 | example | DONE | `src/refund/refund-result.integration.spec.ts`(실제 DB) |
 
 ### `src/refund/refund-dispatch.service.ts, src/refund/refund-sweep.service.ts, src/refund/refund-recovery.service.ts`
 

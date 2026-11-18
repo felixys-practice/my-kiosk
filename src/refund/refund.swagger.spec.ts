@@ -59,7 +59,7 @@ describe('Refund Swagger document', () => {
     await app?.close();
   });
 
-  it('documents all 17 endpoints with success schemas and the correct authentication', () => {
+  it('남은 16개 API의 성공 응답·인증을 문서화하고 폐지한 일반 재시도 경로는 제외한다', () => {
     let count = 0;
     for (const [path, item] of Object.entries(document.paths)) {
       for (const method of ['get', 'post', 'patch'] as const) {
@@ -82,7 +82,11 @@ describe('Refund Swagger document', () => {
         );
       }
     }
-    expect(count).toBe(17);
+    expect(count).toBe(16);
+    expect(document.paths).not.toHaveProperty(
+      '/refund/{refundId}/payout-retries',
+    );
+    expect(document.paths['/refund/{refundId}/pg-check'].post).toBeDefined();
     expect(
       document.components?.securitySchemes?.['access-token'],
     ).toMatchObject({ type: 'http', scheme: 'bearer' });

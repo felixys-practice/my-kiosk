@@ -1,7 +1,7 @@
 import { vi, type Mock } from 'vitest';
 import { RefundAcceptanceExecutionService } from './refund-acceptance-execution.service';
 import { RefundRepository } from './refund.repository';
-import { RefundPgGateway } from 'src/pg/refund-pg.gateway';
+import { PgService } from 'src/pg/pg.service';
 import { RefundDispatchService } from './refund-dispatch.service';
 import { BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -660,7 +660,7 @@ describe('RefundIdempotencyService', () => {
         service,
         repository as unknown as RefundIdempotencyRepository,
         { findAcceptanceSnapshot: snapshot } as unknown as RefundRepository,
-        { sendCancel: send } as unknown as RefundPgGateway,
+        { requestPaymentCancel: send } as unknown as PgService,
         {
           recordSendResult: vi
             .fn()
@@ -832,7 +832,7 @@ describe('RefundIdempotencyService', () => {
         isolated,
         doubled as unknown as RefundIdempotencyRepository,
         {} as RefundRepository,
-        {} as RefundPgGateway,
+        {} as PgService,
         {} as RefundDispatchService,
       );
       vi.spyOn(execution, 'makeAcceptanceResponse').mockResolvedValue(rebuilt);

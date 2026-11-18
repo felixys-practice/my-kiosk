@@ -65,7 +65,7 @@ export class RefundPgCheckService {
   ): Promise<Omit<PgCheckResult, 'refund'>> {
     // 지정한 환불의 미확정 PG 취소 요청 한 건만 조회한다(자동 조회 예정 시각과 무관)
     const pending =
-      await this.refundRepository.findPendingAttemptOfRefund(refundId);
+      await this.refundRepository.findPendingPaymentCancelOfRefund(refundId);
     // 미확정 시도가 없으면 최근 시도가 이미 실패한 환불의 개별 확인(새 요청 경로)을 시도한다
     if (!pending) return this.checkFailed(refundId, now, actorId);
     // 같은 환불의 전송·조회 담당이 유효하면 PG를 다시 부르지 않는다
@@ -94,11 +94,11 @@ export class RefundPgCheckService {
     if (inquired === 'RECENT') {
       return this.storedResult(
         'RECENT_RESULT',
-        await this.refundRepository.findPendingAttemptOfRefund(refundId),
+        await this.refundRepository.findPendingPaymentCancelOfRefund(refundId),
       );
     }
     const after =
-      await this.refundRepository.findPendingAttemptOfRefund(refundId);
+      await this.refundRepository.findPendingPaymentCancelOfRefund(refundId);
     return {
       ...this.storedResult('CHECKED', after),
       ...inquired,
@@ -124,7 +124,7 @@ export class RefundPgCheckService {
       actorId,
     );
     const stored =
-      await this.refundRepository.findLatestAttemptInquiry(refundId);
+      await this.refundRepository.findLatestPaymentCancelInquiry(refundId);
     if (outcome.kind === 'NOT_ELIGIBLE') {
       return this.storedResult('NO_PENDING_ATTEMPT', stored);
     }
