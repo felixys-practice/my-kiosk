@@ -1,2 +1,5 @@
 name: Work in process
-filter: "*"
+filter:
+  and:
+    - path: '^/docs'
+    - title: '[Tt][Oo][Dd][Oo]'
