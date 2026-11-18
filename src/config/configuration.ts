@@ -109,6 +109,8 @@ export default () => {
         refundEnv.REFUND_RECOVERY_WORKER_ENABLED as unknown as boolean,
     },
 
+    pg: { mode: process.env.PG_MODE as 'simulated' | 'production' },
+
     // PG 콜백 서명 검증 설정
     pgCallback: {
       // 콜백 서명 공유 비밀값(최소 32자, 검증 스키마에서 필수). 로그에 남기지 않는다

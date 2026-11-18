@@ -19,7 +19,7 @@ import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { RoleGuard } from './auth/guards/roles.guard';
 import { RedisModule } from './database/redis/redis.module';
 import configuration from './config/configuration';
-import { validationSchema } from './config/validation.schema';
+import { validateEnvironment } from './config/validation.schema';
 import { winstonConfig } from './logger/logger.config';
 import { LoggerModule } from './logger/logger.module';
 import { RefundModule } from './refund/refund.module';
@@ -31,7 +31,7 @@ import { PayoutModule } from './payout/payout.module';
     ConfigModule.forRoot({
       isGlobal: true, // 전역 등록 — 모든 모듈에서 import 없이 ConfigService 주입 가능
       load: [configuration], // configuration.ts 팩토리 함수 등록
-      validationSchema, // joi 스키마로 앱 기동 시 검증
+      validate: validateEnvironment, // 설정값을 노출하지 않고 시작 오류를 안내한다
       validationOptions: {
         allowUnknown: true, // 스키마에 없는 env 변수 허용 (CI/CD 변수 등)
         abortEarly: false, // 오류 전체 수집 후 보고
